@@ -5,16 +5,33 @@ on:
       script_content:
         description: 'Content of train.py'
         required: true
-        type: string  # Explicitly specify the type
+        type: string
 
 jobs:
   train:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Cache PyTorch
+        uses: actions/cache@v3
+        id: pytorch-cache
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/torch
+            ~/.cache/torch_extensions
+          key: ${{ runner.os }}-pytorch-${{ hashFiles('requirements.txt') }}-v1
+          restore-keys: |
+            ${{ runner.os }}-pytorch-
+
       - name: Install dependencies
         run: |
+          pip install torch
           pip install numpy
-          # pip install torch - need to find a way to cache this otherwise it will take a long time to install
 
       - name: Create and run training script
         run: |
