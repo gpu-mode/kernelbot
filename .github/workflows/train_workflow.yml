@@ -37,10 +37,15 @@ jobs:
           torch==2.1.0
           EOF
 
+      - name: Setup Python environment
+        run: |
+          uv venv .venv
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
-          uv venv
-          uv pip install -r requirements.txt --system
+          uv pip install -r requirements.txt
 
       - name: Run training script
         run: |
