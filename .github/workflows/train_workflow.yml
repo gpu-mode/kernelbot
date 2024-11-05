@@ -19,7 +19,6 @@ jobs:
       # Cache pip packages
       - name: Cache pip packages
         uses: actions/cache@v3
-        id: pip-cache
         with:
           path: |
             ~/.cache/pip
@@ -30,13 +29,12 @@ jobs:
       # Cache PyTorch specific directories
       - name: Cache PyTorch
         uses: actions/cache@v3
-        id: pytorch-cache
         with:
           path: |
+            /opt/hostedtoolcache/Python/*/x64/lib/python*/site-packages/torch
+            /opt/hostedtoolcache/Python/*/x64/lib/python*/site-packages/torch_*
             ~/.cache/torch
             ~/.cache/torch_extensions
-            ~/.local/lib/python*/site-packages/torch
-            ~/.local/lib/python*/site-packages/torch_*
           key: ${{ runner.os }}-pytorch-v1
           restore-keys: |
             ${{ runner.os }}-pytorch-
