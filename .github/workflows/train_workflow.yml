@@ -1,22 +1,27 @@
 name: Training Workflow
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'train.py'
   workflow_dispatch:
     inputs:
       script_content:
         description: 'Content of train.py'
-        required: true
+        required: false
         type: string
 
 jobs:
   train:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: "Install uv"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
         uses: astral-sh/setup-uv@v3
-      
-      # Cache PyTorch dependencies
+
       - name: Cache PyTorch
         uses: actions/cache@v3
         with:
@@ -25,29 +30,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-torch-
 
-      # Create requirements.txt
       - name: Create requirements file
         run: |
           cat << EOF > requirements.txt
           numpy==1.24.3
           torch==2.1.0
           EOF
-      
-      # Install dependencies using uv
+
       - name: Install dependencies
         run: |
           uv venv
-          uv pip install -r requirements.txt
-      
-      - name: Create and run training script
+          uv pip install -r requirements.txt --system
+
+      - name: Run training script
         run: |
-          echo "${{ inputs.script_content }}" > train.py
-          cat train.py  # Debug: print the content
+          if [ ! -z "${{ inputs.script_content }}" ]; then
+            echo "${{ inputs.script_content }}" > train.py
+          fi
+          cat train.py # Debug: print the content
           python train.py > training.log 2>&1
-      
+
       - name: Upload logs
         uses: actions/upload-artifact@v3
-        if: always()  # Upload logs whether the job succeeds or fails
+        if: always()
         with:
           name: training-logs
           path: training.log
