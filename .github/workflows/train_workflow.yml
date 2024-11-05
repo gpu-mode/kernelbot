@@ -36,6 +36,7 @@ jobs:
       # Install dependencies using uv
       - name: Install dependencies
         run: |
+          uv venv
           uv pip install -r requirements.txt
       
       - name: Create and run training script
