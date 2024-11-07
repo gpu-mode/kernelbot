@@ -28,15 +28,19 @@ jobs:
           path: |
             ~/.cache/uv
             .venv
-          key: ${{ runner.os }}-uv-numpy-torch-v2
+          key: ${{ runner.os }}-uv-py3.10-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-uv-numpy-torch-
+            ${{ runner.os }}-uv-py3.10-
+          enableCrossOsArchive: true
+          lookup-only: true
+          compression-level: 3
 
       - name: Create virtual environment and install dependencies
         run: |
+          echo "torch\nnumpy" > requirements.txt
           uv venv
           source .venv/bin/activate
-          uv pip install numpy torch
+          uv pip install -r requirements.txt
           
       - name: Create and run training script
         run: |
@@ -52,12 +56,3 @@ jobs:
           path: training.log
           retention-days: 1
           if-no-files-found: warn
-
-  cleanup:
-    runs-on: ubuntu-latest
-    needs: train
-    if: always()
-    steps:
-      - uses: geekyeggo/delete-artifact@v2
-        with:
-          name: training-logs
