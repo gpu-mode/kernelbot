@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import logging
 import sys
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,7 +12,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def simulate_workflow(script_content):
+def install_packages(package_names, pip_path, use_uv=False):
+    if use_uv:
+        subprocess.run(["pip", "install", "uv"])
+        return subprocess.run(["uv", "pip", "install"] + package_names)
+    else:
+        return subprocess.run([pip_path, "install"] + package_names)
+
+def simulate_workflow(script_content, clear_cache=False, use_uv=False):
+    start_time = time.time()
+    
+    if clear_cache:
+        cache_dir = os.path.expanduser("~/.cache/pip")
+        if os.path.exists(cache_dir):
+            logger.info("Clearing pip cache...")
+            shutil.rmtree(cache_dir)
+    
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Created temporary directory: {temp_dir}")
         
@@ -27,7 +43,10 @@ def simulate_workflow(script_content):
         subprocess.run([pip_path, "install", "--upgrade", "pip"])
         
         logger.info("Installing numpy and torch...")
-        subprocess.run([pip_path, "install", "numpy", "torch"])
+        install_start = time.time()
+        install_packages(["numpy", "torch"], pip_path, use_uv=use_uv)
+        install_duration = time.time() - install_start
+        logger.info(f"Package installation took {install_duration:.2f} seconds")
         
         logger.info("Installing requirements...")
         subprocess.run([pip_path, "install", "-r", "requirements.txt"])
@@ -52,7 +71,10 @@ def simulate_workflow(script_content):
             logs = f.read()
             
         logger.info(f"Training completed with return code: {result.returncode}")
-        return result.returncode, logs
+        
+    total_duration = time.time() - start_time
+    logger.info(f"Total workflow duration: {total_duration:.2f} seconds")
+    return result.returncode, logs, total_duration
 
 if __name__ == "__main__":
     try:
@@ -66,16 +88,47 @@ if __name__ == "__main__":
             sys.exit(1)
         logger.info(f"Found Python version: {python_version}")
         
-        test_script = """
+        numpy_test_script = """
 import numpy as np
+
+matrix1 = np.array([[1, 2], [3, 4]])
+matrix2 = np.array([[5, 6], [7, 8]])
+result = np.matmul(matrix1, matrix2)
+print("Matrix multiplication result:\\n", result)
+"""
+
+        pytorch_test_script = """
 import torch
-print("Test script running...")
-print("NumPy version:", np.__version__)
-print("PyTorch version:", torch.__version__)
+
+tensor1 = torch.tensor([[1, 2], [3, 4]], dtype=torch.float)
+tensor2 = torch.tensor([[5, 6], [7, 8]], dtype=torch.float)
+result = torch.matmul(tensor1, tensor2)
+print("Tensor multiplication result:\\n", result)
 """
         
-        return_code, logs = simulate_workflow(test_script)
-        print("\nTest output:")
+        logger.info("\nRunning test with cleared cache...")
+        return_code, logs, uncached_time = simulate_workflow(numpy_test_script, clear_cache=True)
+
+        logger.info("Running test with cached packages...")
+        return_code, logs, cached_time = simulate_workflow(numpy_test_script, clear_cache=False)
+
+        logger.info("Running test with UV package installer...")
+        return_code, logs, uv_time = simulate_workflow(numpy_test_script, clear_cache=False, use_uv=True)
+        
+        print("\n" + "="*50)
+        print("BENCHMARK RESULTS".center(50))
+        print("="*50)
+        print(f"{'Test Type':<30}{'Duration':<20}")
+        print("-"*50)
+        print(f"{'With Cache':<30}{f'{cached_time:.2f}s':<20}")
+        print(f"{'Without Cache':<30}{f'{uncached_time:.2f}s':<20}")
+        print(f"{'With UV':<30}{f'{uv_time:.2f}s':<20}")
+        print(f"{'Cache Speedup':<30}{f'{uncached_time - cached_time:.2f}s':<20}")
+        print(f"{'UV vs Cache Speedup':<30}{f'{cached_time - uv_time:.2f}s':<20}")
+        print("="*50)
+        
+        print("\nTest Output:")
+        print("-"*50)
         print(logs)
         
     except (subprocess.CalledProcessError, FileNotFoundError):

@@ -32,7 +32,6 @@ jobs:
       - name: Install dependencies
         run: |
           pip install numpy torch
-          pip install -r requirements.txt
           
       - name: Create and run training script
         run: |
