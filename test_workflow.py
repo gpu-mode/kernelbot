@@ -12,21 +12,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def install_packages(package_names, pip_path, use_uv=False):
+def install_packages(package_names, pip_path, use_uv=False, python_path=None):
     if use_uv:
-        subprocess.run(["pip", "install", "uv"])
-        return subprocess.run(["uv", "pip", "install"] + package_names)
+        subprocess.run([pip_path, "install", "uv"])
+        subprocess.run([python_path, "-m", "uv", "pip", "install", "--no-deps"] + package_names)
+        subprocess.run([python_path, "-m", "uv", "pip", "install"] + package_names)
+        return subprocess.CompletedProcess(args=[], returncode=0)
     else:
         return subprocess.run([pip_path, "install"] + package_names)
 
 def simulate_workflow(script_content, clear_cache=False, use_uv=False):
     start_time = time.time()
     
+    pip_cache_dir = os.path.expanduser("~/.cache/pip")
+    uv_cache_dir = os.path.expanduser("~/.cache/uv")
+    
     if clear_cache:
-        cache_dir = os.path.expanduser("~/.cache/pip")
-        if os.path.exists(cache_dir):
-            logger.info("Clearing pip cache...")
-            shutil.rmtree(cache_dir)
+        logger.info("Clearing package caches...")
+        if os.path.exists(pip_cache_dir):
+            shutil.rmtree(pip_cache_dir)
+        if os.path.exists(uv_cache_dir):
+            shutil.rmtree(uv_cache_dir)
     
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Created temporary directory: {temp_dir}")
@@ -44,12 +50,16 @@ def simulate_workflow(script_content, clear_cache=False, use_uv=False):
         
         logger.info("Installing numpy and torch...")
         install_start = time.time()
-        install_packages(["numpy", "torch"], pip_path, use_uv=use_uv)
+        if use_uv:
+            install_packages(["numpy", "torch"], pip_path, use_uv=True, python_path=python_path)
+        else:
+            cmd = [pip_path, "install"]
+            if clear_cache:
+                cmd.append("--no-cache-dir")
+            cmd.extend(["numpy", "torch"])
+            subprocess.run(cmd)
         install_duration = time.time() - install_start
         logger.info(f"Package installation took {install_duration:.2f} seconds")
-        
-        logger.info("Installing requirements...")
-        subprocess.run([pip_path, "install", "-r", "requirements.txt"])
         
         train_path = os.path.join(temp_dir, "train.py")
         logger.info(f"Writing training script to {train_path}")
@@ -106,14 +116,14 @@ result = torch.matmul(tensor1, tensor2)
 print("Tensor multiplication result:\\n", result)
 """
         
-        logger.info("\nRunning test with cleared cache...")
+        logger.info("\nRunning test with UV package installer...")
+        return_code, logs, uv_time = simulate_workflow(numpy_test_script, clear_cache=False, use_uv=True)
+        
+        logger.info("\nRunning test without cache...")
         return_code, logs, uncached_time = simulate_workflow(numpy_test_script, clear_cache=True)
 
-        logger.info("Running test with cached packages...")
+        logger.info("\nRunning test with cached packages...")
         return_code, logs, cached_time = simulate_workflow(numpy_test_script, clear_cache=False)
-
-        logger.info("Running test with UV package installer...")
-        return_code, logs, uv_time = simulate_workflow(numpy_test_script, clear_cache=False, use_uv=True)
         
         print("\n" + "="*50)
         print("BENCHMARK RESULTS".center(50))
