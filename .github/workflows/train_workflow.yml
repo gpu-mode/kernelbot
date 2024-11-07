@@ -28,9 +28,9 @@ jobs:
           path: |
             ~/.cache/uv
             .venv
-          key: ${{ runner.os }}-uv-numpy-torch-v1
+          key: ${{ runner.os }}-uv-numpy-torch-v2
           restore-keys: |
-            ${{ runner.os }}-uv-
+            ${{ runner.os }}-uv-numpy-torch-
 
       - name: Create virtual environment and install dependencies
         run: |
@@ -50,3 +50,14 @@ jobs:
         with:
           name: training-logs
           path: training.log
+          retention-days: 1
+          if-no-files-found: warn
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: train
+    if: always()
+    steps:
+      - uses: geekyeggo/delete-artifact@v2
+        with:
+          name: training-logs
