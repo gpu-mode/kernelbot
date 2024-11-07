@@ -36,7 +36,7 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install --no-deps numpy torch
+          uv pip install --no-deps numpy torch typing_extensions
           
       - name: Create and run training script
         run: |
