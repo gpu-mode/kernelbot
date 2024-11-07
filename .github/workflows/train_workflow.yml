@@ -33,11 +33,10 @@ jobs:
             ${{ runner.os }}-uv-py3.10-
           enableCrossOsArchive: true
           lookup-only: true
-          compression-level: 3
 
       - name: Create virtual environment and install dependencies
         run: |
-          echo "torch\nnumpy" > requirements.txt
+          printf "torch\nnumpy\n" > requirements.txt
           uv venv
           source .venv/bin/activate
           uv pip install -r requirements.txt
