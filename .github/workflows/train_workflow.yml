@@ -36,15 +36,13 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install --no-deps numpy torch typing_extensions
+          uv pip install numpy torch
           
       - name: Create and run training script
         run: |
           echo "${{ inputs.script_content }}" > train.py
           source .venv/bin/activate
-          # python train.py > training.log 2>&1
-          cat train.py
-          python train.py
+          python train.py > training.log 2>&1
           
       - name: Upload logs
         uses: actions/upload-artifact@v3
