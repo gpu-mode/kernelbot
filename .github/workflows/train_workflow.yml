@@ -24,15 +24,6 @@ jobs:
           pip install numpy
           # Add other Python dependencies as needed
 
-      - name: Debug Step
-        if: inputs.script_type == 'cu'
-        run: |
-          echo "CUDA script detected"
-          cat << 'EOL' > train.${{ inputs.script_type }}
-          ${{ inputs.script_content }}
-          EOL
-          cat train.${{ inputs.script_type }}
-
       - name: Install CUDA dependencies
         if: inputs.script_type == 'cu'
         run: |
@@ -42,7 +33,6 @@ jobs:
         
 
       - name: Create training script
-        if : inputs.script_type == 'py' # TODO: remove later
         run: |
           cat << 'EOL' > train.${{ inputs.script_type }}
           ${{ inputs.script_content }}
