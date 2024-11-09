@@ -59,7 +59,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 
-async def trigger_github_action(script_content):
+async def trigger_github_action(script_content, script_type):
     """
     Triggers the GitHub action with custom train.py contents
     """
@@ -74,7 +74,7 @@ async def trigger_github_action(script_content):
         workflow = repo.get_workflow("train_workflow.yml")
         logger.info("Found workflow, attempting to dispatch")
         
-        success = workflow.create_dispatch(get_github_branch_name(), {'script_content': script_content})
+        success = workflow.create_dispatch(get_github_branch_name(), {'script_content': script_content, 'script_type': script_type})
         logger.info(f"Workflow dispatch result: {success}")
         
         if success:
@@ -173,25 +173,29 @@ async def on_ready():
             logger.warning(f'Failed to update nickname in guild {guild.name}: {e}')
 
 
-async def process_python(message, attachment):
+async def process_file(message, attachment, script_type):
+    """
+    Generic file processor that handles both .py and .cu files
+    """
     # Reply to the original message
-    initial_reply = await message.reply("Found train.py! Starting training process...")
+    initial_reply = await message.reply(f"Found train.{script_type}! Starting training process...")
     
     # Create a new thread from the reply
     thread = await initial_reply.create_thread(
         name=f"Training Job - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        auto_archive_duration=1440  # Archive after 24 hours of inactivity
+        auto_archive_duration=1440
     )
     
     try:
         # Download the file content
-        logger.info("Downloading train.py content")
+        logger.info(f"Downloading train.{script_type} content")
         script_content = await attachment.read()
         script_content = script_content.decode('utf-8')
-        logger.info("Successfully read train.py content")
+        logger.info(script_content)
+        logger.info(f"Successfully read train.{script_type} content")
         
-        # Trigger GitHub Action
-        run_id = await trigger_github_action(script_content)
+        # Trigger GitHub Action with appropriate script_type
+        run_id = await trigger_github_action(script_content, script_type)
         
         if run_id:
             logger.info(f"Successfully triggered workflow with run ID: {run_id}")
@@ -235,13 +239,14 @@ async def on_message(message):
             for attachment in message.attachments:
                 logger.info(f"Processing attachment: {attachment.filename}")
                 if attachment.filename == "train.py":
-                    process_python(message, attachment)
+                    await process_file(message, attachment, 'py')
                     break
                 elif attachment.filename == "train.cu":
-                    raise ValueError("CUDA training is not supported yet")
+                    await process_file(message, attachment, 'cu')
+                    break
 
-            if not any(att.filename == "train.py" for att in message.attachments):
-                await message.reply("Please attach a file named 'train.py' to your message.")
+            if not any(att.filename in ["train.py", "train.cu"] for att in message.attachments):
+                await message.reply("Please attach a file named 'train.py' or 'train.cu' to your message.")
 
 # Run the bot
 if __name__ == "__main__":
