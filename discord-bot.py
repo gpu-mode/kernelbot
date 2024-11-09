@@ -9,7 +9,7 @@ import asyncio
 import logging
 import zipfile
 import subprocess
-from leaderboard import Leaderboard, LeaderboardEntry
+from leaderboard import Leaderboard, LeaderboardEntry, HardwareInfo, KernelInfo
 from discord import app_commands
 
 # Set up logging
@@ -71,107 +71,110 @@ class ClusterBot(discord.Client):
 client = ClusterBot()
 
 # Initialize leaderboard
-leaderboard = Leaderboard(title="LLM Performance Rankings")
+leaderboard = Leaderboard()
 
-async def trigger_github_action(script_content):
-    """
-    Triggers the GitHub action with custom train.py contents
-    """
-    logger.info("Attempting to trigger GitHub action")
-    gh = Github(os.getenv('GITHUB_TOKEN'))
-    repo = gh.get_repo(os.getenv('GITHUB_REPO'))
-    
+def create_mock_entries():
+    # First user - optimized implementations
+    fast_user = "cuda_wizard"
+    fast_hardware = HardwareInfo(
+        name="4090",
+        count=1,
+        memory=24,
+        provider="Local"
+    )
+
     try:
-        trigger_time = datetime.now(timezone.utc)
-        logger.info(f"Looking for workflow 'train_workflow.yml' in repo {os.getenv('GITHUB_REPO')}")
-        
-        workflow = repo.get_workflow("train_workflow.yml")
-        logger.info("Found workflow, attempting to dispatch")
-        
-        success = workflow.create_dispatch(get_github_branch_name(), {'script_content': script_content})
-        logger.info(f"Workflow dispatch result: {success}")
-        
-        if success:
-            await asyncio.sleep(2)
-            runs = list(workflow.get_runs())
-            logger.info(f"Found {len(runs)} total runs")
-            
-            for run in runs:
-                logger.info(f"Checking run {run.id} created at {run.created_at}")
-                if run.created_at.replace(tzinfo=timezone.utc) > trigger_time:
-                    logger.info(f"Found matching run with ID: {run.id}")
-                    return run.id
-            
-            logger.warning("No matching runs found after trigger")
-            return None
-            
-    except Exception as e:
-        logger.error(f"Error in trigger_github_action: {str(e)}", exc_info=True)
-        return None
+        # GEMM Entry
+        leaderboard.add_entry(
+            username=fast_user,
+            hardware=fast_hardware,
+            kernel=KernelInfo(
+                name="GEMM FP16",
+                language="CUDA",
+                problem_size="M=8192, N=8192, K=8192",
+                description="Mixed-precision matrix multiplication optimized with tensor cores and shared memory tiling",
+                runtime=0.85,
+                framework="CUDA",
+                version="12.1"
+            ),
+            metrics={
+                "Throughput in TFLOPS": 90.5,
+                "Memory Bandwidth in GB/s": 850.2,
+                "Score": 0.98
+            },
+            run_id=f"mock_{len(leaderboard.entries)}"
+        )
 
-async def download_artifact(run_id):
-    """
-    Downloads the training log artifact from the workflow run
-    """
-    logger.info(f"Attempting to download artifacts for run {run_id}")
-    gh = Github(os.getenv('GITHUB_TOKEN'))
-    repo = gh.get_repo(os.getenv('GITHUB_REPO'))
-    
-    try:
-        run = repo.get_workflow_run(run_id)
-        artifacts = run.get_artifacts()
-        logger.info(f"Found {artifacts.totalCount} artifacts")
-        
-        for artifact in artifacts:
-            logger.info(f"Found artifact: {artifact.name}")
-            if artifact.name == 'training-logs':
-                url = artifact.archive_download_url
-                headers = {'Authorization': f'token {os.getenv("GITHUB_TOKEN")}'}
-                response = requests.get(url, headers=headers)
-                
-                if response.status_code == 200:
-                    logger.info("Successfully downloaded artifact")
-                    with open('training.log.zip', 'wb') as f:
-                        f.write(response.content)
-                    
-                    with zipfile.ZipFile('training.log.zip') as z:
-                        with z.open('training.log') as f:
-                            logs = f.read().decode('utf-8')
-                    
-                    os.remove('training.log.zip')
-                    return logs
-                else:
-                    logger.error(f"Failed to download artifact. Status code: {response.status_code}")
-        
-        logger.warning("No training-logs artifact found")
-        return "No training logs found in artifacts"
-    except Exception as e:
-        logger.error(f"Error in download_artifact: {str(e)}", exc_info=True)
-        return f"Error downloading artifacts: {str(e)}"
+        # Softmax Entry
+        leaderboard.add_entry(
+            username=fast_user,
+            hardware=fast_hardware,
+            kernel=KernelInfo(
+                name="Fused Softmax",
+                language="CUDA",
+                problem_size="batch=128, seq=2048",
+                description="Fused softmax with shared memory and warp-level optimizations",
+                runtime=0.15,
+                framework="CUDA",
+                version="12.1"
+            ),
+            metrics={
+                "Throughput in TFLOPS": 45.2,
+                "Memory Bandwidth in GB/s": 789.5,
+                "Score": 0.95
+            },
+            run_id=f"mock_{len(leaderboard.entries)}"
+        )
 
-async def check_workflow_status(run_id, thread):
-    """
-    Monitors the GitHub Action workflow status and updates Discord thread
-    """
-    logger.info(f"Starting to monitor workflow status for run {run_id}")
-    gh = Github(os.getenv('GITHUB_TOKEN'))
-    repo = gh.get_repo(os.getenv('GITHUB_REPO'))
-    
-    while True:
-        try:
-            run = repo.get_workflow_run(run_id)
-            logger.info(f"Current status: {run.status}")
-            
-            if run.status == "completed":
-                logger.info("Workflow completed, downloading artifacts")
-                logs = await download_artifact(run_id)
-                return run.conclusion, logs, run.html_url
-            
-            await thread.send(f"Workflow still running... Status: {run.status}\nLive view: {run.html_url}")
-            await asyncio.sleep(30)
-        except Exception as e:
-            logger.error(f"Error in check_workflow_status: {str(e)}", exc_info=True)
-            return "error", str(e), None
+        # Conv2D Entry
+        leaderboard.add_entry(
+            username=fast_user,
+            hardware=fast_hardware,
+            kernel=KernelInfo(
+                name="Conv2D",
+                language="CUDA",
+                problem_size="batch=32, c_in=256, h=112, w=112, k=512, r=3, s=3",
+                description="Im2Col + GEMM based convolution with tensor cores",
+                runtime=0.42,
+                framework="CUDA",
+                version="12.1"
+            ),
+            metrics={
+                "Throughput in TFLOPS": 75.8,
+                "Memory Bandwidth in GB/s": 820.4,
+                "Score": 0.92
+            },
+            run_id=f"mock_{len(leaderboard.entries)}"
+        )
+
+        # Flash Attention Entry
+        leaderboard.add_entry(
+            username=fast_user,
+            hardware=fast_hardware,
+            kernel=KernelInfo(
+                name="Flash Attention",
+                language="CUDA",
+                problem_size="batch=32, seq=2048, heads=32",
+                description="Optimized attention implementation with tiling and recomputation",
+                runtime=0.28,
+                framework="CUDA",
+                version="12.1"
+            ),
+            metrics={
+                "Throughput in TFLOPS": 68.4,
+                "Memory Bandwidth in GB/s": 795.6,
+                "Score": 0.90
+            },
+            run_id=f"mock_{len(leaderboard.entries)}"
+        )
+
+        # Add slower implementations for second user here...
+        # (Similar structure but with slower runtimes)
+
+        return "Added a mock entry to the RTX 4090 leaderboard! Type '@Cluster-Bot leaderboards' to view all leaderboards"
+    except Exception as e:
+        logger.error(f"Error adding mock entries: {str(e)}")
+        return f"Error adding mock entries: {str(e)}"
 
 @client.event
 async def on_ready():
@@ -181,20 +184,35 @@ async def on_ready():
 @client.tree.command(name="mockadd", description="Add a mock entry to the leaderboard")
 async def mockadd(interaction: discord.Interaction):
     logger.info("mockadd command received")
+    mock_hardware = HardwareInfo(
+        name="4090",
+        count=1,
+        memory=24,
+        provider="Local"
+    )
+    
+    mock_kernel = KernelInfo(
+        name="GEMM 1024x1024",
+        language="CUDA",
+        problem_size="M=1024, N=1024, K=1024",
+        runtime=0.42,
+        framework="CUDA",
+        version="12.1"
+    )
+    
     mock_metrics = {
         "Score": 0.95,
-        "MMLU": 0.71,
-        "CNN/DailyMail": 0.19,
-        "TruthfulQA": 0.76,
-        "BBQ": 0.90,
-        "GPT4All": 0.85,
-        "WizardCoder": 0.82,
-        "HumanEval": 0.88
+        "Throughput in TFLOPS": 45.2,
+        "Memory Bandwidth in GB/s": 850.2,
+        "Occupancy": 0.98,
+        "Achieved Memory BW %": 86.4
     }
     
     try:
         leaderboard.add_entry(
             username=interaction.user.name,
+            hardware=mock_hardware,
+            kernel=mock_kernel,
             metrics=mock_metrics,
             run_id=f"mock_{len(leaderboard.entries)}"
         )
@@ -203,10 +221,32 @@ async def mockadd(interaction: discord.Interaction):
         logger.error(f"Error adding mock entry: {str(e)}")
         await interaction.response.send_message(f"Error adding mock entry: {str(e)}")
 
-@client.tree.command(name="leaderboard", description="Show the current leaderboard")
-async def show_leaderboard(interaction: discord.Interaction):
-    logger.info("leaderboard command received")
-    formatted_board = await leaderboard.format_discord_message()
+@client.tree.command(name="leaderboards", description="Show available leaderboards")
+async def show_leaderboards(interaction: discord.Interaction):
+    hardware_list = leaderboard.get_available_hardware()
+    if not hardware_list:
+        await interaction.response.send_message("No leaderboards available yet!")
+        return
+        
+    output = ["```md", "# Available Leaderboards", ""]
+    for idx, hw in enumerate(hardware_list, 1):
+        output.append(f"{idx}. {hw} CUDA Kernel Benchmarks")
+    output.append("```")
+    await interaction.response.send_message("\n".join(output))
+
+@client.tree.command(name="leaderboard_show", description="Show specific leaderboard")
+async def show_specific_leaderboard(interaction: discord.Interaction, number: int):
+    hardware_list = leaderboard.get_available_hardware()
+    if not hardware_list:
+        await interaction.response.send_message("No leaderboards available yet!")
+        return
+        
+    if number < 1 or number > len(hardware_list):
+        await interaction.response.send_message(f"Please select a number between 1 and {len(hardware_list)}")
+        return
+        
+    hardware_name = hardware_list[number - 1]
+    formatted_board = await leaderboard.format_discord_message(hardware_name)
     await interaction.response.send_message(formatted_board)
 
 @client.event
@@ -220,36 +260,52 @@ async def on_message(message):
 
         if 'mockadd' in content:
             logger.info("mockadd command received")
-            mock_metrics = {
-                "Score": 0.95,
-                "MMLU": 0.71,
-                "CNN/DailyMail": 0.19,
-                "TruthfulQA": 0.76,
-                "BBQ": 0.90,
-                "GPT4All": 0.85,
-                "WizardCoder": 0.82,
-                "HumanEval": 0.88
-            }
+            response = create_mock_entries()
+            await message.channel.send(response)
+            return
+        elif 'leaderboards' in content:
+            logger.info("leaderboards command received")
+            hardware_list = leaderboard.get_available_hardware()
+            if not hardware_list:
+                await message.channel.send("```md\n# No leaderboards available yet!\n```")
+                return
             
-            try:
-                leaderboard.add_entry(
-                    username=message.author.name,
-                    metrics=mock_metrics,
-                    run_id=f"mock_{len(leaderboard.entries)}"
-                )
-                await message.channel.send("Added mock entry to leaderboard! Type '@Cluster-Bot leaderboard' to view it")
-            except Exception as e:
-                logger.error(f"Error adding mock entry: {str(e)}")
-                await message.channel.send(f"Error adding mock entry: {str(e)}")
+            output = [
+                "```md",
+                "# Available Leaderboards",
+                "===============================",
+                ""
+            ]
+            for idx, hw in enumerate(hardware_list, 1):
+                output.append(f"{idx}. {hw} CUDA Kernel Benchmarks")
+            output.append("")
+            output.append("```")
+            await message.channel.send("\n".join(output))
             return
-
-        if 'leaderboard' in content:
+        elif 'leaderboard' in content:
             logger.info("leaderboard command received")
-            formatted_board = await leaderboard.format_discord_message()
-            await message.channel.send(formatted_board)
+            try:
+                parts = content.split('leaderboard')
+                if len(parts) > 1 and parts[1].strip():
+                    number = int(parts[1].strip())
+                    hardware_list = leaderboard.get_available_hardware()
+                    
+                    if not hardware_list:
+                        await message.channel.send("No leaderboards available yet!")
+                        return
+                    
+                    if number < 1 or number > len(hardware_list):
+                        await message.channel.send(f"Please select a number between 1 and {len(hardware_list)}")
+                        return
+                    
+                    hardware_name = hardware_list[number - 1]
+                    formatted_board = await leaderboard.format_discord_message(hardware_name)
+                    await message.channel.send(formatted_board)
+                else:
+                    await message.channel.send("Please specify a leaderboard number. Use '@bot leaderboards' to see available options.")
+            except ValueError:
+                await message.channel.send("Please provide a valid number after 'leaderboard'")
             return
-
-        await message.channel.send("Available commands:\n- @Cluster-Bot mockadd\n- @Cluster-Bot leaderboard")
 
 # Run the bot
 if __name__ == "__main__":
