@@ -30,8 +30,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nvidia-cuda-toolkit
           nvcc --version
+        
+      - name: Debug Step
+        if: inputs.script_type == 'cu'
+        run: |
+          echo "CUDA script detected"
+          cat << 'EOL' > train.${{ inputs.script_type }}
+          ${{ inputs.script_content }}
+          EOL
+          cat train.${{ inputs.script_type }}
 
       - name: Create training script
+        if : inputs.script_type == 'py' # TODO: remove later
         run: |
           echo '${{ inputs.script_content }}' > train.${{ inputs.script_type }}
           cat train.${{ inputs.script_type }}
