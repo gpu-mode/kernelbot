@@ -3,28 +3,58 @@ on:
   workflow_dispatch:
     inputs:
       script_content:
-        description: 'Content of train.py'
+        description: 'Content of training script (Python or CUDA)'
         required: true
-        type: string  # Explicitly specify the type
+        type: string
+      script_type:
+        description: 'Script type (py or cu)'
+        required: true
+        type: choice
+        options:
+          - py
+          - cu
 
 jobs:
   train:
     runs-on: ubuntu-latest
     steps:
-      - name: Install dependencies
+      - name: Set up environment variables
+        run: |
+          echo "SCRIPT_FILE=train.${{ inputs.script_type }}" >> $GITHUB_ENV
+          echo "OUTPUT_FILE=training.log" >> $GITHUB_ENV
+
+      - name: Install Python dependencies
+        if: inputs.script_type == 'py'
         run: |
           pip install numpy
-          # pip install torch - need to find a way to cache this otherwise it will take a long time to install
+          # Add other Python dependencies as needed
 
-      - name: Create and run training script
+      - name: Install CUDA dependencies
+        if: inputs.script_type == 'cu'
         run: |
-          echo "${{ inputs.script_content }}" > train.py
-          cat train.py  # Debug: print the content
-          python train.py > training.log 2>&1
-        
+          sudo apt-get update
+          sudo apt-get install -y nvidia-cuda-toolkit
+          nvcc --version
+
+      - name: Create training script
+        run: |
+          echo "${{ inputs.script_content }}" > ${{ env.SCRIPT_FILE }}
+          cat ${{ env.SCRIPT_FILE }}  # Debug: print the content
+
+      - name: Compile and run CUDA script
+        if: inputs.script_type == 'cu'
+        run: |
+          nvcc ${{ env.SCRIPT_FILE }} -o train_cuda
+          ./train_cuda > ${{ env.OUTPUT_FILE }} 2>&1
+
+      - name: Run Python script
+        if: inputs.script_type == 'py'
+        run: |
+          python ${{ env.SCRIPT_FILE }} > ${{ env.OUTPUT_FILE }} 2>&1
+
       - name: Upload logs
         uses: actions/upload-artifact@v3
-        if: always()  # Upload logs whether the job succeeds or fails
+        if: always()
         with:
           name: training-logs
-          path: training.log
+          path: ${{ env.OUTPUT_FILE }}
