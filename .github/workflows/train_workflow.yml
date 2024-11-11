@@ -9,7 +9,7 @@ on:
 
 jobs:
   train:
-    runs-on: [self-hosted, gpumode-nvidia-arc]
+    runs-on: [self-hosted, amdgpu-mi250-x86-64]
     steps:
       - name: Install dependencies
         run: |
