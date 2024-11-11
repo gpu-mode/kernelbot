@@ -2,9 +2,7 @@ name: AMD PyTorch Job
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-
+  
 jobs:
   train:
     runs-on: [amdgpu-mi250-x86-64]
