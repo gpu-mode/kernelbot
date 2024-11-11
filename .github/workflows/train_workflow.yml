@@ -2,7 +2,12 @@ name: AMD PyTorch Job
 
 on:
   workflow_dispatch:
-  
+    inputs:
+      script_content:
+        description: 'Content of train.py'
+        required: false
+        type: string
+
 jobs:
   train:
     runs-on: [amdgpu-mi250-x86-64]
@@ -11,7 +16,7 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.10'  # or your preferred version
 
     - name: Install dependencies
       run: |
