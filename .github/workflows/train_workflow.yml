@@ -9,12 +9,11 @@ on:
 
 jobs:
   train:
-    runs-on: ubuntu-latest
+    runs-on: [gpumode-nvidia-arc, amd-mi250] # Add more GPUs as we get them here
     steps:
       - name: Install dependencies
         run: |
-          pip install numpy
-          # pip install torch - need to find a way to cache this otherwise it will take a long time to install
+          pip install numpy torch
 
       - name: Create and run training script
         run: |
