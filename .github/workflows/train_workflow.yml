@@ -4,7 +4,7 @@ on:
     inputs:
       script_content:
         description: 'Content of train.py'
-        required: true
+        required: false
         type: string  # Explicitly specify the type
 
 jobs:
