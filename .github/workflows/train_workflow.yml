@@ -9,12 +9,12 @@ on:
 
 jobs:
   train:
-    runs-on: [self-hosted, amdgpu-mi250-x86-64]
+    runs-on: [self-hosted]
     steps:
       - name: Install dependencies
         run: |
           pip install numpy
-          pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
+          pip install torch
 
       - name: Create and run training script
         run: |
