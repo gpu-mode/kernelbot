@@ -11,7 +11,8 @@ on:
 jobs:
   train:
     runs-on: [gpumode-nvidia-arc]
-    
+    container:
+      image: nvidia/cuda:12.4.0-devel-ubuntu22.04
     steps:
     - name: Setup Python
       uses: actions/setup-python@v4
