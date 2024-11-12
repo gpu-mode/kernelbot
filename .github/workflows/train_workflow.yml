@@ -1,4 +1,4 @@
-name: AMD PyTorch Job
+name: NVIDIA PyTorch Job
 
 on:
   workflow_dispatch:
