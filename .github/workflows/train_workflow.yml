@@ -10,7 +10,7 @@ on:
 
 jobs:
   train:
-    runs-on: [amdgpu-mi250-x86-64]
+    runs-on: [gpumode-nvidia-arc]
     
     steps:
     - name: Setup Python
@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install numpy
-        pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
+        pip install torch
 
     - name: Create training script
       shell: python
