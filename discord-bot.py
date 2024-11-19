@@ -60,105 +60,158 @@ for var in required_env_vars:
 
 class ClusterBot(discord.Client):
     def __init__(self):
-        # Add message content intent
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
-        
-        # Register commands during initialization
-        @self.tree.command(
-            name="run",
-            description="Run a Python script on the cluster"
-        )
+
+        # Simple ping command
+        @self.tree.command(name="ping")
+        async def ping(interaction: discord.Interaction):
+            await interaction.response.send_message("pong")
+
+        # Admin command to resync
+        @self.tree.command(name="resync")
+        async def resync(interaction: discord.Interaction):
+            if interaction.user.guild_permissions.administrator:
+                try:
+                    await interaction.response.defer(ephemeral=True)
+                    # Clear and resync
+                    self.tree.clear_commands(guild=interaction.guild)
+                    await self.tree.sync(guild=interaction.guild)
+                    commands = await self.tree.fetch_commands(guild=interaction.guild)
+                    await interaction.followup.send(
+                        f"Resynced commands:\n" + 
+                        "\n".join([f"- /{cmd.name}" for cmd in commands]),
+                        ephemeral=True
+                    )
+                except Exception as e:
+                    await interaction.followup.send(f"Error: {str(e)}", ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    "You need administrator permissions to use this command",
+                    ephemeral=True
+                )
+
+        # Create the run command group
+        self.run_group = app_commands.Group(name="run", description="Run jobs on different platforms")
+
+        # Modal subcommand
+        @self.run_group.command(name="modal")
         @app_commands.describe(
             script="The Python script file to run",
-            gpu_type="Choose the GPU type",
-            scheduler="Choose the scheduler system"
+            gpu_type="Choose the GPU type for Modal"
         )
         @app_commands.choices(
             gpu_type=[
-                app_commands.Choice(name="NVIDIA", value="nvidia"),
-                app_commands.Choice(name="AMD", value="amd")
-            ],
-            scheduler=[
-                app_commands.Choice(name="GitHub Actions", value="github"),
-                app_commands.Choice(name="Modal", value="modal")
+                app_commands.Choice(name="NVIDIA T4", value="t4"),
+                # app_commands.Choice(name="NVIDIA A10G", value="a10g")
             ]
         )
-        async def run_script(
+        async def run_modal(
             interaction: discord.Interaction,
             script: discord.Attachment,
-            gpu_type: app_commands.Choice[str],
-            scheduler: app_commands.Choice[str]
+            gpu_type: app_commands.Choice[str]
         ):
             if not script.filename.endswith('.py'):
                 await interaction.response.send_message("Please provide a Python (.py) file", ephemeral=True)
                 return
 
-            # Create thread for job
             thread = await interaction.channel.create_thread(
-                name=f"{scheduler.value.capitalize()} Job - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                name=f"Modal Job ({gpu_type.name}) - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 auto_archive_duration=1440
             )
 
-            await interaction.response.send_message(f"Created thread {thread.mention} for your job", ephemeral=True)
-            await thread.send(f"Processing `{script.filename}`...")
+            await interaction.response.send_message(f"Created thread {thread.mention} for your Modal job", ephemeral=True)
+            await thread.send(f"Processing `{script.filename}` with {gpu_type.name}...")
 
             try:
                 script_content = (await script.read()).decode('utf-8')
+                await thread.send("Running on Modal...")
+                result = await trigger_modal_run(script_content, script.filename)
+                await thread.send(f"```\nModal execution result:\n{result}\n```")
+            except Exception as e:
+                logger.error(f"Error processing request: {str(e)}", exc_info=True)
+                await thread.send(f"Error processing request: {str(e)}")
+
+        # GitHub subcommand
+        @self.run_group.command(name="github")
+        @app_commands.describe(
+            script="The Python script file to run",
+            gpu_type="Choose the GPU type for GitHub Actions"
+        )
+        @app_commands.choices(
+            gpu_type=[
+                app_commands.Choice(name="NVIDIA", value="nvidia"),
+                app_commands.Choice(name="AMD", value="amd")
+            ]
+        )
+        async def run_github(
+            interaction: discord.Interaction,
+            script: discord.Attachment,
+            gpu_type: app_commands.Choice[str]
+        ):
+            if not script.filename.endswith('.py'):
+                await interaction.response.send_message("Please provide a Python (.py) file", ephemeral=True)
+                return
+
+            thread = await interaction.channel.create_thread(
+                name=f"GitHub Job ({gpu_type.name}) - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                auto_archive_duration=1440
+            )
+
+            await interaction.response.send_message(f"Created thread {thread.mention} for your GitHub job", ephemeral=True)
+            await thread.send(f"Processing `{script.filename}` with {gpu_type.name}...")
+
+            try:
+                script_content = (await script.read()).decode('utf-8')
+                selected_gpu = GPUType.AMD if gpu_type.value == "amd" else GPUType.NVIDIA
+                run_id = await trigger_github_action(script_content, script.filename, selected_gpu)
                 
-                if scheduler.value == "modal":
-                    await thread.send("Running on Modal...")
-                    result = await trigger_modal_run(script_content, script.filename)
-                    await thread.send(f"```\nModal execution result:\n{result}\n```")
-                
-                else:  # GitHub Actions
-                    selected_gpu = GPUType.AMD if gpu_type.value == "amd" else GPUType.NVIDIA
-                    run_id = await trigger_github_action(script_content, script.filename, selected_gpu)
+                if run_id:
+                    await thread.send(f"GitHub Action triggered! Run ID: {run_id}\nMonitoring progress...")
+                    status, logs, url = await check_workflow_status(run_id, thread)
                     
-                    if run_id:
-                        await thread.send(f"GitHub Action triggered! Run ID: {run_id}\nMonitoring progress...")
-                        status, logs, url = await check_workflow_status(run_id, thread)
-                        
-                        await thread.send(f"Training completed with status: {status}")
-                        
-                        if len(logs) > 1900:
-                            chunks = [logs[i:i+1900] for i in range(0, len(logs), 1900)]
-                            for i, chunk in enumerate(chunks):
-                                await thread.send(f"```\nLogs (part {i+1}/{len(chunks)}):\n{chunk}\n```")
-                        else:
-                            await thread.send(f"```\nLogs:\n{logs}\n```")
-                        
-                        if url:
-                            await thread.send(f"View the full run at: {url}")
+                    await thread.send(f"Training completed with status: {status}")
+                    
+                    if len(logs) > 1900:
+                        chunks = [logs[i:i+1900] for i in range(0, len(logs), 1900)]
+                        for i, chunk in enumerate(chunks):
+                            await thread.send(f"```\nLogs (part {i+1}/{len(chunks)}):\n{chunk}\n```")
                     else:
-                        await thread.send("Failed to trigger GitHub Action. Please check the configuration.")
+                        await thread.send(f"```\nLogs:\n{logs}\n```")
+                    
+                    if url:
+                        await thread.send(f"View the full run at: {url}")
+                else:
+                    await thread.send("Failed to trigger GitHub Action. Please check the configuration.")
             
             except Exception as e:
                 logger.error(f"Error processing request: {str(e)}", exc_info=True)
                 await thread.send(f"Error processing request: {str(e)}")
 
+        # Add the run group to the command tree
+        self.tree.add_command(self.run_group)
+
     async def setup_hook(self):
         try:
             guild_id = os.getenv('DISCORD_MARK_STAGING_ID')
-            if globals().get('args') and args.debug and guild_id:
-                # Convert guild_id to int
-                guild_id = int(guild_id)
-                logger.info(f"Debug mode: Syncing commands to guild ID {guild_id}")
-                guild = discord.Object(id=guild_id)
-                # Clear existing commands and sync new ones
+            if guild_id:
+                guild = discord.Object(id=int(guild_id))
+                
+                # Clear existing commands
                 self.tree.clear_commands(guild=guild)
+                logger.info("Cleared existing commands")
+                
+                # Copy global commands to guild and sync
+                self.tree.copy_global_to(guild=guild)
                 await self.tree.sync(guild=guild)
-                logger.info("Slash commands synced successfully to guild")
-            else:
-                logger.info("Production mode: Syncing commands globally")
-                # Clear existing commands and sync new ones
-                self.tree.clear_commands()
-                await self.tree.sync()
-                logger.info("Slash commands synced successfully globally")
+                
+                # Verify commands
+                commands = await self.tree.fetch_commands(guild=guild)
+                logger.info(f"Synced commands: {[cmd.name for cmd in commands]}")
         except Exception as e:
-            logger.error(f"Failed to sync slash commands: {e}")
+            logger.error(f"Failed to sync commands: {e}")
 
 client = ClusterBot()
 
