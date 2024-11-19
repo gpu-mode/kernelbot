@@ -195,7 +195,7 @@ class ClusterBot(discord.Client):
 
     async def setup_hook(self):
         try:
-            guild_id = os.getenv('DISCORD_MARK_STAGING_ID')
+            guild_id = os.getenv('DISCORD_CLUSTER_STAGING_ID')
             if guild_id:
                 guild = discord.Object(id=int(guild_id))
                 
