@@ -92,48 +92,21 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-
-# Modal app setup and stub function definition
-modal_app = modal.App("discord-bot-runner")
-
-@modal_app.function(
-    gpu="T4",
-    image=modal.Image.debian_slim(python_version="3.12")
-        .pip_install(["torch"])
-)
-def run_script_on_modal(script_content, filename):
-    """
-    Runs a Python script on Modal with GPU, isolated from the bot's environment
-    """
-    import sys
-    from io import StringIO
-    
-    # Capture output
-    output = StringIO()
-    sys.stdout = output
-    
-    try:
-        # Execute the submitted script content directly
-        exec(script_content, {'__name__': '__main__'})
-        return output.getvalue()
-    except Exception as e:
-        return f"Error executing script: {str(e)}"
-    finally:
-        sys.stdout = sys.__stdout__
-
-async def trigger_modal_run(script_content, filename):
+async def trigger_modal_run(script_content: str, filename: str) -> str:
     """
     Triggers a Modal run with the provided script
     """
     logger.info("Attempting to trigger Modal run")
     try:
-        with modal_app.run():
-            result = run_script_on_modal.remote(script_content, filename)
+        from modal_runner import run_script, modal_app
+        with modal.enable_output():
+            with modal_app.run():
+                result = run_script.remote(script_content)
             return result
     except Exception as e:
         logger.error(f"Error in trigger_modal_run: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
-
+    
 async def trigger_github_action(script_content, filename, gpu_type):
     """
     Triggers the GitHub action with custom script contents and filename
@@ -287,7 +260,7 @@ async def on_message(message):
                     )
                     
                     # Send initial message in the thread
-                    await thread.send(f"Found {attachment.filename}! Starting process on {scheduler_type.value}...")
+                    await thread.send(f"Found `{attachment.filename}`! Starting process on {scheduler_type.value}...")
                     
                     try:
                         # Download the file content
