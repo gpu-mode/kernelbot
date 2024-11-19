@@ -13,6 +13,12 @@ The key idea is that we're using Github Actions as a job scheduling engine and p
 
 Right now the bot is running on my macbook but will some more permanent location
 
+## Supported schedulers
+
+* GitHub Actions
+* Modal
+* Slurm (not implemented yet)
+
 ## Why Github Actions
 
 Every triggered job is containerized so we don't have to worry too much about security. We are exploring a K8 like setup but it's just harder to finish in a reasonable timeframe
