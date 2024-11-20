@@ -29,6 +29,12 @@ jobs:
       with:
         version: "latest"
 
+    - name: Setup Python environment
+      run: |
+        uv venv .venv
+        echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+        echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
     - name: Create script
       shell: python
       run: |
