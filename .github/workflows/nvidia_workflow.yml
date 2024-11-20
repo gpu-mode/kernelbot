@@ -42,6 +42,8 @@ jobs:
           echo "Triton detected, installing triton"
           pip install triton
         fi
+        echo "Installing dependencies..."
+        pip install numpy numba
 
     # - name: Run script with profiler
     #   run: |
