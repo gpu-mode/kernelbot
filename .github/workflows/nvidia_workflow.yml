@@ -73,6 +73,7 @@ jobs:
         # Also run the script normally and log output
         "$PYTHON_BIN" "${{ github.event.inputs.filename }}" > training.log 2> script_error.log || true
         cat script_error.log  # Output script errors if any
+        sleep 120
 
     - name: Save Python binary information
       run: echo "$PYTHON_BIN" > python_bin_used.txt
