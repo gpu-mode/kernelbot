@@ -43,23 +43,57 @@ jobs:
           pip install triton
         fi
 
+    # - name: Run script with profiler
+    #   run: |
+    #     # Run the script with NSight Compute profiler and save to CSV
+    #     ncu --csv python "${{ github.event.inputs.filename }}" > profile_results.csv 2>&1
+    #     # Also keep regular output in training.log
+    #     python "${{ github.event.inputs.filename }}" > training.log 2>&1
+
     - name: Run script with profiler
       run: |
-        which python || true
-        which python3 || true
-        # Run the script with NSight Compute profiler and save to CSV
-        ncu --csv python3 "${{ github.event.inputs.filename }}" > profile_results.csv 2>&1
-        # Also keep regular output in training.log
-        python3 "${{ github.event.inputs.filename }}" > training.log 2>&1
+        set -e  # Exit immediately if any command fails
+        set -x  # Enable command tracing for debugging
 
-    - name: Upload training artifacts
+        # Determine the proper Python executable
+        PYTHON_BIN=$(command -v python3 || command -v python || echo "Python not found")
+        if [ "$PYTHON_BIN" = "Python not found" ]; then
+          echo "Error: Python executable not found in PATH." >&2
+          exit 1
+        fi
+
+        echo "Using Python executable: $PYTHON_BIN"
+
+        # Run the script with NSight Compute profiler and save to CSV
+        ncu --csv "$PYTHON_BIN" "${{ github.event.inputs.filename }}" > profile_results.csv 2> profiler_error.log || true
+        cat profiler_error.log  # Output profiler errors if any
+
+        # Also run the script normally and log output
+        "$PYTHON_BIN" "${{ github.event.inputs.filename }}" > training.log 2> script_error.log || true
+        cat script_error.log  # Output script errors if any
+
+    - name: Save Python binary information
+      run: echo "$PYTHON_BIN" > python_bin_used.txt
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v3
-      if: always()
       with:
         name: training-artifacts
         path: |
           training.log
-          # profile_results.csv
-          ${{ github.event.inputs.filename }}
-      env:
-        CUDA_VISIBLE_DEVICES: 0 # Make sure only one GPU is used for testing
+          profiler_error.log
+          script_error.log
+          profile_results.csv
+          python_bin_used.txt
+
+    # - name: Upload training artifacts
+    #   uses: actions/upload-artifact@v3
+    #   if: always()
+    #   with:
+    #     name: training-artifacts
+    #     path: |
+    #       training.log
+    #       # profile_results.csv
+    #       ${{ github.event.inputs.filename }}
+    #   env:
+    #     CUDA_VISIBLE_DEVICES: 0 # Make sure only one GPU is used for testing
