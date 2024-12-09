@@ -60,6 +60,9 @@ class ModalCog(commands.Cog):
                     else (await reference_script.read()).decode("utf-8")
                 )
                 eval_code = py_eval if script.filename.endswith(".py") else cu_eval
+            else:
+                eval_code = None
+                reference_content = None
 
             script_content = (await script.read()).decode("utf-8")
             status_msg = await thread.send(
@@ -69,9 +72,9 @@ class ModalCog(commands.Cog):
             result, execution_time_ms = await self.trigger_modal_run(
                 script_content,
                 script.filename,
-                gpu_type,
-                reference_content,
-                eval_code,
+                gpu_type.value,
+                eval_content=eval_code,
+                reference_content=reference_content,
             )
 
             # Update status message to show completion

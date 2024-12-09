@@ -2,7 +2,7 @@ import modal
 from modal import App, Image
 from contextlib import contextmanager
 import signal
-from utils import load_module
+from utils import strip_imports
 
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
@@ -33,7 +33,8 @@ def timeout(seconds: int):
 
 
 @modal_app.function(
-    gpu="T4", image=Image.debian_slim(python_version="3.10").pip_install(["torch"])
+    gpu="T4",
+    image=Image.debian_slim(python_version="3.10").pip_install(["torch", "numpy"]),
 )
 def run_pytorch_script_t4(
     script_content: str,
@@ -52,7 +53,8 @@ def run_pytorch_script_t4(
 
 
 @modal_app.function(
-    gpu="L4", image=Image.debian_slim(python_version="3.10").pip_install(["torch"])
+    gpu="L4",
+    image=Image.debian_slim(python_version="3.10").pip_install(["torch", "numpy"]),
 )
 def run_pytorch_script_l4(
     script_content: str,
@@ -161,16 +163,41 @@ def run_pytorch_script(
         with timeout(timeout_seconds):
             # Create a new dictionary for local variables to avoid polluting the global namespace
 
-            # I'm worried that this will create clashes in the future
-            #  TODO: maybe randomized function names here?
-            script_module = load_module(script_content, "script")
-            reference_module = load_module(reference_content, "reference")
-            eval_module = load_module(eval_content, "eval")
+            if eval_content is not None:
+                global_vars = {}
+                local_vars = {}
 
-            # Execute the script in the isolated namespace
-            if not hasattr(eval_module, "metric"):
-                raise ValueError("'eval' script must define a `metric()` entry point.")
-            result = eval_module.metric()  # Execute t
+                # I'm worried that this will create clashes in the future
+                #  TODO: maybe randomized function names here?
+                exec(script_content, global_vars, local_vars)
+                print("Global variables after execution script:", global_vars)
+
+                reference_content = strip_imports(reference_content, local_vars)
+                exec(reference_content, global_vars, local_vars)
+                print("Global variables after execution ref:", global_vars)
+
+                eval_content = strip_imports(eval_content, local_vars)
+                exec(eval_content, global_vars, local_vars)
+
+                # # Execute the script in the isolated namespace
+                # if not hasattr(eval_module, "metric"):
+                #     raise ValueError(
+                #         "'eval' script must define a `metric()` entry point."
+                #     )
+                # result = eval_module.metric()  # Execute t
+                result = global_vars["metric"]()
+
+            else:
+                local_vars = {}
+
+                execution_start_time = time.perf_counter()
+
+                # Execute the script in the isolated namespace
+                exec(script_content, {}, local_vars)
+
+                execution_end_time = time.perf_counter()
+
+                result = (execution_end_time - execution_start_time) * 1000
 
         return output.getvalue(), result
 

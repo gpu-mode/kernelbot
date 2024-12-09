@@ -50,11 +50,29 @@ def extract_score(score_str: str) -> float:
         return None
 
 
-def load_module(file_path: str, module_name: str):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def strip_imports(code: str, global_vars: dict) -> str:
+    """
+    Removes import statements from the code that import functions
+    already defined in global_vars.
+    """
+    lines = code.split("\n")
+    modified_code = []
+
+    # Extract the names of the functions already defined in global_vars
+    existing_functions = {name for name, obj in global_vars.items() if callable(obj)}
+
+    for line in lines:
+        # If the line is an import statement, check if it's importing one of the existing functions
+        if line.startswith("from") or line.startswith("import"):
+            # Extract the function names from the import statements
+            import_parts = line.split(" ")
+            if len(import_parts) > 1:
+                imported_name = import_parts[-1].strip()
+                if imported_name in existing_functions:
+                    continue  # Skip this import if the function is already defined
+        modified_code.append(line)
+
+    return "\n".join(modified_code)
 
 
 async def get_user_from_id(id, interaction, bot):

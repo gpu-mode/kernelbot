@@ -67,10 +67,45 @@ class LeaderboardSubmitCog(app_commands.Group):
                 await interaction.response.send_message("❌ Required cogs not found!")
                 return
 
+            # Read and convert reference code
+            reference_code = None
+            with self.bot.leaderboard_db as db:
+                leaderboard_item = db.get_leaderboard(leaderboard_name)
+                if not leaderboard_item:
+                    await interaction.response.send_message(
+                        f"Leaderboard {leaderboard_name} not found.", ephemeral=True
+                    )
+                    return
+                reference_code = leaderboard_item["reference_code"]
+
+            # Call GH runner
+            modal_command = self.bot.get_cog("ModalCog")
+
+            if not all([modal_cog]):
+                await interaction.response.send_message("❌ Required cogs not found!")
+                return
+
             modal_command = modal_cog.run_modal
+            try:
+                modal_thread = await modal_command.callback(
+                    modal_cog,
+                    interaction,
+                    script,
+                    gpu_type,
+                    reference_code=reference_code,
+                    use_followup=True,
+                )
+            except discord.errors.NotFound as e:
+                print(f"Webhook not found: {e}")
+                await interaction.followup.send("❌ The webhook was not found.")
+
+            message_contents = [
+                msg.content async for msg in modal_thread.history(limit=None)
+            ]
 
             # Compute eval or submission score, call runner here.
-            score = random.random()
+            # TODO: Make this more robust later
+            score = extract_score("".join(message_contents))
 
             with self.bot.leaderboard_db as db:
                 db.create_submission({
@@ -82,8 +117,13 @@ class LeaderboardSubmitCog(app_commands.Group):
                     "submission_score": score,
                 })
 
-            await interaction.response.send_message(
-                f"Ran on Modal. Leaderboard '{leaderboard_name}'. Submission title: {script.filename}. Submission user: {interaction.user.id}. Runtime: {score} ms",
+            user_id = interaction.user.name
+            await interaction.followup.send(
+                "Successfully ran on Modal runners!\n"
+                + f"Leaderboard '{leaderboard_name}'.\n"
+                + f"Submission title: {script.filename}.\n"
+                + f"Submission user: {user_id}\n"
+                + f"Runtime: {score} ms\n",
                 ephemeral=True,
             )
         except ValueError:
@@ -139,7 +179,6 @@ class LeaderboardSubmitCog(app_commands.Group):
                 return
 
             github_command = github_cog.run_github
-            print(github_command)
             try:
                 github_thread = await github_command.callback(
                     github_cog,
