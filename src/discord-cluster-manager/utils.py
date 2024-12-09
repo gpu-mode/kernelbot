@@ -2,6 +2,7 @@ import logging
 import subprocess
 import datetime
 import re
+import importlib.util
 from typing import TypedDict
 
 
@@ -38,6 +39,24 @@ def get_github_branch_name():
         return "main"
 
 
+def extract_score(score_str: str) -> float:
+    """
+    Extract score from output logs and push to DB (kind of hacky).
+    """
+    match = re.search(r"score:\s*(-?\d+\.\d+)", score_str)
+    if match:
+        return float(match.group(1))
+    else:
+        return None
+
+
+def load_module(file_path: str, module_name: str):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 async def get_user_from_id(id, interaction, bot):
     # This currently doesn't work.
     if interaction.guild:
@@ -56,17 +75,6 @@ async def get_user_from_id(id, interaction, bot):
             return username
         else:
             return id
-
-
-def extract_score(score_str: str) -> float:
-    """
-    Extract score from output logs and push to DB (kind of hacky).
-    """
-    match = re.search(r"score:\s*(-?\d+\.\d+)", score_str)
-    if match:
-        return float(match.group(1))
-    else:
-        return None
 
 
 class LeaderboardItem(TypedDict):

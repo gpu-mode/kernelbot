@@ -1,6 +1,8 @@
+import modal
 from modal import App, Image
 from contextlib import contextmanager
 import signal
+from utils import load_module
 
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
@@ -31,10 +33,110 @@ def timeout(seconds: int):
 
 
 @modal_app.function(
-    gpu="T4", 
-    image=Image.debian_slim(python_version="3.10").pip_install(["torch"])
+    gpu="T4", image=Image.debian_slim(python_version="3.10").pip_install(["torch"])
 )
-def run_pytorch_script(script_content: str, timeout_seconds: int = 300) -> tuple[str, float]:
+def run_pytorch_script_t4(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
+    return run_pytorch_script(
+        script_content,
+        gpu_type,
+        eval_content,
+        reference_content,
+        timeout_seconds,
+    )
+
+
+@modal_app.function(
+    gpu="L4", image=Image.debian_slim(python_version="3.10").pip_install(["torch"])
+)
+def run_pytorch_script_l4(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
+    return run_pytorch_script(
+        script_content,
+        gpu_type,
+        eval_content,
+        reference_content,
+        timeout_seconds,
+    )
+
+
+@modal_app.function(
+    gpu=modal.gpu.A100(size="80GB"),
+    image=Image.debian_slim(python_version="3.10").pip_install(["torch"]),
+)
+def run_pytorch_script_a100_80gb(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
+    return run_pytorch_script(
+        script_content,
+        gpu_type,
+        eval_content,
+        reference_content,
+        timeout_seconds,
+    )
+
+
+@modal_app.function(
+    gpu="a100",
+    image=Image.debian_slim(python_version="3.10").pip_install(["torch"]),
+)
+def run_pytorch_script_a100_40gb(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
+    return run_pytorch_script(
+        script_content,
+        gpu_type,
+        eval_content,
+        reference_content,
+        timeout_seconds,
+    )
+
+
+@modal_app.function(
+    gpu="h100",
+    image=Image.debian_slim(python_version="3.10").pip_install(["torch"]),
+)
+def run_pytorch_script_h100(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
+    return run_pytorch_script(
+        script_content,
+        gpu_type,
+        eval_content,
+        reference_content,
+        timeout_seconds,
+    )
+
+
+def run_pytorch_script(
+    script_content: str,
+    gpu_type: str,
+    eval_content: str = None,
+    reference_content: str = None,
+    timeout_seconds: int = 300,
+) -> tuple[str, float]:
     """
     Executes the provided PyTorch GPU kernel in an isolated environment with a timeout
 
@@ -58,18 +160,19 @@ def run_pytorch_script(script_content: str, timeout_seconds: int = 300) -> tuple
     try:
         with timeout(timeout_seconds):
             # Create a new dictionary for local variables to avoid polluting the global namespace
-            local_vars = {}
-            
-            execution_start_time = time.perf_counter()
+
+            # I'm worried that this will create clashes in the future
+            #  TODO: maybe randomized function names here?
+            script_module = load_module(script_content, "script")
+            reference_module = load_module(reference_content, "reference")
+            eval_module = load_module(eval_content, "eval")
 
             # Execute the script in the isolated namespace
-            exec(script_content, {}, local_vars)
+            if not hasattr(eval_module, "metric"):
+                raise ValueError("'eval' script must define a `metric()` entry point.")
+            result = eval_module.metric()  # Execute t
 
-            execution_end_time = time.perf_counter()
-
-            execution_time_ms = (execution_end_time - execution_start_time) * 1000
-
-        return output.getvalue(), execution_time_ms
+        return output.getvalue(), result
 
     except TimeoutException as e:
         return f"Timeout Error: {str(e)}", 0.0
@@ -85,7 +188,9 @@ def run_pytorch_script(script_content: str, timeout_seconds: int = 300) -> tuple
         "nvidia/cuda:12.6.0-devel-ubuntu24.04", add_python="3.11"
     ),
 )
-def run_cuda_script(script_content: str, timeout_seconds: int = 600) -> tuple[str, float]:
+def run_cuda_script(
+    script_content: str, timeout_seconds: int = 600
+) -> tuple[str, float]:
     """
     Executes the provided CUDA kernel in an isolated environment with a timeout
 

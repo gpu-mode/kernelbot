@@ -30,10 +30,11 @@ class GitHubGPU(Enum):
 
 
 class ModalGPU(Enum):
-    T4 = "T4"
-    L4 = "L4"
-    A100 = "A100"
-    H100 = "H100"
+    NVIDIA_T4 = "t4"
+    L4 = "l4"
+    A100 = "a100"
+    A100_80GB = "a100-80gb"
+    H100 = "h100"
 
 
 init_environment()
