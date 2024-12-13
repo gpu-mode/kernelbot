@@ -2,7 +2,7 @@ import logging
 import subprocess
 import datetime
 import re
-from typing import TypedDict
+from typing import TypedDict, List
 
 
 def setup_logging():
@@ -73,6 +73,7 @@ class LeaderboardItem(TypedDict):
     name: str
     deadline: datetime.datetime
     reference_code: str
+    gpu_types: List[str]
 
 
 class SubmissionItem(TypedDict):
