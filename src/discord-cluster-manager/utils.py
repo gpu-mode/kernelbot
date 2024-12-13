@@ -3,6 +3,7 @@ import subprocess
 import datetime
 import re
 from typing import TypedDict, List
+import discord
 
 
 def setup_logging():
@@ -56,6 +57,18 @@ async def get_user_from_id(id, interaction, bot):
             return username
         else:
             return id
+
+
+def discord_followup_wrapper(interaction: discord.Interaction, msg: str) -> None:
+    """
+    To get around response messages in slash commands that are
+    called externally, send a message using the followup.
+    """
+    try:
+        await interaction.response.send_message(msg)
+
+    except Exception:
+        await interaction.followup.send(msg)
 
 
 def extract_score(score_str: str) -> float:
