@@ -67,7 +67,6 @@ async def send_discord_message(
     called externally, send a message using the followup.
     """
     if interaction.response.is_done():
-        print("Test response")
         await interaction.followup.send(msg, **kwargs)
     else:
         await interaction.response.send_message(msg, **kwargs)
