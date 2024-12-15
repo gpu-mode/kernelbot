@@ -7,9 +7,11 @@ from datetime import datetime
 
 from typing import TYPE_CHECKING
 from consts import GitHubGPU, ModalGPU
-from utils import extract_score, get_user_from_id
+from utils import extract_score, get_user_from_id, setup_logging, send_discord_message
 
 import random
+
+logger = setup_logging()
 
 
 class LeaderboardSubmitCog(app_commands.Group):
@@ -149,7 +151,6 @@ class LeaderboardSubmitCog(app_commands.Group):
                     script,
                     gpu_type,
                     reference_code=reference_code,
-                    use_followup=True,
                 )
             except discord.errors.NotFound as e:
                 print(f"Webhook not found: {e}")
@@ -268,36 +269,32 @@ class LeaderboardCog(commands.Cog):
         deadline: str,
         reference_code: discord.Attachment,
     ):
+        # Try parsing with time first
         try:
-            # Try parsing with time first
+            date_value = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
+        except ValueError:
             try:
-                date_value = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
-            except ValueError:
-                try:
-                    date_value = datetime.strptime(deadline, "%Y-%m-%d")
-                except ValueError:
-                    raise ValueError(
-                        "Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM"
-                    )
+                date_value = datetime.strptime(deadline, "%Y-%m-%d")
+            except ValueError as ve:
+                logger.error(f"Value Error: {str(ve)}", exc_info=True)
+                await interaction.response.send_message(
+                    "Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM",
+                    ephemeral=True,
+                )
+                return
 
-            # Ask the user to select GPUs
-            view = GPUSelectionView([gpu.name for gpu in GitHubGPU])
+        # Ask the user to select GPUs
+        view = GPUSelectionView([gpu.name for gpu in GitHubGPU])
 
-            await interaction.response.send_message(
-                "Please select GPUs for this leaderboard:",
-                view=view,
-                ephemeral=True,
-            )
+        await send_discord_message(
+            interaction,
+            "Please select GPUs for this leaderboard:",
+            view=view,
+            ephemeral=True,
+        )
 
-            # Wait until the user makes a selection
-            await view.wait()
-
-        except ValueError as ve:
-            # Handle invalid date errors
-            await interaction.response.send_message(
-                str(ve),
-                ephemeral=True,
-            )
+        # Wait until the user makes a selection
+        await view.wait()
 
         # Kind of messy, but separate date try/catch
         try:
@@ -313,7 +310,6 @@ class LeaderboardCog(commands.Cog):
                 })
 
                 if err:
-                    print(err)
                     if "duplicate key" in err:
                         await interaction.followup.send(
                             f'Error: Tried to create a leaderboard "{leaderboard_name}" that already exists.',
@@ -321,6 +317,7 @@ class LeaderboardCog(commands.Cog):
                         )
                     else:
                         # Handle any other errors
+                        logger.error(f"Error in leaderboard creation: {err}")
                         await interaction.followup.send(
                             "Error in leaderboard creation.",
                             ephemeral=True,
@@ -333,19 +330,12 @@ class LeaderboardCog(commands.Cog):
             )
 
         except Exception as e:
-            print(str(e))
-            # Handle specific leaderboard name conflict
-            if "already exists" in str(e):
-                await interaction.followup.send(
-                    str(e),
-                    ephemeral=True,
-                )
-            else:
-                # Handle any other errors
-                await interaction.followup.send(
-                    "Error in leaderboard creation.",
-                    ephemeral=True,
-                )
+            logger.error(f"Error in leaderboard creation: {e}")
+            # Handle any other errors
+            await interaction.followup.send(
+                "Error in leaderboard creation.",
+                ephemeral=True,
+            )
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     async def get_leaderboard_submissions(
@@ -359,7 +349,7 @@ class LeaderboardCog(commands.Cog):
                 leaderboard_id = db.get_leaderboard(leaderboard_name)["id"]
                 if not leaderboard_id:
                     await interaction.response.send_message(
-                        "Leaderboard not found.", ephemeral=True
+                        f'Leaderboard "{leaderboard_name}" not found.', ephemeral=True
                     )
                     return
 
@@ -367,7 +357,7 @@ class LeaderboardCog(commands.Cog):
 
             if not submissions:
                 await interaction.response.send_message(
-                    "No submissions found.", ephemeral=True
+                    f'No submissions found for "{leaderboard_name}".', ephemeral=True
                 )
                 return
 
@@ -381,8 +371,6 @@ class LeaderboardCog(commands.Cog):
                 user_id = await get_user_from_id(
                     submission["user_id"], interaction, self.bot
                 )
-                print("members", interaction.guild.members)
-                print(user_id)
 
                 embed.add_field(
                     name=f"{user_id}: {submission['submission_name']}",
@@ -392,7 +380,7 @@ class LeaderboardCog(commands.Cog):
 
             await interaction.response.send_message(embed=embed)
         except Exception as e:
-            print(str(e))
+            logger.error(str(e))
             if "'NoneType' object is not subscriptable" in str(e):
                 await interaction.response.send_message(
                     f"The leaderboard '{leaderboard_name}' doesn't exist.",

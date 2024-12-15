@@ -3,19 +3,18 @@ from discord import app_commands
 from discord.ext import commands
 import modal
 import time
-from utils import setup_logging
+from utils import setup_logging, send_discord_message
 
 logger = setup_logging()
+
 
 class ModalCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
         self.run_modal = bot.run_group.command(
-            name="modal",
-            description="Run a script using Modal"
+            name="modal", description="Run a script using Modal"
         )(self.run_modal)
-
 
     @app_commands.describe(
         script="The Python script file to run", gpu_type="Choose the GPU type for Modal"
@@ -30,7 +29,6 @@ class ModalCog(commands.Cog):
         interaction: discord.Interaction,
         script: discord.Attachment,
         gpu_type: app_commands.Choice[str],
-        use_followup: bool = False
     ) -> discord.Thread:
         if not script.filename.endswith(".py") and not script.filename.endswith(".cu"):
             await interaction.response.send_message(
@@ -42,22 +40,24 @@ class ModalCog(commands.Cog):
         queue_start_time = time.perf_counter()
         message = f"Created thread {thread.mention} for your Modal job"
 
-        if use_followup:
-            await interaction.followup.send(message)
-        else:
-            await interaction.response.send_message(message)
-
+        await send_discord_message(interaction, message)
         await thread.send(f"**Processing `{script.filename}` with {gpu_type.name}...**")
 
         try:
             script_content = (await script.read()).decode("utf-8")
-            status_msg = await thread.send("**Running on Modal...**\n> ⏳ Waiting for available GPU...")
+            status_msg = await thread.send(
+                "**Running on Modal...**\n> ⏳ Waiting for available GPU..."
+            )
 
-            result, execution_time_ms = await self.trigger_modal_run(script_content, script.filename)
-            
+            result, execution_time_ms = await self.trigger_modal_run(
+                script_content, script.filename
+            )
+
             # Update status message to show completion
-            await status_msg.edit(content="**Running on Modal...**\n> ✅ Job completed!")
-            
+            await status_msg.edit(
+                content="**Running on Modal...**\n> ✅ Job completed!"
+            )
+
             queue_end_time = time.perf_counter()
             queue_time_ms = (queue_end_time - queue_start_time) * 1000
 
@@ -76,24 +76,33 @@ class ModalCog(commands.Cog):
         finally:
             return thread
 
-    async def trigger_modal_run(self, script_content: str, filename: str) -> tuple[str, float]:
+    async def trigger_modal_run(
+        self, script_content: str, filename: str
+    ) -> tuple[str, float]:
         logger.info("Attempting to trigger Modal run")
 
         from modal_runner import modal_app
 
         try:
-            print(f"Running {filename} with Modal")            
+            print(f"Running {filename} with Modal")
             with modal.enable_output():
                 with modal_app.run():
                     if filename.endswith(".py"):
                         from modal_runner import run_pytorch_script
-                        result, execution_time_ms = run_pytorch_script.remote(script_content)
+
+                        result, execution_time_ms = run_pytorch_script.remote(
+                            script_content
+                        )
                     elif filename.endswith(".cu"):
                         from modal_runner import run_cuda_script
-                        result, execution_time_ms = run_cuda_script.remote(script_content)
+
+                        result, execution_time_ms = run_cuda_script.remote(
+                            script_content
+                        )
 
             return result, execution_time_ms
-            
+
         except Exception as e:
             logger.error(f"Error in trigger_modal_run: {str(e)}", exc_info=True)
             return f"Error: {str(e)}", 0
+

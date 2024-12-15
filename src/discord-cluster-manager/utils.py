@@ -59,16 +59,18 @@ async def get_user_from_id(id, interaction, bot):
             return id
 
 
-def discord_followup_wrapper(interaction: discord.Interaction, msg: str) -> None:
+async def send_discord_message(
+    interaction: discord.Interaction, msg: str, **kwargs
+) -> None:
     """
     To get around response messages in slash commands that are
     called externally, send a message using the followup.
     """
-    try:
-        await interaction.response.send_message(msg)
-
-    except Exception:
-        await interaction.followup.send(msg)
+    if interaction.response.is_done():
+        print("Test response")
+        await interaction.followup.send(msg, **kwargs)
+    else:
+        await interaction.response.send_message(msg, **kwargs)
 
 
 def extract_score(score_str: str) -> float:

@@ -115,7 +115,7 @@ class LeaderboardDB:
             self.connection.commit()
         except psycopg2.Error as e:
             self.connection.rollback()  # Ensure rollback if error occurs
-            return f"Error during leaderboard creation: {e}"
+            return "Error during leaderboard creation."
 
         return None
 

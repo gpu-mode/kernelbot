@@ -7,7 +7,7 @@ import requests
 import zipfile
 import os
 from github import Github
-from utils import setup_logging, get_github_branch_name
+from utils import setup_logging, get_github_branch_name, send_discord_message
 from consts import GPUType, GITHUB_TOKEN, GITHUB_REPO
 from leaderboard_eval import py_eval, cu_eval
 
@@ -36,7 +36,6 @@ class GitHubCog(commands.Cog):
         interaction: discord.Interaction,
         script: discord.Attachment,
         gpu_type: app_commands.Choice[str],
-        use_followup: bool = False,
         reference_script: discord.Attachment = None,
         reference_code: str = None,
     ) -> discord.Thread:
@@ -49,10 +48,8 @@ class GitHubCog(commands.Cog):
         thread = await self.bot.create_thread(interaction, gpu_type.name, "GitHub Job")
         message = f"Created thread {thread.mention} for your GitHub job"
 
-        if use_followup:
-            await interaction.followup.send(message)
-        else:
-            await interaction.response.send_message(message)
+        # Send message or append message
+        await send_discord_message(interaction, message)
 
         await thread.send(f"Processing `{script.filename}` with {gpu_type.name}...")
 
