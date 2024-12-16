@@ -2,9 +2,8 @@ import random
 from datetime import datetime
 
 import discord
-from discord import ui, SelectOption, Interaction
 from consts import GitHubGPU, ModalGPU
-from discord import app_commands
+from discord import Interaction, SelectOption, app_commands, ui
 from discord.ext import commands
 from utils import extract_score, get_user_from_id
 
