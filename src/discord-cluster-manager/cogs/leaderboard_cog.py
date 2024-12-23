@@ -114,6 +114,8 @@ class LeaderboardSubmitCog(app_commands.Group):
             )
             return
 
+        # Test whether the submitted GPU type exists in LB
+
         try:
             # Read and convert reference code
             reference_code = None
