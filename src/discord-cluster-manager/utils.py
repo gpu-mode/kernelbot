@@ -92,13 +92,13 @@ class LeaderboardItem(TypedDict):
 class SubmissionItem(TypedDict):
     submission_name: str
     submission_time: datetime.datetime
-    submission_score: float
     leaderboard_name: str
     code: str
     user_id: int
 
 
-class ProfilingItem(TypedDict):
-    submission_name: str
-    ncu_output: str
+class RunInfoItem(TypedDict):
     stdout: str
+    ncu_output: str
+    gpu_type: str
+    score: float

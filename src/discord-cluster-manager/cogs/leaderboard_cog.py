@@ -76,16 +76,20 @@ class LeaderboardSubmitCog(app_commands.Group):
             score = random.random()
 
             with self.bot.leaderboard_db as db:
-                db.create_submission(
-                    {
-                        "submission_name": script.filename,
-                        "submission_time": datetime.now(),
-                        "leaderboard_name": leaderboard_name,
-                        "code": submission_content,
-                        "user_id": interaction.user.id,
-                        "submission_score": score,
-                    }
-                )
+                submission_id = db.create_submission({
+                    "submission_name": script.filename,
+                    "submission_time": datetime.now(),
+                    "leaderboard_name": leaderboard_name,
+                    "code": submission_content,
+                    "user_id": interaction.user.id,
+                })
+
+                db.create_run_info(submission_id, {
+                    "stdout": None,
+                    "ncu_output": None,
+                    "gpu_type": gpu_type.name,
+                    "score": score,
+                })
 
             await send_discord_message(
                 interaction,
@@ -179,16 +183,20 @@ class LeaderboardSubmitCog(app_commands.Group):
             score = extract_score("".join(message_contents))
 
             with self.bot.leaderboard_db as db:
-                db.create_submission(
-                    {
-                        "submission_name": script.filename,
-                        "submission_time": datetime.now(),
-                        "leaderboard_name": leaderboard_name,
-                        "code": submission_content,
-                        "user_id": interaction.user.id,
-                        "submission_score": score,
-                    }
-                )
+                submission_id = db.create_submission({
+                    "submission_name": script.filename,
+                    "submission_time": datetime.now(),
+                    "leaderboard_name": leaderboard_name,
+                    "code": submission_content,
+                    "user_id": interaction.user.id,
+                })
+
+                db.create_run_info(submission_id, {
+                    "stdout": None,
+                    "ncu_output": None,
+                    "gpu_type": gpu_type.name,
+                    "score": score,
+                })
 
             user_id = (
                 interaction.user.global_name

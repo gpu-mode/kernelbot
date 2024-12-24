@@ -10,8 +10,9 @@ from consts import (
     POSTGRES_USER,
 )
 from psycopg2 import Error
-from utils import LeaderboardItem, SubmissionItem
+from utils import LeaderboardItem, SubmissionItem, RunInfoItem, setup_logging
 
+logger = setup_logging()
 
 class LeaderboardDB:
     def __init__(self, host: str, database: str, user: str, password: str, port: str = "5432"):
@@ -103,15 +104,16 @@ class LeaderboardDB:
             return f"Error during leaderboard deletion: {e}"
         return None
 
-    def create_submission(self, submission: SubmissionItem):
+    def create_submission(self, submission: SubmissionItem) -> Optional[int]:
         try:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.submission (leaderboard_id, name,
-                    user_id, code, submission_time, score)
+                    user_id, code, submission_time)
                 VALUES (
                     (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     submission["leaderboard_name"],
@@ -119,13 +121,40 @@ class LeaderboardDB:
                     submission["user_id"],
                     submission["code"],
                     submission["submission_time"],
-                    submission["submission_score"],
+                ),
+            )
+
+            submission_id = self.cursor.fetchone()[0]
+
+            self.connection.commit()
+
+            return submission_id
+        except psycopg2.Error as e:
+            logger.error(f"Error during leaderboard submission: {e}")
+            self.connection.rollback()  # Ensure rollback if error occurs
+            return None
+
+    def create_run_info(self, submission_id: int, run_info: RunInfoItem):
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.run_info (submission_id, stdout,
+                    ncu_output, gpu_type, score)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    submission_id,
+                    run_info["stdout"],
+                    run_info["ncu_output"],
+                    run_info["gpu_type"],
+                    run_info["score"],
                 ),
             )
             self.connection.commit()
         except psycopg2.Error as e:
-            print(f"Error during leaderboard submission: {e}")
+            print(f"Error during runinfo creation: {e}")
             self.connection.rollback()  # Ensure rollback if error occurs
+
 
     def get_leaderboards(self) -> list[LeaderboardItem]:
         self.cursor.execute(
