@@ -87,7 +87,8 @@ def extract_score(score_str: str) -> float:
 class LRUCache:
     def __init__(self, max_size: int):
         """LRU Cache implementation, as functools.lru doesn't work in async code
-
+        Note: Implementation uses list for convenience because cache is small, so
+        runtime complexity does not matter here.
         Args:
             max_size (int): Maximum size of the cache
         """
