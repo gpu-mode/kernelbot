@@ -1,15 +1,80 @@
 import random
 import textwrap
 from datetime import datetime
+import asyncio
 
 import discord
 from consts import GitHubGPU, ModalGPU
 from discord import Interaction, SelectOption, app_commands, ui
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
-from utils import extract_score, get_user_from_id, send_discord_message, setup_logging
+from utils import (
+    extract_score,
+    get_user_from_id,
+    send_discord_message,
+    setup_logging,
+    display_lb_submissions,
+)
 
 logger = setup_logging()
+
+
+async def async_submit_github_job(
+    interaction: discord.Interaction,
+    leaderboard_name: str,
+    script: discord.Attachment,
+    github_command,
+    reference_code,
+    bot,
+    submission_content,
+    github_cog: commands.Cog,
+    gpu: str,
+):
+    try:
+        github_thread = await github_command.callback(
+            github_cog,
+            interaction,
+            script,
+            app_commands.Choice(
+                name=gpu,
+                value=GitHubGPU[gpu].value,
+            ),
+            reference_code=reference_code,
+        )
+    except discord.errors.NotFound as e:
+        print(f"Webhook not found: {e}")
+        await send_discord_message(interaction, "❌ The webhook was not found.")
+
+    message_contents = [msg.content async for msg in github_thread.history(limit=None)]
+
+    # Compute eval or submission score, call runner here.
+    # TODO: Make this more robust later
+    score = extract_score("".join(message_contents))
+
+    with bot.leaderboard_db as db:
+        db.create_submission({
+            "submission_name": script.filename,
+            "submission_time": datetime.now(),
+            "leaderboard_name": leaderboard_name,
+            "code": submission_content,
+            "user_id": interaction.user.id,
+            "submission_score": score,
+            "gpu_type": gpu,
+        })
+
+    user_id = (
+        interaction.user.global_name if interaction.user.nick is None else interaction.user.nick
+    )
+
+    await send_discord_message(
+        interaction,
+        f"Successfully ran on {gpu} using GitHub runners!\n"
+        + f"Leaderboard '{leaderboard_name}'.\n"
+        + f"Submission title: {script.filename}.\n"
+        + f"Submission user: {user_id}.\n"
+        + f"Runtime: {score:.9f} seconds.",
+        ephemeral=True,
+    )
 
 
 class LeaderboardSubmitCog(app_commands.Group):
@@ -67,17 +132,15 @@ class LeaderboardSubmitCog(app_commands.Group):
             score = random.random()
 
             with self.bot.leaderboard_db as db:
-                db.create_submission(
-                    {
-                        "submission_name": script.filename,
-                        "submission_time": datetime.now(),
-                        "leaderboard_name": leaderboard_name,
-                        "code": submission_content,
-                        "user_id": interaction.user.id,
-                        "submission_score": score,
-                        "gpu_type": gpu_type.name,
-                    }
-                )
+                db.create_submission({
+                    "submission_name": script.filename,
+                    "submission_time": datetime.now(),
+                    "leaderboard_name": leaderboard_name,
+                    "code": submission_content,
+                    "user_id": interaction.user.id,
+                    "submission_score": score,
+                    "gpu_type": gpu_type.name,
+                })
 
             await send_discord_message(
                 interaction,
@@ -94,7 +157,6 @@ class LeaderboardSubmitCog(app_commands.Group):
                 ephemeral=True,
             )
 
-    ### GITHUB SUBCOMMAND
     @app_commands.command(name="github", description="Submit leaderboard data for GitHub")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     async def submit_github(
@@ -128,6 +190,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                     )
                     return
                 reference_code = leaderboard_item["reference_code"]
+                gpus = db.get_leaderboard_gpu_types(leaderboard_name)
 
             if not interaction.response.is_done():
                 await interaction.response.defer()
@@ -139,11 +202,11 @@ class LeaderboardSubmitCog(app_commands.Group):
                 await send_discord_message(interaction, "❌ Required cogs not found!")
                 return
 
-            view = GPUSelectionView([gpu.name for gpu in GitHubGPU])
+            view = GPUSelectionView(gpus)
 
             await send_discord_message(
                 interaction,
-                f"Please select GPUs to submit to for leaderboard: {leaderboard_name}.",
+                f"Please select GPUs to submit to submit for leaderboard: {leaderboard_name}.",
                 view=view,
                 ephemeral=True,
             )
@@ -151,55 +214,22 @@ class LeaderboardSubmitCog(app_commands.Group):
             await view.wait()
 
             github_command = github_cog.run_github
-            try:
-                github_thread = await github_command.callback(
-                    github_cog,
+
+            tasks = [
+                async_submit_github_job(
                     interaction,
+                    leaderboard_name,
                     script,
-                    app_commands.Choice(
-                        name="NVIDIA", value="nvidia"
-                    ),  # TODO: Change this to multiple GPUs
-                    reference_code=reference_code,
+                    github_command,
+                    reference_code,
+                    self.bot,
+                    reference_code,
+                    github_cog,
+                    gpu,
                 )
-            except discord.errors.NotFound as e:
-                print(f"Webhook not found: {e}")
-                await send_discord_message(interaction, "❌ The webhook was not found.")
-
-            message_contents = [msg.content async for msg in github_thread.history(limit=None)]
-
-            # Compute eval or submission score, call runner here.
-            # TODO: Make this more robust later
-            score = extract_score("".join(message_contents))
-
-            with self.bot.leaderboard_db as db:
-                db.create_submission(
-                    {
-                        "submission_name": script.filename,
-                        "submission_time": datetime.now(),
-                        "leaderboard_name": leaderboard_name,
-                        "code": submission_content,
-                        "user_id": interaction.user.id,
-                        "submission_score": score,
-                         # TODO: Change this to multiple GPUs (see above)
-                        "gpu_type": "nvidia",
-                    }
-                )
-
-            user_id = (
-                interaction.user.global_name
-                if interaction.user.nick is None
-                else interaction.user.nick
-            )
-
-            await send_discord_message(
-                interaction,
-                "Successfully ran on GitHub runners!\n"
-                + f"Leaderboard '{leaderboard_name}'.\n"
-                + f"Submission title: {script.filename}.\n"
-                + f"Submission user: {user_id}.\n"
-                + f"Runtime: {score:.9f} seconds.",
-                ephemeral=True,
-            )
+                for gpu in gpus
+            ]
+            await asyncio.gather(*tasks)
 
         except ValueError:
             await send_discord_message(
@@ -374,14 +404,12 @@ class LeaderboardCog(commands.Cog):
             template_content = await reference_code.read()
 
             with self.bot.leaderboard_db as db:
-                err = db.create_leaderboard(
-                    {
-                        "name": leaderboard_name,
-                        "deadline": date_value,
-                        "reference_code": template_content.decode("utf-8"),
-                        "gpu_types": view.selected_gpus,
-                    }
-                )
+                err = db.create_leaderboard({
+                    "name": leaderboard_name,
+                    "deadline": date_value,
+                    "reference_code": template_content.decode("utf-8"),
+                    "gpu_types": view.selected_gpus,
+                })
 
                 if err:
                     if "duplicate key" in err:
@@ -423,9 +451,9 @@ class LeaderboardCog(commands.Cog):
         self,
         interaction: discord.Interaction,
         leaderboard_name: str,
-        # TODO add GPU type
     ):
         try:
+            submissions = {}
             with self.bot.leaderboard_db as db:
                 # TODO: query that gets leaderboard id given leaderboard name
                 leaderboard_id = db.get_leaderboard(leaderboard_name)["id"]
@@ -437,32 +465,27 @@ class LeaderboardCog(commands.Cog):
                     )
                     return
 
-                submissions = db.get_leaderboard_submissions(leaderboard_name)
+                gpus = db.get_leaderboard_gpu_types(leaderboard_name)
+                for gpu in gpus:
+                    submissions[gpu] = db.get_leaderboard_submissions(leaderboard_name, gpu)
 
-            if not submissions:
-                await send_discord_message(
-                    interaction,
-                    f'No submissions found for "{leaderboard_name}".',
-                    ephemeral=True,
-                )
-                return
+            if not interaction.response.is_done():
+                await interaction.response.defer()
 
-            # Create embed
-            embed = discord.Embed(
-                title=f'Leaderboard Submissions for "{leaderboard_name}"',
-                color=discord.Color.blue(),
+            view = GPUSelectionView(gpus)
+
+            await send_discord_message(
+                interaction,
+                f"Please select GPUs view for leaderboard: {leaderboard_name}.",
+                view=view,
+                ephemeral=True,
             )
 
-            for submission in submissions:
-                user_id = await get_user_from_id(submission["user_id"], interaction, self.bot)
+            await view.wait()
 
-                embed.add_field(
-                    name=f"{user_id}: {submission['submission_name']}",
-                    value=f"Submission speed: {submission['submission_score']}",
-                    inline=False,
-                )
+            for gpu in view.selected_gpus:
+                await display_lb_submissions(interaction, self.bot, leaderboard_name, gpu)
 
-            await interaction.response.send_message(embed=embed)
         except Exception as e:
             logger.error(str(e))
             if "'NoneType' object is not subscriptable" in str(e):
