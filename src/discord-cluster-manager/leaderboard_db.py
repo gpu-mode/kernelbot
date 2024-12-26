@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import List, Optional
 
 import discord
 import psycopg2
@@ -219,10 +219,13 @@ class LeaderboardDB:
             return None
 
     # TODO: add GPU type
-    def get_leaderboard_submissions(self, leaderboard_name: str, gpu_name: str) -> list[SubmissionItem]:
+    def get_leaderboard_submissions(
+        self, leaderboard_name: str, gpu_name: str
+    ) -> list[SubmissionItem]:
         self.cursor.execute(
             """
-            SELECT s.name, s.user_id, s.code, s.submission_time, s.score, s.gpu_type
+            SELECT s.name, s.user_id, s.code, s.submission_time, s.score,
+            s.gpu_type
             FROM leaderboard.submission s
             JOIN leaderboard.leaderboard l
             ON s.leaderboard_id = l.id
