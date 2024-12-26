@@ -1,5 +1,6 @@
 from typing import Optional
 
+import discord
 import psycopg2
 from consts import (
     DATABASE_URL,
@@ -93,6 +94,7 @@ class LeaderboardDB:
                 )
 
             self.connection.commit()
+            leaderboard_name_cache.invalidate()  # Invalidate autocomplete cache
         except psycopg2.Error as e:
             self.connection.rollback()  # Ensure rollback if error occurs
             return f"Error during leaderboard creation: {e}"
@@ -108,6 +110,7 @@ class LeaderboardDB:
                 (leaderboard_name,),
             )
             self.connection.commit()
+            leaderboard_name_cache.invalidate()  # Invalidate autocomplete cache
         except psycopg2.Error as e:
             self.connection.rollback()
             return f"Error during leaderboard deletion: {e}"
