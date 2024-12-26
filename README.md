@@ -145,9 +145,10 @@ Below is where to find these environment variables:
 
 ### How to run the bot
 
-1. Install dependencies with `pip install -r requirements.txt`
+1. Install [uv](https://docs.astral.sh/uv/), which we use as a dependency manager,
+optionally you can use `pip` to install the dependencies, but further instructions assume you're using `uv`
 2. Create a `.env` file with the environment variables listed above
-3. `python src/discord-cluster-manager/bot.py --debug`
+3. `uv run src/discord-cluster-manager/bot.py --debug`
 
 ### Usage instructions
 
@@ -257,8 +258,8 @@ Use the `/verifyruns` command to test basic functionality of the cluster bot. To
 You need to have multiple environment variables set to run the bot on your own server:
 
 You can run the bot in two modes:
-- Production mode: `python discord-bot.py`
-- Debug/staging mode: `python discord-bot.py --debug`
+- Production mode: `uv run src/discord-cluster-manager/bot.py`
+- Debug/staging mode: `uv run src/discord-cluster-manager/bot.py --debug`
 
 When running in debug mode, the bot will use your `DISCORD_DEBUG_TOKEN` and `DISCORD_DEBUG_CLUSTER_STAGING_ID` and display as "Cluster Bot (Staging)" to clearly indicate it's not the production instance.
 

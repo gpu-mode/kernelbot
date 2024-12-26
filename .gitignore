@@ -6,3 +6,5 @@ data/
 node_modules/
 package-lock.json
 package.json
+.venv
+yoyo.ini

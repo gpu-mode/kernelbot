@@ -1,0 +1,39 @@
+[project]
+name = "discord-cluster-manager"
+version = "0.1.0"
+description = "A Discord bot that enables benchmarking and queuing of gpu jobs"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "PyGithub",
+    "aiohttp",
+    "discord.py",
+    "audioop-lts",
+    "python-dotenv",
+    "requests",
+    "modal",
+    "psycopg2-binary",
+    "yoyo-migrations",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pre-commit",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C",   # mccabe
+    "W",   # pycodestyle warnings
+]
+ignore = []
+
