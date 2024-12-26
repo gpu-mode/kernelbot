@@ -230,7 +230,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                     github_cog,
                     gpu,
                 )
-                for gpu in gpus
+                for gpu in view.selected_gpus
             ]
             await asyncio.gather(*tasks)
 
