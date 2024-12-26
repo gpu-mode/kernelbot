@@ -181,7 +181,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                         "user_id": interaction.user.id,
                         "submission_score": score,
                          # TODO: Change this to multiple GPUs (see above)
-                        "gpu_type": "nvidia", 
+                        "gpu_type": "nvidia",
                     }
                 )
 
