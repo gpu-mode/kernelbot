@@ -89,7 +89,7 @@ float measure_runtime() {
 
     auto end = std::chrono::high_resolution_clock::now();
 
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    auto duration = std::chrono::duration_cast<double>(end - start).count() / TIMED_RUNS;
     std::cout << "submitted kernel runtime: " << duration << " seconds" << std::endl;
     return duration;
 }
