@@ -65,8 +65,8 @@ cu_eval = """
 #include <chrono>
 #include <iostream>
 
-#include "reference.cu"
-#include "train.cu"
+#include "reference.cuh"
+#include "train.cuh"
 
 #define WARMUP_RUNS 10
 #define TIMED_RUNS 100
