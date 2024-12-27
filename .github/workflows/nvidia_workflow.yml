@@ -98,14 +98,16 @@ jobs:
       - name: Run script
         shell: bash
         run: |
-          if [[ -n "${{ github.event.inputs.eval_content }}" ]]; then
+          # Check if eval content exists without trying to evaluate it
+          if [ -f "${{ github.event.inputs.eval_filename }}" ]; then
             if [[ "${{ github.event.inputs.eval_filename }}" == *.cu ]]; then
               echo "Compiling and running CUDA files..."
               CUDA_FILES="${{ github.event.inputs.filename }}"
-              if [[ -n "${{ github.event.inputs.reference_filename }}" ]]; then
-                CUDA_FILES="$CUDA_FILES ${{ github.event.inputs.reference_filename }}"
+              if [ -f "${{ github.event.inputs.reference_filename }}" ]; then
+                CUDA_FILES="${{ github.event.inputs.reference_filename }} $CUDA_FILES"
               fi
-              CUDA_FILES="$CUDA_FILES ${{ github.event.inputs.eval_filename }}"
+              CUDA_FILES="${{ github.event.inputs.eval_filename }} $CUDA_FILES"
+              echo "Compiling: $CUDA_FILES"
               nvcc $CUDA_FILES -o cuda_program
               ./cuda_program > training.log 2>&1
             else
