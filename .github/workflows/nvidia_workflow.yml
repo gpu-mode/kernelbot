@@ -114,7 +114,7 @@ jobs:
             else
               echo "Running Python file..."
               python3 "${{ github.event.inputs.eval_filename }}" > training.log 2>&1
-            f
+            fi
           else
             if [[ "${{ github.event.inputs.filename }}" == *.cu ]]; then
               echo "Compiling and running CUDA file..."
