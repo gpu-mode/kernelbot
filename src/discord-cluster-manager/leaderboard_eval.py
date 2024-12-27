@@ -71,7 +71,6 @@ cu_eval = """
 #define WARMUP_RUNS 10
 #define TIMED_RUNS 100
 
-using clock = std::chrono::high_resolution_clock;
 
 float measure_runtime() {
     std::cout << "warming up..." << std::endl;
@@ -81,14 +80,14 @@ float measure_runtime() {
         submission(data);
     }
 
-    auto start = clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < TIMED_RUNS; i++) {
         auto data = generate_input();
         submission(data);
     }
 
-    auto end = clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
     std::cout << "submitted kernel runtime: " << duration << " seconds" << std::endl;
@@ -96,7 +95,10 @@ float measure_runtime() {
 }
 
 int main() {
-    if (!check_implementation()) {
+    auto data = generate_input();
+    auto submission_output = submission(data);
+
+    if (!check_implementation(submission_output)) {
         std::cout << "check_implementation failed" << std::endl;
         return 1;
     }
