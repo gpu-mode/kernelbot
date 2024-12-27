@@ -66,7 +66,6 @@ cu_eval = """
 #include <iostream>
 
 #include "reference.h"
-#include "train.cu"
 
 #define WARMUP_RUNS 10
 #define TIMED_RUNS 100
@@ -102,6 +101,7 @@ float measure_runtime() {
 
 int main() {
     if (!check_implementation()) {
+        std::cout << "check_implementation failed" << std::endl;
         return 1;
     }
 
