@@ -104,12 +104,17 @@ jobs:
               echo "Compiling and running CUDA files..."
               CUDA_FILES="${{ github.event.inputs.eval_filename }}"
               echo "Compiling: $CUDA_FILES"
+              echo "---"
+              cat reference.cuh
+              echo "---"
+              cat train.cuh
+              echo "---"
               nvcc $CUDA_FILES -o cuda_program
               ./cuda_program > training.log 2>&1
             else
               echo "Running Python file..."
               python3 "${{ github.event.inputs.eval_filename }}" > training.log 2>&1
-            fi
+            f
           else
             if [[ "${{ github.event.inputs.filename }}" == *.cu ]]; then
               echo "Compiling and running CUDA file..."
