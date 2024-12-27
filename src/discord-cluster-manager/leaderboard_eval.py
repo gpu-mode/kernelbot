@@ -65,7 +65,8 @@ cu_eval = """
 #include <chrono>
 #include <iostream>
 
-#include "reference.h"
+#include "reference.hpp"
+#include "submission.cu"
 
 #define WARMUP_RUNS 10
 #define TIMED_RUNS 100
@@ -77,19 +78,14 @@ float measure_runtime() {
 
     for (int i = 0; i < WARMUP_RUNS; i++) {
         auto data = generate_input();
-        for (auto input : data) {
-            submission(input);
-            reference(input);
-        }
+        submission(data);
     }
 
     auto start = clock::now();
 
     for (int i = 0; i < TIMED_RUNS; i++) {
         auto data = generate_input();
-        for (auto input : data) {
-            submission(input);
-        }
+        submission(data);
     }
 
     auto end = clock::now();
