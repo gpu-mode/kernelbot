@@ -97,9 +97,10 @@ float measure_runtime() {
 
 int main() {
     auto data = generate_input();
+    auto reference_output = reference(data);
     auto submission_output = submission(data);
 
-    if (!check_implementation(submission_output)) {
+    if (!check_implementation(submission_output, reference_output)) {
         std::cout << "check_implementation failed" << std::endl;
         return 1;
     }
