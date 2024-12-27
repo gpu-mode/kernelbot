@@ -104,7 +104,7 @@ int main() {
     }
 
     float s = measure_runtime();
-    std::cout << "score: " << static_cast<float>(s) << std::endl;
+    std::cout << "score: " << s << std::endl;
 
     return 0;
 }
