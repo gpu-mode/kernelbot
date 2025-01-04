@@ -68,7 +68,7 @@ def create_table_page(data: List[Dict[str, Any]], page: int, items_per_page: int
     return discord.Embed(description=f"```\n{'\n'.join(table_rows)}\n```")
 
 
-async def create_table(
+def create_table(
     title: str, data: List[Dict[str, Any]], items_per_page: int = 10
 ) -> tuple[discord.Embed, TableView]:
     """

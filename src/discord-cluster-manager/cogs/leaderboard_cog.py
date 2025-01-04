@@ -4,9 +4,10 @@ from datetime import datetime
 
 import discord
 from consts import GitHubGPU, ModalGPU
-from discord import Interaction, SelectOption, app_commands, ui
+from discord import app_commands, ui
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
+from ui.gpu_selection import create_gpu_selection_view
 from ui.table import create_table
 from utils import (
     display_lb_submissions,
@@ -205,11 +206,11 @@ class LeaderboardSubmitCog(app_commands.Group):
                 await send_discord_message(interaction, "❌ Required cogs not found!")
                 return
 
-            view = GPUSelectionView(gpus)
+            view = create_gpu_selection_view(gpus)
 
             await send_discord_message(
                 interaction,
-                f"Please select GPUs to submit to submit for leaderboard: {leaderboard_name}.",
+                f"Please select GPUs to submit for leaderboard: {leaderboard_name}.",
                 view=view,
                 ephemeral=True,
             )
@@ -240,29 +241,6 @@ class LeaderboardSubmitCog(app_commands.Group):
                 "Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM",
                 ephemeral=True,
             )
-
-
-class GPUSelectionView(ui.View):
-    def __init__(self, available_gpus: list[str]):
-        super().__init__()
-
-        # Add the Select Menu with the list of GPU options
-        select = ui.Select(
-            placeholder="Select GPUs for this leaderboard...",
-            options=[SelectOption(label=gpu, value=gpu) for gpu in available_gpus],
-            min_values=1,  # Minimum number of selections
-            max_values=len(available_gpus),  # Maximum number of selections
-        )
-        select.callback = self.select_callback
-        self.add_item(select)
-
-    async def select_callback(self, interaction: Interaction):
-        # Retrieve the selected options
-        select = interaction.data["values"]
-        self.selected_gpus = select
-        # Acknowledge the interaction
-        await interaction.response.defer(ephemeral=True)
-        self.stop()
 
 
 class DeleteConfirmationModal(ui.Modal, title="Confirm Deletion"):
@@ -375,7 +353,7 @@ class LeaderboardCog(commands.Cog):
                 return
 
         # Ask the user to select GPUs
-        view = GPUSelectionView([gpu.name for gpu in GitHubGPU])
+        view = create_gpu_selection_view([gpu.name for gpu in GitHubGPU])
 
         await send_discord_message(
             interaction,
@@ -462,7 +440,7 @@ class LeaderboardCog(commands.Cog):
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=True)
 
-            view = GPUSelectionView(gpus)
+            view = create_gpu_selection_view(gpus)
             await send_discord_message(
                 interaction,
                 f"Please select GPUs view for leaderboard: {leaderboard_name}.",
