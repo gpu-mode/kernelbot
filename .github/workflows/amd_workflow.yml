@@ -78,19 +78,22 @@ jobs:
         source ${VENV_DIR}/bin/activate
         pip install --upgrade pip
         pip install --pre pytorch-triton-rocm==3.1.0+cf34004b8a torch==2.6.0.dev20241023+rocm6.2 --index-url https://download.pytorch.org/whl/nightly/rocm6.2
+        # Verify PyTorch installation and GPU availability
+        python -c "import torch; print('PyTorch version:', torch.__version__); print('GPU available:', torch.cuda.is_available()); print('Device count:', torch.cuda.device_count())"
 
     - name: Run script
       shell: bash
       run: |
+        # Ensure virtual environment is activated
+        source ${VENV_DIR}/bin/activate
         if [[ -n "${{ github.event.inputs.eval_content }}" ]]; then
           echo "Running Python file..."
           python3 "${{ github.event.inputs.eval_filename }}" > training.log 2>&1
-          cat training.log  # Debug: show output
         else
           echo "Running Python file..."
           python3 "${{ github.event.inputs.filename }}" > training.log 2>&1
-          cat training.log  # Debug: show output
         fi
+        cat training.log  # Debug: show output
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4
