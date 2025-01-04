@@ -4,10 +4,11 @@ from datetime import datetime
 
 import discord
 from consts import GitHubGPU, ModalGPU
-from discord import app_commands, ui
+from discord import app_commands
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
 from leaderboard_eval import cu_eval, py_eval
+from ui.delete_confirmation import create_delete_confirmation_modal
 from ui.gpu_selection import create_gpu_selection_view
 from ui.table import create_table
 from utils import (
@@ -240,42 +241,6 @@ class LeaderboardSubmitCog(app_commands.Group):
             await send_discord_message(
                 interaction,
                 "Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM",
-                ephemeral=True,
-            )
-
-
-class DeleteConfirmationModal(ui.Modal, title="Confirm Deletion"):
-    def __init__(self, leaderboard_name: str, db):
-        super().__init__()
-        self.leaderboard_name = leaderboard_name
-        self.db = db
-        self.confirmation = ui.TextInput(
-            label=f"Type '{leaderboard_name}' to confirm deletion",
-            placeholder="Enter the leaderboard name",
-            required=True,
-        )
-        self.add_item(self.confirmation)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if self.confirmation.value == self.leaderboard_name:
-            with self.db as db:
-                err = db.delete_leaderboard(self.leaderboard_name)
-                if err:
-                    await send_discord_message(
-                        interaction,
-                        "An error occurred while deleting the leaderboard.",
-                        ephemeral=True,
-                    )
-                else:
-                    await send_discord_message(
-                        interaction,
-                        f"Leaderboard '{self.leaderboard_name}' deleted.",
-                        ephemeral=True,
-                    )
-        else:
-            await send_discord_message(
-                interaction,
-                "Deletion cancelled: The leaderboard name didn't match.",
                 ephemeral=True,
             )
 
@@ -545,5 +510,7 @@ class LeaderboardCog(commands.Cog):
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     async def delete_leaderboard(self, interaction: discord.Interaction, leaderboard_name: str):
-        modal = DeleteConfirmationModal(leaderboard_name, self.bot.leaderboard_db)
+        modal = create_delete_confirmation_modal(
+            "leaderboard", leaderboard_name, self.bot.leaderboard_db
+        )
         await interaction.response.send_modal(modal)
