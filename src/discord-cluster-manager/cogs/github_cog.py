@@ -47,9 +47,6 @@ class GitHubCog(commands.Cog):
             return None
 
         thread = await self.bot.create_thread(interaction, gpu_type.name, "GitHub Job")
-        message = f"Created thread {thread.mention} for your GitHub job"
-
-        await send_discord_message(interaction, message)
         await thread.send(f"Processing `{script.filename}` with {gpu_type.name}...")
 
         try:
