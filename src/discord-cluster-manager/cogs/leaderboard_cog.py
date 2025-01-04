@@ -315,7 +315,7 @@ class LeaderboardCog(commands.Cog):
         table_cols = ["name", "deadline", "gpu_types"]
         to_show = [{col: x[col] for col in table_cols} for x in leaderboards]
 
-        embed, view = await create_table("Active Leaderboards", to_show, items_per_page=1)
+        embed, view = create_table("Active Leaderboards", to_show, items_per_page=1)
 
         await send_discord_message(
             interaction,

@@ -117,7 +117,7 @@ async def display_lb_submissions(
     if user_id:
         title += f" for user {await get_user_from_id(user_id, interaction, bot)}"
 
-    embed, view = await create_table(
+    embed, view = create_table(
         title,
         processed_submissions,
         items_per_page=5,
