@@ -7,6 +7,7 @@ from consts import GitHubGPU, ModalGPU
 from discord import app_commands, ui
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
+from leaderboard_eval import cu_eval, py_eval
 from ui.gpu_selection import create_gpu_selection_view
 from ui.table import create_table
 from utils import (
@@ -301,6 +302,14 @@ class LeaderboardCog(commands.Cog):
             name="delete", description="Delete a leaderboard"
         )(self.delete_leaderboard)
 
+        self.get_leaderboard_references = bot.leaderboard_group.command(
+            name="reference-code", description="Get leaderboard reference codes"
+        )(self.get_leaderboard_references)
+
+        self.get_leaderboard_eval = bot.leaderboard_group.command(
+            name="eval-code", description="Get leaderboard evaluation codes"
+        )(self.get_leaderboard_eval)
+
     async def get_leaderboards(self, interaction: discord.Interaction):
         """Display all leaderboards in a table format"""
         await interaction.response.defer(ephemeral=True)
@@ -322,6 +331,48 @@ class LeaderboardCog(commands.Cog):
             "",
             embed=embed,
             view=view,
+            ephemeral=True,
+        )
+
+    @app_commands.describe(leaderboard_name="Name of the leaderboard")
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    async def get_leaderboard_references(
+        self, interaction: discord.Interaction, leaderboard_name: str
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        with self.bot.leaderboard_db as db:
+            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            if not leaderboard_item:
+                await send_discord_message(interaction, "Leaderboard not found.", ephemeral=True)
+                return
+
+        code = leaderboard_item["reference_code"]
+        language = "cpp" if "#include" in code else "python"
+
+        message = (
+            f"**Reference Code for {leaderboard_name}**\n"
+            f"```{language}\n{code}\n```\n"
+            f"*If you want to display the evaluation code, run `/leaderboard eval-code {language}`*"
+        )
+
+        await send_discord_message(interaction, message, ephemeral=True)
+
+    @app_commands.describe(language="Language of the evaluation code [cpp, python]")
+    @app_commands.choices(
+        language=[app_commands.Choice(name=lang, value=lang) for lang in ["cpp", "python"]]
+    )
+    async def get_leaderboard_eval(self, interaction: discord.Interaction, language: str):
+        await interaction.response.defer(ephemeral=True)
+
+        if language == "cpp":
+            eval_code = cu_eval
+        else:
+            eval_code = py_eval
+
+        await send_discord_message(
+            interaction,
+            f"**Evaluation Code for language: {language}**\n```{language}\n{eval_code}\n```",
             ephemeral=True,
         )
 
