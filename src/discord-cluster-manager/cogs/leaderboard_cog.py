@@ -331,7 +331,7 @@ class LeaderboardCog(commands.Cog):
 
     async def get_leaderboards(self, interaction: discord.Interaction):
         """Display all leaderboards in a table format"""
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
         with self.bot.leaderboard_db as db:
             leaderboards = db.get_leaderboards()
@@ -345,7 +345,13 @@ class LeaderboardCog(commands.Cog):
 
         embed, view = await create_table("Active Leaderboards", to_show, items_per_page=1)
 
-        await interaction.followup.send("", embed=embed, view=view, ephemeral=True)
+        await send_discord_message(
+            interaction,
+            "",
+            embed=embed,
+            view=view,
+            ephemeral=True,
+        )
 
     @discord.app_commands.describe(
         leaderboard_name="Name of the leaderboard",

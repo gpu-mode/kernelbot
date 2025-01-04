@@ -5,6 +5,7 @@ import subprocess
 from typing import Any, List, NotRequired, TypedDict
 
 import discord
+from ui.table import create_table
 
 
 def setup_logging():
@@ -91,7 +92,7 @@ async def display_lb_submissions(interaction, bot, leaderboard_name: str, gpu: s
         submissions = db.get_leaderboard_submissions(leaderboard_name, gpu)
 
     if not interaction.response.is_done():
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
     if not submissions:
         await send_discord_message(
@@ -102,21 +103,29 @@ async def display_lb_submissions(interaction, bot, leaderboard_name: str, gpu: s
         return
 
     # Create embed
-    embed = discord.Embed(
-        title=f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}',
-        color=discord.Color.blue(),
+    processed_submissions = [
+        {
+            "rank": idx + 1,
+            "user": await get_user_from_id(submission["user_id"], interaction, bot),
+            "score": submission["submission_score"],
+            "submission_name": submission["submission_name"],
+        }
+        for idx, submission in enumerate(submissions)
+    ]
+
+    embed, view = await create_table(
+        f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}',
+        processed_submissions,
+        items_per_page=5,
     )
 
-    for submission in submissions:
-        user_id = await get_user_from_id(submission["user_id"], interaction, bot)
-
-        embed.add_field(
-            name=f"{user_id}: {submission['submission_name']}",
-            value=f"Submission speed: {submission['submission_score']}",
-            inline=False,
-        )
-
-    await interaction.followup.send(embed=embed, ephemeral=True)
+    await send_discord_message(
+        interaction,
+        "",
+        embed=embed,
+        view=view,
+        ephemeral=True,
+    )
 
 
 class LRUCache:
