@@ -1,6 +1,5 @@
 import asyncio
 import random
-import textwrap
 from datetime import datetime
 
 import discord
@@ -8,6 +7,7 @@ from consts import GitHubGPU, ModalGPU
 from discord import Interaction, SelectOption, app_commands, ui
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
+from ui.table import create_table
 from utils import (
     display_lb_submissions,
     extract_score,
@@ -340,35 +340,12 @@ class LeaderboardCog(commands.Cog):
             await send_discord_message(interaction, "No leaderboards found.", ephemeral=True)
             return
 
-        # Create embed
-        embed = discord.Embed(title="Active Leaderboards", color=discord.Color.blue())
-        padding = " " * 4
-        header = f"{'Name':<20}{padding}{'Deadline':<10}{padding}{'GPU Types':<18}\n"
-        divider = "-" * 56  # Fixed discord bot length
-        rows = []
+        table_cols = ["name", "deadline", "gpu_types"]
+        to_show = [{col: x[col] for col in table_cols} for x in leaderboards]
 
-        # Add fields for each leaderboard
-        for lb in leaderboards:
-            name_lines = textwrap.wrap(lb["name"], 20)
-            gpu_types_lines = textwrap.wrap(", ".join(lb["gpu_types"]), 18)
+        embed, view = await create_table("Active Leaderboards", to_show, items_per_page=1)
 
-            # Text wrapping logic for long names / multiple GPU displays
-            max_lines = max(len(name_lines), len(gpu_types_lines), 1)
-            deadline_str = lb["deadline"].strftime("%Y-%m-%d")
-
-            for i in range(max_lines):
-                name_part = name_lines[i] if i < len(name_lines) else ""
-                deadline_part = deadline_str if i == 0 else ""  # Deadline only on the first row
-                gpu_types_part = gpu_types_lines[i] if i < len(gpu_types_lines) else ""
-
-                rows.append(
-                    f"{name_part:<20}{padding}{deadline_part:<10}{padding}{gpu_types_part:<18}"
-                )
-
-        # Add the formatted text to the embed as a code block
-        embed.description = f"```\n{header}{divider}\n" + "\n".join(rows) + "\n```"
-
-        await interaction.followup.send("", embed=embed)
+        await interaction.followup.send("", embed=embed, view=view, ephemeral=True)
 
     @discord.app_commands.describe(
         leaderboard_name="Name of the leaderboard",
