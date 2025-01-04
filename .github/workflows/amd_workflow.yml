@@ -77,8 +77,7 @@ jobs:
         python -m venv ${VENV_DIR}
         source ${VENV_DIR}/bin/activate
         pip install --upgrade pip
-        pip install --pre pytorch-triton-rocm==3.1.0+cf34004b8a torch==2.6.0.dev20241023+rocm6.2 --index-url https://download.pytorch.org/whl/nightly/rocm6.2
-        # Verify PyTorch installation and GPU availability
+        pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
         python -c "import torch; print('PyTorch version:', torch.__version__); print('GPU available:', torch.cuda.is_available()); print('Device count:', torch.cuda.device_count())"
 
     - name: Run script
