@@ -218,22 +218,27 @@ class LeaderboardDB:
         else:
             return None
 
-    # TODO: add GPU type
     def get_leaderboard_submissions(
-        self, leaderboard_name: str, gpu_name: str
+        self, leaderboard_name: str, gpu_name: str, user_id: Optional[str] = None
     ) -> list[SubmissionItem]:
-        self.cursor.execute(
-            """
+        query = """
             SELECT s.name, s.user_id, s.code, s.submission_time, s.score,
             s.gpu_type
             FROM leaderboard.submission s
             JOIN leaderboard.leaderboard l
             ON s.leaderboard_id = l.id
             WHERE l.name = %s AND s.gpu_type = %s
-            ORDER BY s.score ASC
-            """,
-            (leaderboard_name, gpu_name),
+            """
+        if user_id:
+            query += " AND s.user_id = %s"
+
+        query += " ORDER BY s.score ASC"
+
+        args = (
+            (leaderboard_name, gpu_name) if not user_id else (leaderboard_name, gpu_name, user_id)
         )
+
+        self.cursor.execute(query, args)
 
         return [
             SubmissionItem(

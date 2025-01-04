@@ -2,7 +2,7 @@ import datetime
 import logging
 import re
 import subprocess
-from typing import Any, List, NotRequired, TypedDict
+from typing import Any, List, NotRequired, Optional, TypedDict
 
 import discord
 from ui.table import create_table
@@ -83,13 +83,13 @@ def extract_score(score_str: str) -> float:
         return None
 
 
-async def display_lb_submissions(interaction, bot, leaderboard_name: str, gpu: str):
+async def display_lb_submissions(
+    submissions, interaction, bot, leaderboard_name: str, gpu: str, user_id: Optional[int] = None
+):
     """
     Display leaderboard submissions for a particular GPU to discord.
     Must be used as a follow-up currently.
     """
-    with bot.leaderboard_db as db:
-        submissions = db.get_leaderboard_submissions(leaderboard_name, gpu)
 
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
@@ -112,6 +112,10 @@ async def display_lb_submissions(interaction, bot, leaderboard_name: str, gpu: s
         }
         for idx, submission in enumerate(submissions)
     ]
+
+    title = f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}'
+    if user_id:
+        title += f" for user {await get_user_from_id(user_id, interaction, bot)}"
 
     embed, view = await create_table(
         f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}',
