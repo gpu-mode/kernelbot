@@ -1,5 +1,8 @@
 # discord-cluster-manager
 
+[![AMD Nightly Status](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nightly-gpu-tests.yml/badge.svg?branch=main&event=schedule&job=amd-test)](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nightly-gpu-tests.yml?query=branch%3Amain+event%3Aschedule)
+[![NVIDIA Nightly Status](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nightly-gpu-tests.yml/badge.svg?branch=main&event=schedule&job=nvidia-test)](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nightly-gpu-tests.yml?query=branch%3Amain+event%3Aschedule)
+
 This is the code for the Discord bot we'll be using to queue jobs to a cluster of GPUs that our generous sponsors have provided. Our goal is to be able to queue kernels that can run end to end in seconds that way things feel interactive and social.
 
 The key idea is that we're using Github Actions as a job scheduling engine and primarily making the Discord bot interact with the cluster via issuing Github Actions and and monitoring their status and while we're focused on having a nice user experience on discord.gg/gpumode, [we're happy to accept PRs](#local-development) that make it easier for other Discord communities to hook GPUs.

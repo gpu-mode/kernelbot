@@ -1,0 +1,78 @@
+name: Nightly GPU Tests
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  amd-test:
+    name: AMD PyTorch Test
+    runs-on: [amdgpu-mi250-x86-64]
+    timeout-minutes: 10
+    env:
+      VENV_DIR: /groups/aig_sharks/pytorch_venv
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Create test script
+        run: |
+          echo "import torch; torch.zeros(10).cuda()" > test_gpu.py
+      - name: Setup Virtual Environment and Install Dependencies
+        run: |
+          python -m venv ${VENV_DIR}
+          source ${VENV_DIR}/bin/activate
+          pip install --upgrade pip
+          pip install --pre pytorch-triton-rocm==3.1.0+cf34004b8a torch==2.6.0.dev20241023+rocm6.2 --index-url https://download.pytorch.org/whl/nightly/rocm6.2
+      - name: Run GPU test
+        run: |
+          python test_gpu.py > training.log 2>&1
+          cat training.log
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amd-test-artifacts
+          path: training.log
+
+  nvidia-test:
+    name: NVIDIA PyTorch Test
+    runs-on: [gpumode-nvidia-arc]
+    timeout-minutes: 10
+    container:
+      image: nvidia/cuda:12.4.0-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Setup Python environment
+        run: |
+          uv venv .venv
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+      - name: Create test script
+        run: |
+          echo "import torch; torch.zeros(10).cuda()" > test_gpu.py
+      - name: Install dependencies
+        run: |
+          uv pip install numpy torch
+      - name: Run GPU test
+        run: |
+          python3 test_gpu.py > training.log 2>&1
+          cat training.log
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nvidia-test-artifacts
+          path: training.log
+    env:
+      CUDA_VISIBLE_DEVICES: 0
