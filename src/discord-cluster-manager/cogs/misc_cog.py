@@ -49,7 +49,7 @@ class BotManagerCog(commands.Cog):
             return
 
         try:
-            with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+            with psycopg2.connect(DATABASE_URL) as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT RANDOM()")
                     result = cursor.fetchone()

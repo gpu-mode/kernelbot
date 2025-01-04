@@ -1,7 +1,7 @@
 PyGithub
 aiohttp
 discord.py
-audioop-lts # discord.py imports using * syntax 
+# audioop-lts # discord.py imports using * syntax 
 python-dotenv
 requests
 modal
