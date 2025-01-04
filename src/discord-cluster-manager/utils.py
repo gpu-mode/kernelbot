@@ -105,12 +105,12 @@ async def display_lb_submissions(
     # Create embed
     processed_submissions = [
         {
-            "rank": idx + 1,
+            "rank": submission["rank"],
             "user": await get_user_from_id(submission["user_id"], interaction, bot),
             "score": submission["submission_score"],
             "submission_name": submission["submission_name"],
         }
-        for idx, submission in enumerate(submissions)
+        for submission in submissions
     ]
 
     title = f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}'
@@ -118,7 +118,7 @@ async def display_lb_submissions(
         title += f" for user {await get_user_from_id(user_id, interaction, bot)}"
 
     embed, view = await create_table(
-        f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}',
+        title,
         processed_submissions,
         items_per_page=5,
     )
@@ -187,6 +187,7 @@ class LeaderboardItem(TypedDict):
 
 
 class SubmissionItem(TypedDict):
+    rank: int
     submission_name: str
     submission_time: datetime.datetime
     submission_score: float

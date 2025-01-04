@@ -222,8 +222,14 @@ class LeaderboardDB:
         self, leaderboard_name: str, gpu_name: str, user_id: Optional[str] = None
     ) -> list[SubmissionItem]:
         query = """
-            SELECT s.name, s.user_id, s.code, s.submission_time, s.score,
-            s.gpu_type
+            SELECT
+                s.name,
+                s.user_id,
+                s.code,
+                s.submission_time,
+                s.score,
+                s.gpu_type,
+                RANK() OVER (PARTITION BY s.gpu_type ORDER BY s.score ASC) as rank
             FROM leaderboard.submission s
             JOIN leaderboard.leaderboard l
             ON s.leaderboard_id = l.id
@@ -249,6 +255,7 @@ class LeaderboardDB:
                 submission_time=submission[3],
                 submission_score=submission[4],
                 gpu_type=gpu_name,
+                rank=submission[6],
             )
             for submission in self.cursor.fetchall()
         ]
