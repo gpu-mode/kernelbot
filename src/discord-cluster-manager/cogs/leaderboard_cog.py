@@ -1,6 +1,7 @@
 import asyncio
 import random
 from datetime import datetime
+from io import StringIO
 
 import discord
 from consts import GitHubGPU, ModalGPU
@@ -332,15 +333,19 @@ class LeaderboardCog(commands.Cog):
                 return
 
         code = leaderboard_item["reference_code"]
-        language = "cpp" if "#include" in code else "python"
+        code_file = StringIO(code)
+        language = "cpp" if "#include" in code else "py"
+
+        ref_code = discord.File(
+            fp=code_file, filename=f"{leaderboard_name}_reference_code.{language}"
+        )
 
         message = (
-            f"**Reference Code for {leaderboard_name}**\n"
-            f"```{language}\n{code}\n```\n"
+            f"**Reference Code for {leaderboard_name} in {language}**\n"
             f"*If you want to display the evaluation code, run `/leaderboard eval-code {language}`*"
         )
 
-        await send_discord_message(interaction, message, ephemeral=True)
+        await send_discord_message(interaction, message, ephemeral=True, file=ref_code)
 
     @app_commands.describe(language="Language of the evaluation code [cpp, python]")
     @app_commands.choices(
@@ -354,9 +359,13 @@ class LeaderboardCog(commands.Cog):
         else:
             eval_code = py_eval
 
+        code_file = StringIO(eval_code)
+        ref_code = discord.File(fp=code_file, filename=f"leaderboard_eval.{language}")
+
         await send_discord_message(
             interaction,
-            f"**Evaluation Code for language: {language}**\n```{language}\n{eval_code}\n```",
+            f"**Evaluation Code for language: {language}**\n",
+            file=ref_code,
             ephemeral=True,
         )
 
