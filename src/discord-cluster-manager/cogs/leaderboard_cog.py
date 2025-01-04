@@ -248,12 +248,20 @@ class LeaderboardSubmitCog(app_commands.Group):
 class LeaderboardCog(commands.Cog):
     def __init__(self, bot):
         self.bot: commands.Bot = bot
-        self.get_leaderboards = bot.leaderboard_group.command(name="list")(self.get_leaderboards)
+
+        bot.leaderboard_group.add_command(LeaderboardSubmitCog(bot))
+
+        self.get_leaderboards = bot.leaderboard_group.command(
+            name="list", description="Get all leaderboards"
+        )(self.get_leaderboards)
+
         self.leaderboard_create = bot.leaderboard_group.command(
             name="create", description="Create a new leaderboard"
         )(self.leaderboard_create)
 
-        bot.leaderboard_group.add_command(LeaderboardSubmitCog(bot))
+        self.delete_leaderboard = bot.leaderboard_group.command(
+            name="delete", description="Delete a leaderboard"
+        )(self.delete_leaderboard)
 
         self.get_leaderboard_submissions = bot.leaderboard_group.command(
             name="show", description="Get all submissions for a leaderboard"
@@ -262,10 +270,6 @@ class LeaderboardCog(commands.Cog):
         self.get_user_leaderboard_submissions = bot.leaderboard_group.command(
             name="show-personal", description="Get all your submissions for a leaderboard"
         )(self.get_user_leaderboard_submissions)
-
-        self.delete_leaderboard = bot.leaderboard_group.command(
-            name="delete", description="Delete a leaderboard"
-        )(self.delete_leaderboard)
 
         self.get_leaderboard_references = bot.leaderboard_group.command(
             name="reference-code", description="Get leaderboard reference codes"
