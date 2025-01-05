@@ -1,6 +1,9 @@
-from typing import Any, Dict, List
+import textwrap
+from typing import Any, Dict, List, Optional
 
 import discord
+
+DISCORD_MAX_EMBED_WIDTH = 56
 
 
 class TableView(discord.ui.View):
@@ -38,38 +41,72 @@ class TableView(discord.ui.View):
         )
 
 
-def create_table_page(data: List[Dict[str, Any]], page: int, items_per_page: int) -> discord.Embed:
+def create_table_page(
+    data: List[Dict[str, Any]],
+    page: int,
+    items_per_page: int,
+    column_widths: Optional[Dict[str, int]],
+    padding_width: int,
+) -> discord.Embed:
     if not data:
         return discord.Embed(description="No data to display")
 
-    headers = list(data[0].keys())
+    padding = " " * padding_width
 
-    col_widths = {header: len(header) for header in headers}
-    for item in data:
-        for header in headers:
-            col_widths[header] = max(col_widths[header], len(str(item[header])))
+    if column_widths is None:
+        remaining_width = DISCORD_MAX_EMBED_WIDTH - len(padding) * len(data[0].keys())
+        column_widths = {
+            column: remaining_width // len(data[0].keys()) for column in data[0].keys()
+        }
+
+    if sum(column_widths.values()) + len(padding) * len(data[0].keys()) > DISCORD_MAX_EMBED_WIDTH:
+        raise ValueError(
+            """Column widths exceed the maximum embed width.
+            Please provide smaller padding_width or column_widths"""
+        )
 
     start_idx = page * items_per_page
     end_idx = min(start_idx + items_per_page, len(data))
+
     page_data = data[start_idx:end_idx]
+    column_names = list(data[0].keys())
 
-    table_rows = []
+    headers = [
+        f"{column_name:<{column_widths[column_name]}}{padding}" for column_name in column_names
+    ]
 
-    header_row = "  ".join(header.ljust(col_widths[header]) for header in headers)
-    separator = "  ".join("─" * col_widths[header] for header in headers)
+    header = "".join(headers)
+    divider = "-" * (sum(column_widths.values()) + len(padding) * (len(headers)))
 
-    table_rows.append(header_row)
-    table_rows.append(separator)
+    table_rows = [header, divider]
 
     for item in page_data:
-        row = "  ".join(str(item[header]).ljust(col_widths[header]) for header in headers)
-        table_rows.append(row)
+        wrapped_columns = {
+            column: textwrap.wrap(str(item[column]), column_widths[column])
+            for column in column_names
+        }
+
+        max_lines = max(len(lines) for lines in wrapped_columns.values())
+        max_lines = max(max_lines, 1)
+
+        for i in range(max_lines):
+            row_parts = []
+            for column_name in column_names:
+                lines = wrapped_columns[column_name]
+                part = lines[i] if i < len(lines) else ""
+                row_parts.append(f"{part:<{column_widths[column_name]}}{padding}")
+
+            table_rows.append("".join(row_parts))
 
     return discord.Embed(description=f"```\n{'\n'.join(table_rows)}\n```")
 
 
 def create_table(
-    title: str, data: List[Dict[str, Any]], items_per_page: int = 10
+    title: str,
+    data: List[Dict[str, Any]],
+    items_per_page: int = 10,
+    column_widths: Dict[str, int] = None,
+    padding_width: int = 3,
 ) -> tuple[discord.Embed, TableView]:
     """
     Create a paginated table for Discord with navigation buttons.
@@ -85,9 +122,8 @@ def create_table(
     """
     if not data:
         return discord.Embed(title=title, description="No data to display"), None
-
     view = TableView(data, items_per_page)
-    embed = create_table_page(data, 0, items_per_page)
+    embed = create_table_page(data, 0, items_per_page, column_widths, padding_width)
     embed.title = title
 
     return embed, view

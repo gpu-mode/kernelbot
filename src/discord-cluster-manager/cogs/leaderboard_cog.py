@@ -326,10 +326,10 @@ class LeaderboardCog(commands.Cog):
         # Create embed
         processed_submissions = [
             {
-                "rank": submission["rank"],
-                "user": await get_user_from_id(submission["user_id"], interaction, self.bot),
-                "score": submission["submission_score"],
-                "submission_name": submission["submission_name"],
+                "Rank": submission["rank"],
+                "User": await get_user_from_id(submission["user_id"], interaction, self.bot),
+                "Score": f"{submission['submission_score']:.9f}",
+                "Submission Name": submission["submission_name"],
             }
             for submission in submissions
         ]
@@ -338,10 +338,17 @@ class LeaderboardCog(commands.Cog):
         if user_id:
             title += f" for user {await get_user_from_id(user_id, interaction, self.bot)}"
 
+        column_widths = {
+            "Rank": 4,
+            "User": 14,
+            "Score": 12,
+            "Submission Name": 14,
+        }
         embed, view = create_table(
             title,
             processed_submissions,
             items_per_page=5,
+            column_widths=column_widths,
         )
 
         await send_discord_message(
@@ -427,10 +434,26 @@ class LeaderboardCog(commands.Cog):
             await send_discord_message(interaction, "No leaderboards found.", ephemeral=True)
             return
 
-        table_cols = ["name", "deadline", "gpu_types"]
-        to_show = [{col: x[col] for col in table_cols} for x in leaderboards]
+        to_show = [
+            {
+                "Name": x["name"],
+                "Deadline": x["deadline"].strftime("%Y-%m-%d %H:%M"),
+                "GPU Types": ", ".join(x["gpu_types"]),
+            }
+            for x in leaderboards
+        ]
 
-        embed, view = create_table("Active Leaderboards", to_show, items_per_page=5)
+        column_widths = {
+            "Name": 18,
+            "Deadline": 18,
+            "GPU Types": 11,
+        }
+        embed, view = create_table(
+            "Active Leaderboards",
+            to_show,
+            items_per_page=5,
+            column_widths=column_widths,
+        )
 
         await send_discord_message(
             interaction,
