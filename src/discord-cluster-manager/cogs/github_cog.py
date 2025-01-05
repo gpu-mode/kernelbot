@@ -194,7 +194,7 @@ class GitHubCog(commands.Cog):
                     f"{elapsed_time.total_seconds():.2f} seconds\n"
                     f"Live view: <{run.html_url}>"
                 )
-                await asyncio.sleep(60)
+                await asyncio.sleep(20)
             except Exception as e:
                 return "error", str(e), None
 

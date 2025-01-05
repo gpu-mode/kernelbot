@@ -222,27 +222,29 @@ class LeaderboardDB:
         self, leaderboard_name: str, gpu_name: str, user_id: Optional[str] = None
     ) -> list[SubmissionItem]:
         query = """
-            SELECT
-                s.name,
-                s.user_id,
-                s.code,
-                s.submission_time,
-                s.score,
-                s.gpu_type,
-                RANK() OVER (PARTITION BY s.gpu_type ORDER BY s.score ASC) as rank
-            FROM leaderboard.submission s
-            JOIN leaderboard.leaderboard l
-            ON s.leaderboard_id = l.id
-            WHERE l.name = %s AND s.gpu_type = %s
+            WITH ranked_submissions AS (
+                SELECT
+                    s.name,
+                    s.user_id,
+                    s.code,
+                    s.submission_time,
+                    s.score,
+                    s.gpu_type,
+                    RANK() OVER (ORDER BY s.score ASC) as rank
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s AND s.gpu_type = %s
+            )
+            SELECT * FROM ranked_submissions
             """
         if user_id:
-            query += " AND s.user_id = %s"
+            query += " WHERE user_id = %s"
 
-        query += " ORDER BY s.score ASC"
+        query += " ORDER BY score ASC"
 
-        args = (
-            (leaderboard_name, gpu_name) if not user_id else (leaderboard_name, gpu_name, user_id)
-        )
+        args = (leaderboard_name, gpu_name)
+        if user_id:
+            args = args + (user_id,)
 
         self.cursor.execute(query, args)
 
