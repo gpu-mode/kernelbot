@@ -2,6 +2,7 @@ import asyncio
 import random
 from datetime import datetime
 from io import StringIO
+from typing import Optional
 
 import discord
 from consts import GitHubGPU, ModalGPU
@@ -12,8 +13,8 @@ from leaderboard_eval import cu_eval, py_eval
 from ui.misc import DeleteConfirmationModal, GPUSelectionView
 from ui.table import create_table
 from utils import (
-    display_lb_submissions,
     extract_score,
+    get_user_from_id,
     send_discord_message,
     setup_logging,
 )
@@ -294,6 +295,127 @@ class LeaderboardCog(commands.Cog):
             name="eval-code", description="Get leaderboard evaluation codes"
         )(self.get_leaderboard_eval)
 
+    # --------------------------------------------------------------------------
+    # |                           HELPER FUNCTIONS                              |
+    # --------------------------------------------------------------------------
+
+    async def _display_lb_submissions_helper(
+        self,
+        submissions,
+        interaction,
+        leaderboard_name: str,
+        gpu: str,
+        user_id: Optional[int] = None,
+    ):
+        """
+        Display leaderboard submissions for a particular GPU to discord.
+        Must be used as a follow-up currently.
+        """
+
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        if not submissions:
+            await send_discord_message(
+                interaction,
+                f'No submissions found for "{leaderboard_name}".',
+                ephemeral=True,
+            )
+            return
+
+        # Create embed
+        processed_submissions = [
+            {
+                "rank": submission["rank"],
+                "user": await get_user_from_id(submission["user_id"], interaction, self.bot),
+                "score": submission["submission_score"],
+                "submission_name": submission["submission_name"],
+            }
+            for submission in submissions
+        ]
+
+        title = f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}'
+        if user_id:
+            title += f" for user {await get_user_from_id(user_id, interaction, self.bot)}"
+
+        embed, view = create_table(
+            title,
+            processed_submissions,
+            items_per_page=5,
+        )
+
+        await send_discord_message(
+            interaction,
+            "",
+            embed=embed,
+            view=view,
+            ephemeral=True,
+        )
+
+    async def _get_submissions_helper(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        user_id: str = None,
+    ):
+        """Helper method to get leaderboard submissions with optional user filtering"""
+        try:
+            submissions = {}
+            with self.bot.leaderboard_db as db:
+                leaderboard_id = db.get_leaderboard(leaderboard_name)["id"]
+                if not leaderboard_id:
+                    await send_discord_message(
+                        interaction,
+                        f'Leaderboard "{leaderboard_name}" not found.',
+                        ephemeral=True,
+                    )
+                    return
+
+                gpus = db.get_leaderboard_gpu_types(leaderboard_name)
+                for gpu in gpus:
+                    submissions[gpu] = db.get_leaderboard_submissions(
+                        leaderboard_name, gpu, user_id
+                    )
+
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+
+            view = GPUSelectionView(gpus)
+            await send_discord_message(
+                interaction,
+                f"Please select GPUs view for leaderboard: {leaderboard_name}.",
+                view=view,
+                ephemeral=True,
+            )
+
+            await view.wait()
+
+            for gpu in view.selected_gpus:
+                await self._display_lb_submissions_helper(
+                    submissions[gpu],
+                    interaction,
+                    leaderboard_name,
+                    gpu,
+                    user_id,
+                )
+
+        except Exception as e:
+            logger.error(str(e))
+            if "'NoneType' object is not subscriptable" in str(e):
+                await send_discord_message(
+                    interaction,
+                    f"The leaderboard '{leaderboard_name}' doesn't exist.",
+                    ephemeral=True,
+                )
+            else:
+                await send_discord_message(
+                    interaction, "An unknown error occurred.", ephemeral=True
+                )
+
+    # --------------------------------------------------------------------------
+    # |                           COMMANDS                                      |
+    # --------------------------------------------------------------------------
+
     async def get_leaderboards(self, interaction: discord.Interaction):
         """Display all leaderboards in a table format"""
         await interaction.response.defer(ephemeral=True)
@@ -454,67 +576,6 @@ class LeaderboardCog(commands.Cog):
                 "Error in leaderboard creation.",
                 ephemeral=True,
             )
-
-    async def _get_submissions_helper(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        user_id: str = None,
-    ):
-        """Helper method to get leaderboard submissions with optional user filtering"""
-        try:
-            submissions = {}
-            with self.bot.leaderboard_db as db:
-                leaderboard_id = db.get_leaderboard(leaderboard_name)["id"]
-                if not leaderboard_id:
-                    await send_discord_message(
-                        interaction,
-                        f'Leaderboard "{leaderboard_name}" not found.',
-                        ephemeral=True,
-                    )
-                    return
-
-                gpus = db.get_leaderboard_gpu_types(leaderboard_name)
-                for gpu in gpus:
-                    submissions[gpu] = db.get_leaderboard_submissions(
-                        leaderboard_name, gpu, user_id
-                    )
-
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
-
-            view = GPUSelectionView(gpus)
-            await send_discord_message(
-                interaction,
-                f"Please select GPUs view for leaderboard: {leaderboard_name}.",
-                view=view,
-                ephemeral=True,
-            )
-
-            await view.wait()
-
-            for gpu in view.selected_gpus:
-                await display_lb_submissions(
-                    submissions[gpu],
-                    interaction,
-                    self.bot,
-                    leaderboard_name,
-                    gpu,
-                    user_id,
-                )
-
-        except Exception as e:
-            logger.error(str(e))
-            if "'NoneType' object is not subscriptable" in str(e):
-                await send_discord_message(
-                    interaction,
-                    f"The leaderboard '{leaderboard_name}' doesn't exist.",
-                    ephemeral=True,
-                )
-            else:
-                await send_discord_message(
-                    interaction, "An unknown error occurred.", ephemeral=True
-                )
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)

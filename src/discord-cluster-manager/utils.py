@@ -2,10 +2,9 @@ import datetime
 import logging
 import re
 import subprocess
-from typing import Any, List, NotRequired, Optional, TypedDict
+from typing import Any, List, NotRequired, TypedDict
 
 import discord
-from ui.table import create_table
 
 
 def setup_logging():
@@ -81,55 +80,6 @@ def extract_score(score_str: str) -> float:
         return float(match.group(1))
     else:
         return None
-
-
-async def display_lb_submissions(
-    submissions, interaction, bot, leaderboard_name: str, gpu: str, user_id: Optional[int] = None
-):
-    """
-    Display leaderboard submissions for a particular GPU to discord.
-    Must be used as a follow-up currently.
-    """
-
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True)
-
-    if not submissions:
-        await send_discord_message(
-            interaction,
-            f'No submissions found for "{leaderboard_name}".',
-            ephemeral=True,
-        )
-        return
-
-    # Create embed
-    processed_submissions = [
-        {
-            "rank": submission["rank"],
-            "user": await get_user_from_id(submission["user_id"], interaction, bot),
-            "score": submission["submission_score"],
-            "submission_name": submission["submission_name"],
-        }
-        for submission in submissions
-    ]
-
-    title = f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}'
-    if user_id:
-        title += f" for user {await get_user_from_id(user_id, interaction, bot)}"
-
-    embed, view = create_table(
-        title,
-        processed_submissions,
-        items_per_page=5,
-    )
-
-    await send_discord_message(
-        interaction,
-        "",
-        embed=embed,
-        view=view,
-        ephemeral=True,
-    )
 
 
 class LRUCache:
