@@ -7,12 +7,20 @@ DISCORD_MAX_EMBED_WIDTH = 56
 
 
 class TableView(discord.ui.View):
-    def __init__(self, data: List[Dict[str, Any]], items_per_page: int = 10):
+    def __init__(
+        self,
+        data: List[Dict[str, Any]],
+        items_per_page: int = 10,
+        column_widths: Dict[str, int] = None,
+        padding_width: int = 3,
+    ):
         super().__init__()
         self.data = data
         self.current_page = 0
         self.items_per_page = items_per_page
         self.total_pages = max(1, (len(data) + items_per_page - 1) // items_per_page)
+        self.column_widths = column_widths
+        self.padding_width = padding_width
         self.update_buttons()
 
     def update_buttons(self):
@@ -25,7 +33,14 @@ class TableView(discord.ui.View):
         self.current_page = max(0, self.current_page - 1)
         self.update_buttons()
         await interaction.response.edit_message(
-            embed=create_table_page(self.data, self.current_page, self.items_per_page), view=self
+            embed=create_table_page(
+                self.data,
+                self.current_page,
+                self.items_per_page,
+                self.column_widths,
+                self.padding_width,
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="Page 1/1", style=discord.ButtonStyle.secondary, disabled=True)
@@ -36,8 +51,16 @@ class TableView(discord.ui.View):
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_page = min(self.total_pages - 1, self.current_page + 1)
         self.update_buttons()
+
         await interaction.response.edit_message(
-            embed=create_table_page(self.data, self.current_page, self.items_per_page), view=self
+            embed=create_table_page(
+                self.data,
+                self.current_page,
+                self.items_per_page,
+                self.column_widths,
+                self.padding_width,
+            ),
+            view=self,
         )
 
 
@@ -122,7 +145,7 @@ def create_table(
     """
     if not data:
         return discord.Embed(title=title, description="No data to display"), None
-    view = TableView(data, items_per_page)
+    view = TableView(data, items_per_page, column_widths, padding_width)
     embed = create_table_page(data, 0, items_per_page, column_widths, padding_width)
     embed.title = title
 
