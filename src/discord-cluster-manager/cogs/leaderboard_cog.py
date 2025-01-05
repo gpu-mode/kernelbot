@@ -9,8 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
 from leaderboard_eval import cu_eval, py_eval
-from ui.delete_confirmation import create_delete_confirmation_modal
-from ui.gpu_selection import create_gpu_selection_view
+from ui.misc import DeleteConfirmationModal, GPUSelectionView
 from ui.table import create_table
 from utils import (
     display_lb_submissions,
@@ -224,7 +223,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 await send_discord_message(interaction, "❌ Required cogs not found!")
                 return
 
-            view = create_gpu_selection_view(gpus)
+            view = GPUSelectionView(gpus)
 
             await send_discord_message(
                 interaction,
@@ -397,7 +396,7 @@ class LeaderboardCog(commands.Cog):
                 return
 
         # Ask the user to select GPUs
-        view = create_gpu_selection_view([gpu.name for gpu in GitHubGPU])
+        view = GPUSelectionView([gpu.name for gpu in GitHubGPU])
 
         await send_discord_message(
             interaction,
@@ -484,7 +483,7 @@ class LeaderboardCog(commands.Cog):
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=True)
 
-            view = create_gpu_selection_view(gpus)
+            view = GPUSelectionView(gpus)
             await send_discord_message(
                 interaction,
                 f"Please select GPUs view for leaderboard: {leaderboard_name}.",
@@ -538,7 +537,5 @@ class LeaderboardCog(commands.Cog):
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     async def delete_leaderboard(self, interaction: discord.Interaction, leaderboard_name: str):
-        modal = create_delete_confirmation_modal(
-            "leaderboard", leaderboard_name, self.bot.leaderboard_db
-        )
+        modal = DeleteConfirmationModal("leaderboard", leaderboard_name, self.bot.leaderboard_db)
         await interaction.response.send_modal(modal)
