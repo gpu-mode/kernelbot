@@ -5,9 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 import requests
-from consts import GITHUB_REPO, GITHUB_TOKEN, GPUType
+from consts import GPUType
 from discord import app_commands
 from discord.ext import commands
+from env import GITHUB_REPO, GITHUB_TOKEN
 from github import Github
 from leaderboard_eval import cu_eval, py_eval
 from utils import get_github_branch_name, send_discord_message, setup_logging
@@ -47,9 +48,6 @@ class GitHubCog(commands.Cog):
             return None
 
         thread = await self.bot.create_thread(interaction, gpu_type.name, "GitHub Job")
-        message = f"Created thread {thread.mention} for your GitHub job"
-
-        await send_discord_message(interaction, message)
         await thread.send(f"Processing `{script.filename}` with {gpu_type.name}...")
 
         try:
@@ -197,7 +195,7 @@ class GitHubCog(commands.Cog):
                     f"{elapsed_time.total_seconds():.2f} seconds\n"
                     f"Live view: <{run.html_url}>"
                 )
-                await asyncio.sleep(60)
+                await asyncio.sleep(20)
             except Exception as e:
                 return "error", str(e), None
 

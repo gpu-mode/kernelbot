@@ -2,7 +2,7 @@ from typing import List, Optional
 
 import discord
 import psycopg2
-from consts import (
+from env import (
     DATABASE_URL,
     POSTGRES_DATABASE,
     POSTGRES_HOST,
@@ -82,14 +82,15 @@ class LeaderboardDB:
         try:
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.leaderboard (name, deadline, reference_code)
-                VALUES (%s, %s, %s)
+                INSERT INTO leaderboard.leaderboard (name, deadline, reference_code, creator_id)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     leaderboard["name"],
                     leaderboard["deadline"],
                     leaderboard["reference_code"],
+                    leaderboard["creator_id"],
                 ),
             )
 
@@ -158,7 +159,7 @@ class LeaderboardDB:
     def get_leaderboards(self) -> list[LeaderboardItem]:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, reference_code
+            SELECT id, name, deadline, reference_code, creator_id
             FROM leaderboard.leaderboard
             """
         )
@@ -174,7 +175,12 @@ class LeaderboardDB:
 
             leaderboards.append(
                 LeaderboardItem(
-                    id=lb[0], name=lb[1], deadline=lb[2], reference_code=lb[3], gpu_types=gpu_types
+                    id=lb[0],
+                    name=lb[1],
+                    deadline=lb[2],
+                    reference_code=lb[3],
+                    gpu_types=gpu_types,
+                    creator_id=lb[4],
                 )
             )
 
@@ -201,10 +207,10 @@ class LeaderboardDB:
         else:
             return None
 
-    def get_leaderboard(self, leaderboard_name: str) -> int | None:
+    def get_leaderboard(self, leaderboard_name: str) -> LeaderboardItem | None:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, reference_code
+            SELECT id, name, deadline, reference_code, creator_id
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -214,26 +220,45 @@ class LeaderboardDB:
         res = self.cursor.fetchone()
 
         if res:
-            return LeaderboardItem(id=res[0], name=res[1], deadline=res[2], reference_code=res[3])
+            return LeaderboardItem(
+                id=res[0],
+                name=res[1],
+                deadline=res[2],
+                reference_code=res[3],
+                creator_id=res[4],
+            )
         else:
             return None
 
-    # TODO: add GPU type
     def get_leaderboard_submissions(
-        self, leaderboard_name: str, gpu_name: str
+        self, leaderboard_name: str, gpu_name: str, user_id: Optional[str] = None
     ) -> list[SubmissionItem]:
-        self.cursor.execute(
+        query = """
+            WITH ranked_submissions AS (
+                SELECT
+                    s.name,
+                    s.user_id,
+                    s.code,
+                    s.submission_time,
+                    s.score,
+                    s.gpu_type,
+                    RANK() OVER (ORDER BY s.score ASC) as rank
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s AND s.gpu_type = %s
+            )
+            SELECT * FROM ranked_submissions
             """
-            SELECT s.name, s.user_id, s.code, s.submission_time, s.score,
-            s.gpu_type
-            FROM leaderboard.submission s
-            JOIN leaderboard.leaderboard l
-            ON s.leaderboard_id = l.id
-            WHERE l.name = %s AND s.gpu_type = %s
-            ORDER BY s.score ASC
-            """,
-            (leaderboard_name, gpu_name),
-        )
+        if user_id:
+            query += " WHERE user_id = %s"
+
+        query += " ORDER BY score ASC"
+
+        args = (leaderboard_name, gpu_name)
+        if user_id:
+            args = args + (user_id,)
+
+        self.cursor.execute(query, args)
 
         return [
             SubmissionItem(
@@ -244,6 +269,7 @@ class LeaderboardDB:
                 submission_time=submission[3],
                 submission_score=submission[4],
                 gpu_type=gpu_name,
+                rank=submission[6],
             )
             for submission in self.cursor.fetchall()
         ]

@@ -44,12 +44,12 @@ async def get_user_from_id(id, interaction, bot):
     # This currently doesn't work.
     if interaction.guild:
         # In a guild, try to get the member by ID
-        member = await interaction.guild.fetch_member(id)
-        if member:
-            username = member.global_name if member.nick is None else member.nick
-            return username
-        else:
-            return id
+        try:
+            member = await interaction.guild.fetch_member(id)
+        except Exception:
+            member = id
+
+        return member
     else:
         # If the interaction is in DMs, we can get the user directly
         user = await bot.fetch_user(id)
@@ -80,43 +80,6 @@ def extract_score(score_str: str) -> float:
         return float(match.group(1))
     else:
         return None
-
-
-async def display_lb_submissions(interaction, bot, leaderboard_name: str, gpu: str):
-    """
-    Display leaderboard submissions for a particular GPU to discord.
-    Must be used as a follow-up currently.
-    """
-    with bot.leaderboard_db as db:
-        submissions = db.get_leaderboard_submissions(leaderboard_name, gpu)
-
-    if not interaction.response.is_done():
-        await interaction.response.defer()
-
-    if not submissions:
-        await send_discord_message(
-            interaction,
-            f'No submissions found for "{leaderboard_name}".',
-            ephemeral=True,
-        )
-        return
-
-    # Create embed
-    embed = discord.Embed(
-        title=f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}',
-        color=discord.Color.blue(),
-    )
-
-    for submission in submissions:
-        user_id = await get_user_from_id(submission["user_id"], interaction, bot)
-
-        embed.add_field(
-            name=f"{user_id}: {submission['submission_name']}",
-            value=f"Submission speed: {submission['submission_score']}",
-            inline=False,
-        )
-
-    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 class LRUCache:
@@ -168,12 +131,14 @@ class LRUCache:
 
 class LeaderboardItem(TypedDict):
     name: str
+    creator_id: int
     deadline: datetime.datetime
     reference_code: str
     gpu_types: List[str]
 
 
 class SubmissionItem(TypedDict):
+    rank: int
     submission_name: str
     submission_time: datetime.datetime
     submission_score: float
