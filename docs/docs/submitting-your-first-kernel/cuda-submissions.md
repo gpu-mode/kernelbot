@@ -56,7 +56,7 @@ require submission files to **define and implement** the following function sign
 function that gets called by our harness is `submission`**). Note that we automatically convert
 your submission into a `.cuh` header, so you don't need to treat your file that way.
 
-```cpp title="submission.cuh"
+```cpp title="submission.cu"
 // Type aliases for input_t, output_t defined by leaderboard...
 
 // User kernel implementation.
