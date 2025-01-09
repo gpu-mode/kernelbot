@@ -90,6 +90,30 @@ Modal runners, but we can also replace `modal` with `github` to user the GitHub 
 perspective, the only difference is what hardware is available on either runner. After submitting
 the command, you should see the following UI pop up:
 
+<center>![GPU selection UI](./img/select.png)</center>
+
+<br></br>
+
+This UI contains a dropdown menu where you can select which GPUs to submit your kernel to. You can
+select as many GPUs as you want, and they will each be a part of a different leaderboard. For this
+example, select the `T4` GPU, and click anywhere outside the UI. The Discord bot will now create a
+thread where you will be able to see if your submission passes / fails, and the runtime (if it
+passes all evaluation checks).
+
+<center>![Submission result](./img/result.png)</center>
+
+<br></br>
+
+## Viewing the Leaderboard
+You can now view your ranking on the leaderboard compared to other participants. Type `/leaderboard
+show identity_py`. Another dropdown menu should appear, similar when you submitted your kernel. 
+Because we submitted to the `T4` GPU, select the `T4` option in the dropdown. Like for submissions,
+you can select multiple GPUs. In this instance, it will display each ranking on each unique GPU.
+
+<center>![Showing leaderboard ranking](./img/show.png)</center>
+
+<br></br>
+
 ## Debugging with Discord
 We provide many `/` (*"slash"*) commands to help participants understand the leaderboard they are
 submitting to. None of the submission pipeline is hidden from the user, and they can access the
@@ -99,4 +123,5 @@ entire pipeline source code from slash commands. Some examples of useful command
 * `/leaderboard eval-code {language}` to show the evaluation harness for Python/CUDA leaderboards.
 * `/leaderboard reference-code {name}` to get the reference code for the leaderboard.
 
-More details for commands can be found in [Available Discord Commands](discord-cluster-manager/docs/available-discord-commands). You are now ready to write kernels! Play around with other available leaderboards and try to write the fastest kernels ⚡!
+More details for commands can be found in [Available Discord Commands](discord-cluster-manager/docs/available-discord-commands). 
+You are now ready to write Python kernels! Play around with other available leaderboards and try to write the fastest kernels ⚡!
