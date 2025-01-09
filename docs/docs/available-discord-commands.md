@@ -42,9 +42,9 @@ into three categories, which you can open in the tabs below.
         - `script` *(required)*: Script to be submitted. Note, a Python leaderboard expects a Python
         submission file, and a CUDA leaderboard expects a CUDA submission file.
   </TabItem>
-  <TabItem value="tools" label="Useful Tool Commands">
+  <TabItem value="tools" label="Useful Info Commands">
 
-        ## Useful Tool Commands
+        ## Useful Info Commands
         These commands are particularly useful for leaderboard participants to query for information
         about the leaderboards that they are submitting to. For example, listing the available
         leaderboards to submit to, viewing the source code for the reference kernel, etc.
@@ -61,7 +61,7 @@ into three categories, which you can open in the tabs below.
         ```rust title="/leaderboard list"
         Name                    Deadline             GPU Types     
         --------------------------------------------------------------------------------
-        softmax_py              2025-01-31 00:00     NVIDIA T4, AMD 7900 XTX
+        softmax_py              2025-01-31 00:00     NVIDIA T4, AMD MI250
         softmax_cuda            2024-12-31 00:00     NVIDIA T4
         matmul_cuda             2025-12-12 00:00     NVIDIA T4, NVIDIA A100, NVIDIA H100
         llama3-inference_py     2025-12-31 00:00     NVIDIA A100, NVIDIA H100
