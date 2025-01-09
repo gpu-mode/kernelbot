@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: 20.x
           cache: yarn
-          cache-dependency-path: docs/yarn.json
+          cache-dependency-path: docs/yarn.lock
       - name: Install dependencies
         run: yarn install --frozen-lockfile --non-interactive
       - name: Upload Build Artifact
