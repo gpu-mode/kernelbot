@@ -27,7 +27,7 @@ function HomepageHeader() {
           <br/>
           <a href="https://discord.gg/"><img src="https://img.shields.io/badge/Discord-Join%20Us-purple?logo=discord&logoColor=white&style=for-the-badge" alt="Join our Discord community" /></a>
           <br/>
-          <a href="/docs/intro"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Getting started." /></a>
+          <a href="docs/intro"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Getting started." /></a>
           <br/>
         </div>
         </center>

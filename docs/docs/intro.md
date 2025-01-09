@@ -2,46 +2,21 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# Getting Started
+Welcome! If you are excited about building GPU kernels, this leaderboard is the place for you! We
+have designed a fully-functional competition platform on [Discord](https://discord.com/), where users can **submit their own
+kernel implementations** for popular algorithms (e.g. matrix multiplication, softmax, [LLaMA 3](https://ai.meta.com/blog/meta-llama-3/) inference, etc.) and compete to produce the fastest kernels.
 
-Let's discover **Docusaurus in less than 5 minutes**.
+Users interface directly with a Discord bot, which runs and measures various metrics for their
+kernel submissions on our own cloud compute, so **participants can compete without their own GPUs**!
+We are gracious to our sponsors for providing these community resources.
 
-## Getting Started
+## Why a GPU Kernel Competition?
 
-Get started by **creating a new site**.
+## How the Competition Works
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+## Participating
+We have tried to make the platform as intuitive as possible, but we are open to feedback. You are
+now ready to submit your first leaderboard kernel -- go to the next section to begin!
 
-### What you'll need
 
-- [Node.js](https://nodejs.org/en/download/) version 18.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
-
-## Generate a new site
-
-Generate a new Docusaurus site using the **classic template**.
-
-The classic template will automatically be added to your project after you run the command:
-
-```bash
-npm init docusaurus@latest my-website classic
-```
-
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
-
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
-
-```bash
-cd my-website
-npm run start
-```
-
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
