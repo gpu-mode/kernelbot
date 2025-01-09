@@ -19,7 +19,9 @@ operating_sys = "ubuntu22.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
 # Move this to another file later:
-python_image = Image.debian_slim(python_version="3.10").pip_install(["torch"])
+python_image = Image.debian_slim(python_version="3.10").pip_install(
+    ["torch", "triton", "jax[cuda12]", "jax2torch"]
+)
 
 cuda_image = (
     Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.11")
@@ -30,11 +32,7 @@ cuda_image = (
         "clang-11",  # note i skip a step
     )
     .pip_install(
-        "ninja",
-        "packaging",
-        "wheel",
-        "torch",
-        "numpy",
+        "ninja", "packaging", "wheel", "torch", "numpy", "triton", "jax[cuda12]", "jax2torch"
     )
     .run_commands(
         "update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 "
@@ -71,7 +69,6 @@ def timeout(seconds: int):
         signal.signal(signal.SIGALRM, original_handler)
 
 
-@app.function(gpu="T4", image=python_image)
 def run_pytorch_script(  # noqa: C901
     script_content: str,
     reference_content: Optional[str] = None,
