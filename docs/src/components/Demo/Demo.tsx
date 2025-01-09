@@ -15,10 +15,10 @@ export function Demo() {
         className={styles.demo}
         muted
         onMouseOver={() => (videoRef.current.controls = true)}
-        onMouseOut={() => (videoRef.current.controls = true)}
+        onMouseOut={() => (videoRef.current.controls = false)}
         ref={videoRef}
       >
-        <source src="img/teaser.mp4" type="video/mp4"></source>
+        <source src="img/preview.mp4" type="video/mp4"></source>
       </video>
     </div>
   );
