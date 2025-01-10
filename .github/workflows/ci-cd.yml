@@ -29,4 +29,4 @@ jobs:
 
       - name: Deploy job
         run: |
-          modal deploy src/discord-cluster/manager.modal_runner_archs.py
+          modal deploy src/discord-cluster-manager/modal_runner_archs.py
