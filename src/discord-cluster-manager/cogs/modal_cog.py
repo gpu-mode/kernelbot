@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 
 import discord
 import modal
@@ -30,7 +31,7 @@ class ModalCog(commands.Cog):
         interaction: discord.Interaction,
         script: discord.Attachment,
         gpu_type: app_commands.Choice[str],
-        reference_script: discord.Attachment = None,
+        reference_script: Optional[discord.Attachment] = None,
         reference_code: str = None,
     ) -> discord.Thread:
         thread = None
@@ -45,7 +46,7 @@ class ModalCog(commands.Cog):
 
             # TODO: Maybe find a better way?
             if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=False)
+                await interaction.response.defer(ephemeral=True)
             channel = interaction.channel
             message = await channel.send(f"Starting Modal job with {gpu_type.name}...")
             thread = await message.create_thread(name=f"{gpu_type.name} Modal Job")
@@ -65,6 +66,7 @@ class ModalCog(commands.Cog):
                 )
 
             result, score = await self.handle_modal_execution(
+                interaction,
                 thread,
                 script_content,
                 filename,
@@ -87,30 +89,42 @@ class ModalCog(commands.Cog):
 
     async def handle_modal_execution(
         self,
-        thread,
-        script_content,
-        filename,
-        gpu_type,
-        reference_content,
-        status_msg,
+        interaction: discord.Interaction,
+        thread: discord.Thread,
+        script_content: str,
+        filename: str,
+        gpu_type: str,
+        reference_content: Optional[str],
+        status_msg: discord.Message,
     ) -> tuple[str, float]:
         try:
             loop = asyncio.get_event_loop()
-            result, score = await loop.run_in_executor(
-                None,
-                lambda: modal.Function.lookup(
-                    "discord-bot-runner", "run_pytorch_script_h100"
-                ).remote(
-                    py_eval if filename.endswith(".py") else cu_eval,
-                    reference_content=reference_content,
-                    submission_content=script_content,
-                ),
-            )
+            func_type = "pytorch" if filename.endswith(".py") else "cuda"
+            func_name = f"run_{func_type}_script_{gpu_type.lower()}"
+
+            if reference_content is not None:
+                result, score = await loop.run_in_executor(
+                    None,
+                    lambda: modal.Function.lookup("discord-bot-runner", func_name).remote(
+                        py_eval if filename.endswith(".py") else cu_eval,
+                        reference_content=reference_content,
+                        submission_content=script_content,
+                    ),
+                )
+            else:
+                result, score = await loop.run_in_executor(
+                    None,
+                    lambda: modal.Function.lookup("discord-bot-runner", func_name).remote(
+                        script_content,
+                    ),
+                )
+                await interaction.followup.send(
+                    f"Modal job completed in thread {thread.jump_url}", ephemeral=True
+                )
 
             # Send results
             await thread.send(f"\n**Script size:** {len(script_content)} bytes")
             await thread.send(f"**Execution time:** {score:.3f} s\n")
-            await thread.send(f"**Modal execution result:**\n```\n{result}\n```")
 
             if "check_implementation failed" in result or "Error" in result:
                 await thread.send("Modal run failed.\n")
