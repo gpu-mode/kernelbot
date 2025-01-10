@@ -29,7 +29,7 @@ input_t generate_input() {
 
 // The identity kernel
 output_t ref_kernel(input_t data) {
-  return (output_t) out;
+  return (output_t) data;
 }
 
 bool check_implementation(output_t out, output_t ref, float epsilon = 1e-5) {
