@@ -11,10 +11,10 @@ from train import custom_kernel
 
 def correctness() -> bool:
     for _ in range(10):  # check multiple times
-        input_tensors = generate_input()
+        inputs = generate_input()
 
-        custom_output = custom_kernel(input_tensors)
-        ref_output = ref_kernel(input_tensors)
+        custom_output = custom_kernel(inputs)
+        ref_output = ref_kernel(inputs)
 
         if not check_implementation(custom_output, ref_output):
             return False
@@ -30,16 +30,15 @@ def metric():
     # Warmup Code
     print('warming up...')
     for _ in range(warmup_runs):
-        input_tensors = generate_input()
-        _ = custom_kernel(input_tensors)
-        _ = ref_kernel(input_tensors)
+        inputs = generate_input()
+        _ = custom_kernel(inputs)
     torch.cuda.synchronize()
 
     # Timing Code
-    input_tensors = generate_input()
+    inputs = generate_input()
     start_time = time.time()
     for _ in range(timed_runs):
-        _ = custom_kernel(input_tensors)
+        _ = custom_kernel(inputs)
     torch.cuda.synchronize()
     end_time = time.time()
 
@@ -76,16 +75,18 @@ float measure_runtime() {
 
     for (int i = 0; i < WARMUP_RUNS; i++) {
         auto data = generate_input();
-        submission(data);
+        custom_kernel(data);
     }
+    cudaDeviceSynchronize();
 
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < TIMED_RUNS; i++) {
         auto data = generate_input();
-        submission(data);
+        custom_kernel(data);
     }
 
+    cudaDeviceSynchronize();
     auto end = std::chrono::high_resolution_clock::now();
 
     using double_duration = std::chrono::duration<double>;
@@ -96,8 +97,8 @@ float measure_runtime() {
 
 int main() {
     auto data = generate_input();
-    auto reference_output = reference(data);
-    auto submission_output = submission(data);
+    auto reference_output = ref_kernel(data);
+    auto submission_output = custom_kernel(data);
 
     if (!check_implementation(submission_output, reference_output)) {
         std::cout << "check_implementation failed" << std::endl;
