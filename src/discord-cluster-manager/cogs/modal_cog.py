@@ -32,22 +32,20 @@ class ModalCog(commands.Cog):
         gpu_type: app_commands.Choice[str],
         reference_script: discord.Attachment = None,
         reference_code: str = None,
-    ) -> tuple[discord.Thread, float]:
+    ) -> discord.Thread:
         thread = None
         status_msg = None
-
         try:
             if not script.filename.endswith(".py") and not script.filename.endswith(".cu"):
                 if not interaction.response.is_done():
                     await interaction.response.send_message(
                         "Please provide a Python (.py) or CUDA (.cu) file"
                     )
-                return None, 0
+                return None
 
-            # Send a new message in the channel
+            # TODO: Maybe find a better way?
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=False)
-
             channel = interaction.channel
             message = await channel.send(f"Starting Modal job with {gpu_type.name}...")
             thread = await message.create_thread(name=f"{gpu_type.name} Modal Job")
@@ -75,7 +73,10 @@ class ModalCog(commands.Cog):
                 status_msg,
             )
 
-            return thread, score
+            if result is not None and score > 0:
+                await thread.send(f"**score:{score:.9f}**")
+
+            return thread
 
         except Exception as e:
             logger.error(f"Error processing request: {str(e)}", exc_info=True)
@@ -95,7 +96,6 @@ class ModalCog(commands.Cog):
     ) -> tuple[str, float]:
         try:
             loop = asyncio.get_event_loop()
-            # Run Modal operation in a thread pool
             result, score = await loop.run_in_executor(
                 None,
                 lambda: modal.Function.lookup(
