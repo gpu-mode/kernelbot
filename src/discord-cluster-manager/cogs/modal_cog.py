@@ -7,7 +7,7 @@ from consts import ModalGPU
 from discord import app_commands
 from discord.ext import commands
 from leaderboard_eval import cu_eval, py_eval
-from utils import send_logs, setup_logging
+from utils import send_discord_message, send_logs, setup_logging
 
 logger = setup_logging()
 
@@ -38,10 +38,11 @@ class ModalCog(commands.Cog):
         status_msg = None
         try:
             if not script.filename.endswith(".py") and not script.filename.endswith(".cu"):
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "Please provide a Python (.py) or CUDA (.cu) file"
-                    )
+                await send_discord_message(
+                    interaction,
+                    "Please provide a Python (.py) or CUDA (.cu) file",
+                    ephemeral=True,
+                )
                 return None
 
             # TODO: Maybe find a better way?
