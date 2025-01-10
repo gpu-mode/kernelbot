@@ -3,11 +3,13 @@
 
 #include <tuple>
 #include <vector>
+#include <cstdlib>
+#include <cmath>
+#include <array>
 
-#define N_SIZES 5
-const int Ns[N_SIZES] = {
-    32, 32, 32, 32, 32,
-};
+#define N_SIZES 10
+const int Ns[N_SIZES] = {128,  256,  512,   1024,  2048,
+                         4096, 8192, 16384, 32768, 65536};
 
 using input_t = std::array<std::vector<float>, N_SIZES>;
 using output_t = input_t;
@@ -25,17 +27,9 @@ input_t generate_input() {
   return data;
 }
 
+// The identity kernel
 output_t ref_kernel(input_t data) {
-  output_t out;
-
-  for (int i = 0; i < N_SIZES; ++i) {
-    out[i].resize(Ns[i]);
-    for (int j = 0; j < Ns[i]; ++j) {
-      out[i][j] = data[i][j] + data[i][j];
-    }
-  }
-
-  return out;
+  return (output_t) out;
 }
 
 bool check_implementation(output_t out, output_t ref, float epsilon = 1e-5) {
