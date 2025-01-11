@@ -119,8 +119,8 @@ class ModalCog(commands.Cog):
                         script_content,
                     ),
                 )
-                await interaction.followup.send(
-                    f"Modal job completed in thread {thread.jump_url}", ephemeral=True
+                await send_discord_message(
+                    interaction, f"Modal job completed in thread {thread.jump_url}", ephemeral=True
                 )
 
             # Send results
