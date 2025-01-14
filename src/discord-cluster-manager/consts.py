@@ -68,4 +68,4 @@ CUDA_FLAGS = [
     "-Xptxas=--verbose",
     "-Xptxas=--warn-on-spills",
 ]
-MODAL_CUDA_INCLUDE_DIRS = ["-I/ThunderKittens/include"]
+MODAL_CUDA_INCLUDE_DIRS = ["-I/ThunderKittens/include", "-I/cutlass/include"]

@@ -42,6 +42,8 @@ cuda_image = (
         #
         "git clone https://github.com/HazyResearch/ThunderKittens.git",
         # "cd /ThunderKittens && pwd && python setup.py install",
+        # CUTLASS
+        "git clone https://github.com/NVIDIA/cutlass.git",
     )
 )
 
