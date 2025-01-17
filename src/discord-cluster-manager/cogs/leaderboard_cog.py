@@ -5,14 +5,13 @@ from io import StringIO
 from typing import List, Optional
 
 import discord
-from discord.ext import commands, tasks
 from consts import (
     AllGPU,
     GitHubGPU,
     ModalGPU,
 )
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
 from leaderboard_eval import cu_eval, py_eval
 from ui.misc import DeleteConfirmationModal, GPUSelectionView
