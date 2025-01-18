@@ -14,7 +14,7 @@ from consts import (
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
-from leaderboard_eval import cu_eval, py_eval
+from task import LeaderboardTask
 from ui.misc import DeleteConfirmationModal, GPUSelectionView
 from ui.table import create_table
 from utils import (
@@ -37,7 +37,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         leaderboard_name: str,
         script: discord.Attachment,
         command: Callable,
-        reference_code,
+        task: LeaderboardTask,
         submission_content,
         gpu: AllGPU,
         runner_name: str = "GitHub",
@@ -49,7 +49,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 name=gpu.name,
                 value=gpu.value,
             ),
-            reference_code=reference_code,
+            task=task,
         )
 
         # no point going further if this already failed
@@ -128,7 +128,6 @@ class LeaderboardSubmitCog(app_commands.Group):
         sure reference code, deadlines, etc. are all correct.
         """
         # Read and convert reference code
-        reference_code = None
         with self.bot.leaderboard_db as db:
             leaderboard_item = db.get_leaderboard(leaderboard_name)
 
@@ -151,9 +150,8 @@ class LeaderboardSubmitCog(app_commands.Group):
                 )
                 return None
 
-            leaderboard_item = db.get_leaderboard(leaderboard_name)
             gpus = db.get_leaderboard_gpu_types(leaderboard_name)
-            reference_code = leaderboard_item["reference_code"]
+            task = leaderboard_item["task"]
 
         # Read the template file
         submission_content = await script.read()
@@ -166,7 +164,7 @@ class LeaderboardSubmitCog(app_commands.Group):
             )
             return None
 
-        return (submission_content, reference_code, gpus)
+        return submission_content, task, gpus
 
     async def on_submit_hook(
         self,
@@ -180,7 +178,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         """
         Called as the main body of a submission to route to the correct runner.
         """
-        submission_content, reference_code, gpus = await self.before_submit_hook(
+        submission_content, task, gpus = await self.before_submit_hook(
             interaction,
             leaderboard_name,
             script,
@@ -212,7 +210,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 leaderboard_name,
                 script,
                 command,
-                reference_code,
+                task,
                 submission_content,
                 AllGPU[gpu],
                 runner_name,
@@ -323,13 +321,9 @@ class LeaderboardCog(commands.Cog):
             name="show-personal", description="Get all your submissions for a leaderboard"
         )(self.get_user_leaderboard_submissions)
 
-        self.get_leaderboard_references = bot.leaderboard_group.command(
-            name="reference-code", description="Get leaderboard reference codes"
-        )(self.get_leaderboard_references)
-
-        self.get_leaderboard_eval = bot.leaderboard_group.command(
-            name="eval-code", description="Get leaderboard evaluation codes"
-        )(self.get_leaderboard_eval)
+        self.get_leaderboard_task = bot.leaderboard_group.command(
+            name="task", description="Get leaderboard reference codes"
+        )(self.get_leaderboard_task)
 
         # Start updating leaderboard
         self.leaderboard_update.start()
@@ -571,56 +565,24 @@ class LeaderboardCog(commands.Cog):
 
     @app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
-    async def get_leaderboard_references(
-        self, interaction: discord.Interaction, leaderboard_name: str
-    ):
+    async def get_leaderboard_task(self, interaction: discord.Interaction, leaderboard_name: str):
         await interaction.response.defer(ephemeral=True)
 
         with self.bot.leaderboard_db as db:
-            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            leaderboard_item = db.get_leaderboard(leaderboard_name)  # type: LeaderboardItem
             if not leaderboard_item:
                 await send_discord_message(interaction, "Leaderboard not found.", ephemeral=True)
                 return
 
-        code = leaderboard_item["reference_code"]
-        code_file = StringIO(code)
-        language = "cuda" if "#include" in code else "python"
-        suffix = "py" if language == "python" else "cuh"
+        code = leaderboard_item["task"].files
 
-        ref_code = discord.File(
-            fp=code_file, filename=f"{leaderboard_name}_reference_code.{suffix}"
-        )
+        files = []
+        for file_name, content in code.items():
+            files.append(discord.File(fp=StringIO(content), filename=file_name))
 
-        message = (
-            f"**Reference Code for {leaderboard_name} in {language}**\n"
-            f"*If you want to display the evaluation code, run `/leaderboard eval-code {language}`*"
-        )
+        message = f"**Reference Code for {leaderboard_name}**\n"
 
-        await send_discord_message(interaction, message, ephemeral=True, file=ref_code)
-
-    @app_commands.describe(language="Language of the evaluation code [cpp, python]")
-    @app_commands.choices(
-        language=[app_commands.Choice(name=lang, value=lang) for lang in ["cuda", "python"]]
-    )
-    async def get_leaderboard_eval(self, interaction: discord.Interaction, language: str):
-        await interaction.response.defer(ephemeral=True)
-
-        if language == "cuda":
-            eval_code = cu_eval
-        else:
-            eval_code = py_eval
-
-        suffix = "py" if language == "python" else "cu"
-
-        code_file = StringIO(eval_code)
-        ref_code = discord.File(fp=code_file, filename=f"leaderboard_eval.{suffix}")
-
-        await send_discord_message(
-            interaction,
-            f"**Evaluation Code for language: {language}**\n",
-            file=ref_code,
-            ephemeral=True,
-        )
+        await send_discord_message(interaction, message, ephemeral=True, files=files)
 
     @discord.app_commands.describe(
         leaderboard_name="Name of the leaderboard",
@@ -690,14 +652,15 @@ class LeaderboardCog(commands.Cog):
 
         try:
             # Read the template file
-            template_content = await reference_code.read()
+            task_str = (await reference_code.read()).decode("utf-8")
+            task = LeaderboardTask.from_str(task_str)
 
             with self.bot.leaderboard_db as db:
                 err = db.create_leaderboard(
                     {
                         "name": leaderboard_name,
                         "deadline": date_value,
-                        "reference_code": template_content.decode("utf-8"),
+                        "task": task,
                         "gpu_types": view.selected_gpus,
                         "creator_id": interaction.user.id,
                     }

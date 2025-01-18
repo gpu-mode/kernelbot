@@ -1,0 +1,19 @@
+# name of the task
+# name: identity-cuda
+
+# these files will be baked into the json object, so that they are available during testing
+files:
+  - {"name": "eval.cu", "source": "@EVAL_CU@"}
+  - {"name": "reference.cuh", "source": "reference.cuh"}
+  - {"name": "submission.cuh", "source": "@SUBMISSION@"}
+
+# task language, depending on this we do get different keys in runner
+lang: "cu"
+
+# Config object
+config:
+  # task provided source files to compile
+  sources: ["eval.cu"]
+
+  # additional include directories
+  include_dirs: []

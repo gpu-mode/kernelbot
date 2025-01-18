@@ -1,3 +1,5 @@
+import json
+import logging
 from typing import List, Optional
 
 import discord
@@ -11,6 +13,7 @@ from env import (
     POSTGRES_USER,
 )
 from psycopg2 import Error
+from task import LeaderboardTask, build_from_legacy_reference
 from utils import LeaderboardItem, LRUCache, SubmissionItem
 
 leaderboard_name_cache = LRUCache(max_size=512)
@@ -89,7 +92,7 @@ class LeaderboardDB:
                 (
                     leaderboard["name"],
                     leaderboard["deadline"],
-                    leaderboard["reference_code"],
+                    leaderboard["task"].to_str(),
                     leaderboard["creator_id"],
                 ),
             )
@@ -178,7 +181,7 @@ class LeaderboardDB:
                     id=lb[0],
                     name=lb[1],
                     deadline=lb[2],
-                    reference_code=lb[3],
+                    task=LeaderboardTask.from_str(lb[3]),
                     gpu_types=gpu_types,
                     creator_id=lb[4],
                 )
@@ -220,11 +223,18 @@ class LeaderboardDB:
         res = self.cursor.fetchone()
 
         if res:
+            # TODO: This is just a clutch to keep compatibility with old leaderboards
+            try:
+                task = LeaderboardTask.from_str(res[3])
+            except json.JSONDecodeError:
+                logging.error("json decoding error in LB %s. Legacy task?", leaderboard_name)
+                task = build_from_legacy_reference(res[3])
+
             return LeaderboardItem(
                 id=res[0],
                 name=res[1],
                 deadline=res[2],
-                reference_code=res[3],
+                task=task,
                 creator_id=res[4],
             )
         else:
