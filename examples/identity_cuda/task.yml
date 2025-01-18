@@ -3,7 +3,7 @@
 
 # these files will be baked into the json object, so that they are available during testing
 files:
-  - {"name": "eval.cu", "source": "@EVAL_CU@"}
+  - {"name": "eval.cu", "source": "eval.cu"}
   - {"name": "reference.cuh", "source": "reference.cuh"}
   - {"name": "submission.cuh", "source": "@SUBMISSION@"}
 

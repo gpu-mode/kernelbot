@@ -86,10 +86,6 @@ def make_task(yaml_file: str) -> LeaderboardTask:
         if source == "@SUBMISSION@":
             assert user_file_name is None
             file_dict[name] = "@SUBMISSION@"
-        elif source == "@EVAL_CU@":
-            file_dict[name] = leaderboard_eval.cu_eval
-        elif source == "@EVAL_PY@":
-            file_dict[name] = leaderboard_eval.py_eval
         else:
             file_dict[name] = Path(source).read_text()
 

@@ -53,6 +53,8 @@ def compile_cuda_script(  # # noqa: C901
     files: list[str],
     arch: int = None,
     include_dirs: list[str] = None,
+    defines: dict[str, str] = None,
+    flags: list[str] = None,
     verbose: bool = False,
 ) -> CompileResult:
     """
@@ -62,14 +64,34 @@ def compile_cuda_script(  # # noqa: C901
         files: List of files to compile.
         arch: Architecture to compile for. If None, uses `native`
         include_dirs: additional include directories to supply to nvcc
+        defines: Additional defines for the preprocessor
+        flags: Other compiler flags
         verbose: whether to print progress or be silent
-        seed: Seed value to use for generating test cases
     Returns:
         A `CompileResult` that summarizes the compilation process.
 
     """
-    if include_dirs is None:
-        include_dirs = []
+    if flags is None:
+        flags = CUDA_FLAGS
+    else:
+        for flag in flags:
+            if not flag.startswith("-"):
+                raise ValueError(f"Flag `{flag}` should start with a dash.")
+        flags = CUDA_FLAGS + flags
+
+    if include_dirs is not None:
+        flags += [f"-I{d}" for d in include_dirs]
+
+    if defines is not None:
+        for name, value in defines.items():
+            # restrict macro names to valid identifiers
+            if not name.isidentifier():
+                raise ValueError(f"Define key `{name}` contains invalid character")
+
+            if value is not None:
+                flags.append(f"-D{name}={value}")
+            else:
+                flags.append(f"-D{name}")
 
     if verbose:
         print_ = print
@@ -98,7 +120,7 @@ def compile_cuda_script(  # # noqa: C901
     else:
         ARCH = f"-gencode=arch=compute_{arch},code=sm_{arch}"
 
-    command = [nvcc] + CUDA_FLAGS + include_dirs + files + [ARCH, "-o", "eval.out"]
+    command = [nvcc] + flags + files + [ARCH, "-o", "eval.out"]
 
     print_("[Compiling]")
     try:
@@ -174,6 +196,8 @@ def run_cuda_script(  # # noqa: C901
     headers: dict[str, str] = None,
     arch: int = None,
     include_dirs: list[str] = None,
+    defines: dict[str, str] = None,
+    flags: list[str] = None,
     seed: int = 42,
 ) -> tuple[CompileResult, RunResult]:
     """
@@ -186,14 +210,13 @@ def run_cuda_script(  # # noqa: C901
             compile command.
         arch: The arch code for the compute/sm versions. If None, native arch is used.
         include_dirs: Additional include directories, e.g., for thunderkittens/cutlass etc
+        defines: Preprocessor defines
+        flags: Additional flags to give to the compiler
         seed: Random seed to initialize the RNG for testing
 
     Returns:
         tuple[CompileResult, RunResult]: CUDA compile/eval result information
     """
-    if include_dirs is None:
-        include_dirs = []
-
     try:
         # Write submission files to directory
         for source, content in sources.items():
@@ -206,6 +229,8 @@ def run_cuda_script(  # # noqa: C901
             files=list(sources.keys()),
             arch=arch,
             include_dirs=include_dirs,
+            defines=defines,
+            flags=flags,
             verbose=True,
         )
 
@@ -236,7 +261,6 @@ def run_cuda_script(  # # noqa: C901
 def run_pytorch_script(  # noqa: C901
     sources: dict[str, str],
     main: str,
-    arch: int = None,
     seed: int = 42,
 ) -> RunResult:
     """
@@ -245,7 +269,6 @@ def run_pytorch_script(  # noqa: C901
     Args:
         sources: Files to generate
         main: Which file to run. Must be one of the keys in sources.
-        arch: The arch code for the compute/sm versions.
         seed: Random seed to initialize the RNG for testing
 
     Returns:
@@ -267,15 +290,14 @@ def run_pytorch_script(  # noqa: C901
 
 def run_config(config: dict):
     if config["lang"] == "py":
-        run_result = run_pytorch_script(
-            sources=config["sources"], main=config["main"], arch=config.get("arch", None)
-        )
+        run_result = run_pytorch_script(sources=config["sources"], main=config["main"])
         return FullResult(success=True, error="", compile=None, run=run_result)
     elif config["lang"] == "cu":
         comp, run = run_cuda_script(
             sources=config["sources"],
             headers=config.get("headers", {}),
             arch=config.get("arch", None),
+            defines=config.get("defines", {}),
             include_dirs=config.get("include_dirs", []),
         )
         return FullResult(success=True, error="", compile=comp, run=run)
