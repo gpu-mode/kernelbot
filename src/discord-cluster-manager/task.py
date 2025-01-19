@@ -28,6 +28,8 @@ class LeaderboardTask:
     Attributes:
         lang: Programming language of this task. Specifies the type of
             the `data` attribute.
+        description: A description of the task.
+            TODO use for a sticky message for the LBs channel
         files: Dictionary containing a mapping of file names to file
             contents. Contents '@SUBMISSION@' get replaced with the
             submitted file before sending to the runner.
@@ -41,6 +43,7 @@ class LeaderboardTask:
     lang: Language
     files: dict[str, str]
     config: CudaTaskData | PythonTaskData
+    description: str = ''
     libraries: list[str] = dataclasses.field(default_factory=list)
 
     @staticmethod

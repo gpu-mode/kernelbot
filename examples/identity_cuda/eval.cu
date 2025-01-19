@@ -6,53 +6,42 @@
 #include <algorithm>
 #include <memory>
 
+#include "utils.h"
 #include "reference.cuh"
-#include "submission.cuh"
+
+// forward declaration for user submission
+output_t custom_kernel(input_t data);
 
 #define WARMUP_RUNS 10
 #define TIMED_RUNS 100
 
-struct Closer {
-    void operator()(std::FILE* file) {
-        std::fclose(file);
-    }
-};
+namespace {
+    struct Closer {
+        void operator()(std::FILE* file) {
+            std::fclose(file);
+        }
+    };
 
-struct PopcornOutput {
-    template<class... Args>
-    void printf(Args&&... args) {
-        ::fprintf(File.get(), std::forward<Args>(args)...);
-    }
+    struct PopcornOutput {
+        template<class... Args>
+        void printf(Args&&... args) {
+            ::fprintf(File.get(), std::forward<Args>(args)...);
+        }
 
-    void log(const char* key, const char* value) {
-        printf("%s: %s\n", key, value);
-    }
+        void log(const char* key, const char* value) {
+            printf("%s: %s\n", key, value);
+        }
 
-    template<class T>
-    void log(const char* key, T&& value) {
-        log(key, std::to_string(value).c_str());
-    }
+        template<class T>
+        void log(const char* key, T&& value) {
+            log(key, std::to_string(value).c_str());
+        }
 
-    std::unique_ptr<std::FILE, Closer> File;
-};
-
-// checks that a CUDA API call returned successfully, otherwise prints an error message and exits.
-static void cuda_check(cudaError_t status, const char* expr, const char* file, int line, const char* function)
-{
-    if(status != cudaSuccess) {
-        std::cerr << "CUDA error (" << (int)status << ") while evaluating expression "
-                  << expr << " at "
-                  << file << '('
-                  << line << ") in `"
-                  << function << "`: "
-                  << cudaGetErrorString(status) << std::endl;
-        std::exit(110);
-    }
+        std::unique_ptr<std::FILE, Closer> File;
+    };
 }
 
-#define cuda_check(expr) cuda_check(expr, #expr, __FILE__, __LINE__, __FUNCTION__)
-
-void measure_runtime(PopcornOutput& logger, std::mt19937& rng) {
+static void measure_runtime(PopcornOutput& logger, std::mt19937& rng) {
     std::cout << "warming up..." << std::endl;
 
     {
@@ -60,7 +49,7 @@ void measure_runtime(PopcornOutput& logger, std::mt19937& rng) {
         for (int i = 0; i < WARMUP_RUNS; i++) {
             // discard result; this is just warmup, we don't care what it returns
             (void)custom_kernel(warmup_data);
-            cuda_check(cudaDeviceSynchronize());
+            CUDA_CHECK(cudaDeviceSynchronize());
         }
     }
 
@@ -77,7 +66,7 @@ void measure_runtime(PopcornOutput& logger, std::mt19937& rng) {
         // move data into custom_kernel, so that if custom_kernel takes large std::vectors or similar by value,
         // we're not measuring the copy overhead.
         auto submission_output = custom_kernel(std::move(data));
-        cuda_check(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
         auto end = std::chrono::high_resolution_clock::now();
 
         durations.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
