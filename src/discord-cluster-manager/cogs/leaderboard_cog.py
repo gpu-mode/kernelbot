@@ -1,7 +1,9 @@
 import asyncio
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from io import StringIO
+from pathlib import Path
 from typing import Callable, List, Optional, Type
 
 import discord
@@ -14,7 +16,7 @@ from consts import (
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
-from task import LeaderboardTask
+from task import LeaderboardTask, make_task
 from ui.misc import DeleteConfirmationModal, GPUSelectionView
 from ui.table import create_table
 from utils import (
@@ -309,6 +311,10 @@ class LeaderboardCog(commands.Cog):
             name="create", description="Create a new leaderboard"
         )(self.leaderboard_create)
 
+        self.leaderboard_create_local = bot.leaderboard_group.command(
+            name="create-local", description="Create or update a leaderboard from a local directory"
+        )(self.leaderboard_create_local)
+
         self.delete_leaderboard = bot.leaderboard_group.command(
             name="delete", description="Delete a leaderboard"
         )(self.delete_leaderboard)
@@ -586,6 +592,49 @@ class LeaderboardCog(commands.Cog):
 
     @discord.app_commands.describe(
         leaderboard_name="Name of the leaderboard",
+        directory="Directory of the kernel definition",
+    )
+    async def leaderboard_create_local(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        directory: str,
+    ):
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "Debug command, only for admins.",
+                ephemeral=True,
+            )
+            return
+
+        old_cwd = Path.cwd()
+        try:
+            assert Path(directory).resolve().is_relative_to(Path.cwd())
+            os.chdir(directory)
+            task = make_task("task.yml")
+        finally:
+            os.chdir(old_cwd)
+
+        # create-local overwrites existing leaderboard
+        with self.bot.leaderboard_db as db:
+            db.delete_leaderboard(leaderboard_name)
+
+        await self.create_leaderboard_in_db(
+            interaction,
+            leaderboard_name,
+            datetime.now(timezone.utc) + timedelta(days=365),
+            task=task,
+        )
+
+        await send_discord_message(
+            interaction,
+            f"Leaderboard '{leaderboard_name}' created.",
+        )
+
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the leaderboard",
         deadline="Competition deadline in the form: 'Y-m-d'",
         reference_code="Reference implementation of kernel. Also includes eval code.",
     )
@@ -638,51 +687,16 @@ class LeaderboardCog(commands.Cog):
             )
             return
 
-        # Ask the user to select GPUs
-        view = GPUSelectionView([gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU])
-
-        await send_discord_message(
-            interaction,
-            "Please select GPUs for this leaderboard.",
-            view=view,
-            ephemeral=True,
-        )
-
-        await view.wait()
-
         try:
             # Read the template file
             task_str = (await reference_code.read()).decode("utf-8")
             task = LeaderboardTask.from_str(task_str)
 
-            with self.bot.leaderboard_db as db:
-                err = db.create_leaderboard(
-                    {
-                        "name": leaderboard_name,
-                        "deadline": date_value,
-                        "task": task,
-                        "gpu_types": view.selected_gpus,
-                        "creator_id": interaction.user.id,
-                    }
-                )
-
-                if err:
-                    if "duplicate key" in err:
-                        await send_discord_message(
-                            interaction,
-                            "Error: Tried to create a leaderboard "
-                            f'"{leaderboard_name}" that already exists.',
-                            ephemeral=True,
-                        )
-                    else:
-                        # Handle any other errors
-                        logger.error(f"Error in leaderboard creation: {err}")
-                        await send_discord_message(
-                            interaction,
-                            "Error in leaderboard creation.",
-                            ephemeral=True,
-                        )
-                    return
+            success = await self.create_leaderboard_in_db(
+                interaction, leaderboard_name, date_value, task
+            )
+            if not success:
+                return
 
             forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
 
@@ -736,6 +750,56 @@ class LeaderboardCog(commands.Cog):
 
         with self.bot.leaderboard_db as db:  # Cleanup in case lb was created
             db.delete_leaderboard(leaderboard_name)
+
+    async def create_leaderboard_in_db(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        date_value: datetime,
+        task: LeaderboardTask,
+    ) -> bool:
+        # Ask the user to select GPUs
+        view = GPUSelectionView([gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU])
+
+        await send_discord_message(
+            interaction,
+            "Please select GPUs for this leaderboard.",
+            view=view,
+            ephemeral=True,
+        )
+
+        await view.wait()
+
+        with self.bot.leaderboard_db as db:
+            err = db.create_leaderboard(
+                {
+                    "name": leaderboard_name,
+                    "deadline": date_value,
+                    "task": task,
+                    "gpu_types": view.selected_gpus,
+                    "creator_id": interaction.user.id,
+                }
+            )
+
+            if err:
+                if "duplicate key" in err:
+                    await send_discord_message(
+                        interaction,
+                        "Error: Tried to create a leaderboard "
+                        f'"{leaderboard_name}" that already exists.',
+                        ephemeral=True,
+                    )
+                else:
+                    # Handle any other errors
+                    logger.error(f"Error in leaderboard creation: {err}")
+                    await send_discord_message(
+                        interaction,
+                        "Error in leaderboard creation.",
+                        ephemeral=True,
+                    )
+                return False
+
+            return True
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)

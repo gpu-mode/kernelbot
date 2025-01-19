@@ -68,7 +68,7 @@ class LeaderboardTask:
         return LeaderboardTask.from_dict(json.loads(data))
 
 
-def make_task(yaml_file: str) -> LeaderboardTask:
+def make_task(yaml_file: str | Path) -> LeaderboardTask:
     import yaml
 
     with open(yaml_file) as f:
