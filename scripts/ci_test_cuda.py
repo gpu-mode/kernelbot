@@ -8,28 +8,31 @@ if Path().resolve().name == "scripts":
 sys.path.append("src/discord-cluster-manager")
 
 from consts import ExitCode
-from leaderboard_eval import cu_eval
 from run_eval import run_cuda_script
 
-ref = Path("examples/identity_cuda/reference.cuh")
+ref = Path("examples/identity_cuda/reference.cuh").read_text()
+task_h = Path("examples/identity_cuda/task.h").read_text()
+utils_h = Path("examples/identity_cuda/utils.h").read_text()
+eval_cu = Path("examples/identity_cuda/eval.cu").read_text()
+
+header_files = {"reference.cuh": ref, "task.h": task_h, "utils.h": utils_h}
 
 
 def test_does_not_compile():
     # input_tt is a typo, so this won't compile
     sub = """
+    #include "task.h"
     output_t custom_kernel(input_tt data) {   }
     """
 
-    comp, run = run_cuda_script(
-        {"eval.cu": cu_eval}, {"reference.cuh": ref.read_text(), "submission.cuh": sub}, arch=None
-    )
+    comp, run = run_cuda_script({"eval.cu": eval_cu, "submission.cu": sub}, header_files, arch=None)
     assert comp.success is False
     assert run.success is False
     assert comp.nvcc_found is True
     assert comp.exit_code != ExitCode.SUCCESS
     assert comp.stdout == ""
-    assert 'submission.cuh(2): error: identifier "input_tt" is undefined' in comp.stderr
-    assert '1 error detected in the compilation of "eval.cu".' in comp.stderr
+    assert 'submission.cu(3): error: identifier "input_tt" is undefined' in comp.stderr
+    assert '1 error detected in the compilation of "submission.cu".' in comp.stderr
     assert comp.command.startswith("/usr/local/cuda/bin/nvcc")
     assert "nvcc: NVIDIA (R) Cuda compiler driver" in comp.nvcc_version
 
@@ -39,7 +42,7 @@ def test_cuda_runtime_error():
     sub = """
 #include <array>
 #include <vector>
-#include "reference.cuh"
+#include "task.h"
 
 __global__ void copy_kernel(float* a) {
     a[-100] = 10.0;
@@ -54,14 +57,12 @@ output_t custom_kernel(input_t data)
 }
 
     """
-    comp, run = run_cuda_script(
-        {"eval.cu": cu_eval}, {"reference.cuh": ref.read_text(), "submission.cuh": sub}, arch=None
-    )
+    comp, run = run_cuda_script({"eval.cu": eval_cu, "submission.cu": sub}, header_files, arch=None)
     assert comp.success is True
     assert run.success is False
     assert run.command == "./eval.out"
     assert "warming up..." in run.stdout
-    assert "cudaDeviceSynchronize() at eval.cu(63) in `measure_runtime`" in run.stderr
+    assert "cudaDeviceSynchronize() at eval.cu(52) in `measure_runtime`" in run.stderr
     assert "an illegal memory access was encountered" in run.stderr
     assert run.exit_code == ExitCode.CUDA_FAIL
     assert len(run.result) == 0
@@ -70,7 +71,7 @@ output_t custom_kernel(input_t data)
 def test_cuda_validation_fail():
     # no-op, runs fine but isn't correct
     sub = """
-    #include "reference.cuh"
+    #include "task.h"
 
     output_t custom_kernel(input_t data)
     {
@@ -84,9 +85,7 @@ def test_cuda_validation_fail():
     }
 
         """
-    comp, run = run_cuda_script(
-        {"eval.cu": cu_eval}, {"reference.cuh": ref.read_text(), "submission.cuh": sub}, arch=None
-    )
+    comp, run = run_cuda_script({"eval.cu": eval_cu, "submission.cu": sub}, header_files, arch=None)
     assert comp.success is True
     assert run.success is True
     assert run.passed is False
@@ -99,11 +98,9 @@ def test_cuda_validation_fail():
 
 
 def test_cuda_correct():
-    sub = Path("examples/identity_cuda/submission.cuh").read_text()
+    sub = Path("examples/identity_cuda/submission.cu").read_text()
 
-    comp, run = run_cuda_script(
-        {"eval.cu": cu_eval}, {"reference.cuh": ref.read_text(), "submission.cuh": sub}, arch=None
-    )
+    comp, run = run_cuda_script({"eval.cu": eval_cu, "submission.cu": sub}, header_files, arch=None)
     assert comp.success is True
     assert run.success is True
     assert "warming up..." in run.stdout
