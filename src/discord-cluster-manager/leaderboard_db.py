@@ -57,7 +57,7 @@ class LeaderboardDB:
             self.connection = (
                 psycopg2.connect(DATABASE_URL)
                 if DATABASE_URL
-                else psycopg2.connect(**self.connection_params)
+                else psycopg2.connect(**self.connection_params, sslmode="require")
             )
             self.cursor = self.connection.cursor()
             return True
