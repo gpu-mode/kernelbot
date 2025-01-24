@@ -1,40 +1,55 @@
 import torch
 import triton
 import triton.language as tl
+from typing import List
+from task import kernel_interface
 
-# Triton kernel
 @triton.jit
 def add_kernel(
-    A_ptr, B_ptr, C_ptr, M, N,
+    a_ptr, b_ptr, c_ptr,
+    n_elements,
     BLOCK_SIZE: tl.constexpr,
 ):
-    row_idx = tl.program_id(0) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    col_idx = tl.program_id(1) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
     
-    mask_row = row_idx < M
-    mask_col = col_idx < N
+    a = tl.load(a_ptr + offsets, mask=mask)
+    b = tl.load(b_ptr + offsets, mask=mask)
+    
+    c = a + b
+    
+    tl.store(c_ptr + offsets, c, mask=mask)
 
-    A = tl.load(A_ptr + row_idx[:, None] * N + col_idx[None, :], mask=mask_row[:, None] & mask_col[None, :], other=0.0)
-    B = tl.load(B_ptr + row_idx[:, None] * N + col_idx[None, :], mask=mask_row[:, None] & mask_col[None, :], other=0.0)
-
-    C = A + B
-    tl.store(C_ptr + row_idx[:, None] * N + col_idx[None, :], C, mask=mask_row[:, None] & mask_col[None, :])
-
-def custom_kernel(inputs):
-    outputs = []
-    for input_tensor in inputs:
-        A, B = input_tensor
+def custom_kernel(inputs: List[List[torch.Tensor]]) -> List[torch.Tensor]:
+    """
+    Custom implementation of vector addition using Triton.
+    Args:
+        inputs: List of pairs of tensors [A, B] to be added.
+    Returns:
+        List of tensors containing element-wise sums.
+    """
+    results = []
+    for A, B in inputs:
+        assert A.is_cuda and B.is_cuda, "Input tensors must be on GPU"
+        assert A.shape == B.shape, "Input tensors must have the same shape"
+        assert A.dtype == torch.float16 and B.dtype == torch.float16, "Input tensors must be float16"
+        
         M, N = A.shape
-
+        n_elements = M * N
         C = torch.empty_like(A)
-
-        BLOCK_SIZE = 32
-        grid = (triton.cdiv(M, BLOCK_SIZE), triton.cdiv(N, BLOCK_SIZE))
-
+        
+        def grid(meta): return (triton.cdiv(n_elements, meta['BLOCK_SIZE']),)
+        
         add_kernel[grid](
-            A, B, C, M, N,
-            BLOCK_SIZE=BLOCK_SIZE,
+            A.reshape(-1).data_ptr(),
+            B.reshape(-1).data_ptr(),
+            C.reshape(-1).data_ptr(),
+            n_elements,
+            BLOCK_SIZE=1024
         )
-
-        outputs.append(C)
-    return outputs
+        
+        results.append(C)
+    
+    return results
