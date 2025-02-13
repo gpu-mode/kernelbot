@@ -28,7 +28,7 @@ def sum_kernel(
     # Store the partial sum
     tl.atomic_add(output_ptr, block_sum)
 
-def custom_kernel(data: input_t) -> output_t:
+def _custom_kernel(data: input_t) -> output_t:
     """
     Performs parallel reduction to compute sum of all elements.
     Args:
@@ -51,4 +51,7 @@ def custom_kernel(data: input_t) -> output_t:
         BLOCK_SIZE=BLOCK_SIZE,
     )
     
-    return output[0] 
+    return output[0]
+
+# Compile the kernel for better performance
+custom_kernel = torch.compile(_custom_kernel, mode="reduce-overhead") 
