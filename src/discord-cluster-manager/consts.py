@@ -140,4 +140,5 @@ triton
 
 AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
+torch
 """
