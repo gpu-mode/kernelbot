@@ -256,12 +256,15 @@ class AdminCog(commands.Cog):
                     auto_archive_duration=10080,  # 7 days
                 )
 
-                await send_discord_message(
-                    interaction,
-                    f"Leaderboard '{leaderboard_name}'.\n"
-                    + f"Submission deadline: {date_value}"
-                    + f"\nForum thread: {thread.thread.mention}",
-                )
+            with self.bot.leaderboard_db as db:
+                db.assign_forum_to_leaderboard(leaderboard_name, thread.thread.id)
+
+            await send_discord_message(
+                interaction,
+                f"Leaderboard '{leaderboard_name}'.\n"
+                + f"Submission deadline: {date_value}"
+                + f"\nForum thread: {thread.thread.mention}",
+            )
             return
 
         except discord.Forbidden:
@@ -370,7 +373,11 @@ class AdminCog(commands.Cog):
         )
 
         forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
-        threads = [thread for thread in forum_channel.threads if thread.name == leaderboard_name]
+
+        with self.bot.leaderboard_db as db:
+            lb: LeaderboardItem = db.get_leaderboard(leaderboard_name)
+            forum_id = lb["forum_id"]
+        threads = [thread for thread in forum_channel.threads if thread.id == forum_id]
 
         if threads:
             thread = threads[0]

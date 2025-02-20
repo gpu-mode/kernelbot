@@ -147,6 +147,22 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error in leaderboard creation.") from e
 
+    def assign_forum_to_leaderboard(self, name: str, forum_thread: int):
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard
+                SET forum_id = %s
+                WHERE name = %s AND active is TRUE;
+                """,
+                (name, forum_thread),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()  # Ensure rollback if error occurs
+            logger.exception("Could not assign forum thread", exc_info=e)
+            raise KernelBotError("Could not assign forum thread") from e
+
     def update_leaderboard(self, name, deadline, task):
         try:
             self.cursor.execute(
@@ -417,7 +433,7 @@ class LeaderboardDB:
     def get_leaderboard(self, leaderboard_name: str) -> LeaderboardItem | None:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id
+            SELECT id, name, deadline, task, creator_id, forum_id
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -434,6 +450,7 @@ class LeaderboardDB:
                 deadline=res[2],
                 task=task,
                 creator_id=res[4],
+                forum_id=res[5]
             )
         else:
             return None
