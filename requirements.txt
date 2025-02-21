@@ -9,4 +9,10 @@ psycopg2-binary
 yoyo-migrations
 ruff
 pre-commit
+
+# api
+fastapi[all] # install all to avoid random bugs
+uvicorn
+
+# docs
 jinja2

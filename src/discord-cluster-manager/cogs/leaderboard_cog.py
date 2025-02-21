@@ -1,48 +1,34 @@
 import asyncio
-import tempfile
-import zipfile
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import datetime
 from io import StringIO
-from pathlib import Path
-from typing import Callable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import discord
 from consts import (
-    GPU_SELECTION,
-    AllGPU,
-    GitHubGPU,
-    ModalGPU,
     SubmissionMode,
+    get_gpu_by_name,
 )
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
-from task import LeaderboardTask, make_task
-from ui.misc import DeleteConfirmationModal, GPUSelectionView
+from task import LeaderboardTask
+from ui.misc import GPUSelectionView
 from ui.table import create_table
 from utils import (
+    LeaderboardItem,
     get_user_from_id,
     send_discord_message,
     setup_logging,
 )
 
+if TYPE_CHECKING:
+    from ..bot import ClusterBot
+
 logger = setup_logging()
 
 
-async def leaderboard_dir_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[discord.app_commands.Choice[str]]:
-    """Return leaderboard names that match the current typed name"""
-    root = Path("examples")
-    return [
-        discord.app_commands.Choice(name=x.name, value=x.name) for x in root.iterdir() if x.is_dir()
-    ]
-
-
 class LeaderboardSubmitCog(app_commands.Group):
-    def __init__(self, bot):
+    def __init__(self, bot: "ClusterBot"):
         super().__init__(name="submit", description="Submit to leaderboard")
         self.bot = bot
 
@@ -54,17 +40,14 @@ class LeaderboardSubmitCog(app_commands.Group):
         command: Callable,
         task: LeaderboardTask,
         submission_content,
-        gpu: AllGPU,
+        gpu: app_commands.Choice[str],
         runner_name: str,
         mode: SubmissionMode,
     ):
         discord_thread, result = await command(
             interaction,
             script,
-            app_commands.Choice(
-                name=gpu.name,
-                value=gpu.value,
-            ),
+            gpu,
             task=task,
             mode=mode,
         )
@@ -160,7 +143,6 @@ class LeaderboardSubmitCog(app_commands.Group):
         self,
         interaction: discord.Interaction,
         leaderboard_name: str,
-        script: discord.Attachment,
     ):
         """
         Main logic to handle at the beginning of a user submission to a runner, to make
@@ -169,6 +151,13 @@ class LeaderboardSubmitCog(app_commands.Group):
         # Read and convert reference code
         with self.bot.leaderboard_db as db:
             leaderboard_item = db.get_leaderboard(leaderboard_name)
+            if not leaderboard_item:
+                await send_discord_message(
+                    interaction,
+                    f"Leaderboard {leaderboard_name} not found.",
+                    ephemeral=True,
+                )
+                return None, None
 
             now = datetime.now()
             deadline = leaderboard_item["deadline"]
@@ -179,19 +168,49 @@ class LeaderboardSubmitCog(app_commands.Group):
                     f"The deadline to submit to {leaderboard_name} has passed.\n"
                     + f"It was {deadline.date()} and today is {now.date()}.",
                 )
-                return None
-
-            if not leaderboard_item:
-                await send_discord_message(
-                    interaction,
-                    f"Leaderboard {leaderboard_name} not found.",
-                    ephemeral=True,
-                )
-                return None
+                return None, None
 
             gpus = db.get_leaderboard_gpu_types(leaderboard_name)
             task = leaderboard_item["task"]
+        return task, gpus
 
+    def _get_run_command(self, gpu) -> Optional[Callable]:
+        runner_cog = self.bot.get_cog(f"{gpu.runner}Cog")
+
+        if not all([runner_cog]):
+            logger.error("Cog for runner %s for gpu %s not found!", f"{gpu.runner}Cog", gpu.name)
+            return None
+        return runner_cog.submit_leaderboard
+
+    @staticmethod
+    def _get_popcorn_directives(submission: str) -> dict:
+        popcorn_info = {"gpus": None, "leaderboard": None}
+        for line in submission.splitlines():
+            # only process the first comment block of the file.
+            # for simplicity, don't care whether these are python or C++ comments here
+            if not (line.startswith("//") or line.startswith("#")):
+                break
+
+            args = line.split()
+            if args[0] in ["//!POPCORN", "#!POPCORN"]:
+                arg = args[1].strip().lower()
+                if arg in ["gpu", "gpus"]:
+                    popcorn_info["gpus"] = args[2:]
+                elif arg == "leaderboard":
+                    popcorn_info["leaderboard"] = args[2]
+        return popcorn_info
+
+    async def on_submit_hook(  # noqa: C901
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: Optional[str],
+        script: discord.Attachment,
+        mode: SubmissionMode,
+        cmd_gpus: Optional[List[str]],
+    ) -> int:
+        """
+        Called as the main body of a submission to route to the correct runner.
+        """
         # Read the template file
         submission_content = await script.read()
 
@@ -201,38 +220,43 @@ class LeaderboardSubmitCog(app_commands.Group):
             await send_discord_message(
                 interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
             )
-            return None
+            return -1
 
-        return submission_content, task, gpus
+        info = self._get_popcorn_directives(submission_content)
+        # command argument GPUs overwrites popcorn directive
+        if info["gpus"] is not None and cmd_gpus is None:
+            cmd_gpus = info["gpus"]
 
-    async def on_submit_hook(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        script: discord.Attachment,
-        command: Callable,
-        GPUsEnum: Type[Enum],
-        runner_name: str,
-        mode: SubmissionMode,
-    ) -> int:
-        """
-        Called as the main body of a submission to route to the correct runner.
-        """
-        submission_content, task, gpus = await self.before_submit_hook(
+        if info["leaderboard"] is not None:
+            if leaderboard_name is not None:
+                await send_discord_message(
+                    interaction,
+                    "Contradicting leaderboard name specification. "
+                    "Submitting to {leaderboard_name}",
+                )
+            else:
+                leaderboard_name = info["leaderboard"]
+
+        if leaderboard_name is None:
+            await send_discord_message(
+                interaction,
+                "Missing leaderboard name. "
+                "Either supply as argument in the submit command, or "
+                "specify in your submission script using the "
+                "`{#,//}!POPCORN leaderboard` directive.",
+            )
+            return -1
+
+        task, task_gpus = await self.before_submit_hook(
             interaction,
             leaderboard_name,
-            script,
         )
 
         # GPU selection View
-        gpu_enums = {e.name for e in GPUsEnum}
-        gpus = [gpu for gpu in gpus if gpu in gpu_enums]
-
-        if len(gpus) == 0:
+        if len(task_gpus) == 0:
             await send_discord_message(
                 interaction,
-                "❌ No available GPUs for Leaderboard "
-                + f"`{leaderboard_name}` on {runner_name} runner.",
+                "❌ No available GPUs for Leaderboard " + f"`{leaderboard_name}`.",
             )
             return -1
 
@@ -240,16 +264,35 @@ class LeaderboardSubmitCog(app_commands.Group):
         # otherwise just run on that GPU
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
-        if len(gpus) == 1:
+
+        if cmd_gpus is not None:
+            selected_gpus = []
+            for g in cmd_gpus:
+                if g in task_gpus:
+                    selected_gpus.append(g)
+                else:
+                    await send_discord_message(
+                        interaction,
+                        f"GPU {g} not available for `{leaderboard_name}`",
+                        ephemeral=True,
+                    )
+                    return -1
+        elif len(task_gpus) == 1:
             await send_discord_message(
                 interaction,
-                f"Running for `{leaderboard_name}` on GPU: **{gpus[0]}**",
+                f"Running for `{leaderboard_name}` on GPU: **{task_gpus[0]}**",
                 ephemeral=True,
             )
-            selected_gpus = gpus
+            selected_gpus = task_gpus
         else:
-            view = await self.select_gpu_view(interaction, leaderboard_name, gpus)
+            view = await self.select_gpu_view(interaction, leaderboard_name, task_gpus)
             selected_gpus = view.selected_gpus
+
+        selected_gpus = [get_gpu_by_name(gpu) for gpu in selected_gpus]
+        commands = [self._get_run_command(gpu) for gpu in selected_gpus]
+        if any((c is None for c in commands)):
+            await send_discord_message(interaction, "❌ Required runner not found!")
+            return -1
 
         tasks = [
             self.async_submit_cog_job(
@@ -259,11 +302,11 @@ class LeaderboardSubmitCog(app_commands.Group):
                 command,
                 task,
                 submission_content,
-                AllGPU[gpu],
-                runner_name,
+                app_commands.Choice(name=gpu.name, value=gpu.value),
+                gpu.runner,
                 mode,
             )
-            for gpu in selected_gpus
+            for gpu, command in zip(selected_gpus, commands, strict=False)
         ]
 
         # also schedule secret run
@@ -276,14 +319,21 @@ class LeaderboardSubmitCog(app_commands.Group):
                     command,
                     task,
                     submission_content,
-                    AllGPU[gpu],
-                    runner_name,
+                    app_commands.Choice(name=gpu.name, value=gpu.value),
+                    gpu.runner,
                     SubmissionMode.PRIVATE,
                 )
-                for gpu in selected_gpus
+                for gpu, command in zip(selected_gpus, commands, strict=False)
             ]
 
         await asyncio.gather(*tasks)
+
+        await send_discord_message(
+            interaction,
+            f"{mode.value.capitalize()} submission to '{leaderboard_name}' "
+            f"on GPUS: {', '.join([gpu.name for gpu in selected_gpus])} "
+            f"using {', '.join({gpu.runner for gpu in selected_gpus})} runners succeeded!",
+        )
         return 0
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -297,134 +347,146 @@ class LeaderboardSubmitCog(app_commands.Group):
 
     async def submit(
         self,
-        runner_name: str,
         interaction: discord.Interaction,
-        leaderboard_name: str,
+        leaderboard_name: Optional[str],
         script: discord.Attachment,
         mode: SubmissionMode,
+        gpu: Optional[str],
     ):
-        # Call Modal runner
-        runner_cog = self.bot.get_cog(f"{runner_name}Cog")
-
-        if not all([runner_cog]):
-            await send_discord_message(interaction, f"❌ Required {runner_name} cogs not found!")
+        if not self.bot.accepts_jobs:
+            await send_discord_message(
+                interaction,
+                "The bot is currently not accepting any new submissions, please try again later.",
+                ephemeral=True,
+            )
             return
 
-        runner_command = runner_cog.submit_leaderboard
-
+        if gpu is not None:
+            gpu = [gpu.strip() for gpu in gpu.split(",")]
         try:
-            return await self.on_submit_hook(
-                interaction,
-                leaderboard_name,
-                script,
-                runner_command,
-                GPU_SELECTION[runner_name],
-                runner_name,
-                mode,
-            )
+            return await self.on_submit_hook(interaction, leaderboard_name, script, mode, gpu)
         except Exception as e:
             logger.error("Error handling leaderboard submission", exc_info=e)
             # don't leak any information, but at least acknowledge that the command failed.
             await send_discord_message(
                 interaction,
-                f"An error occurred when submitting to leaderboard "
-                f"`{leaderboard_name}` on runner `{runner_name}`.",
+                f"An error occurred when submitting to leaderboard " f"`{leaderboard_name}`.",
                 ephemeral=True,
             )
             return -1
 
-    @app_commands.command(name="modal", description="Submit leaderboard data for modal")
-    @app_commands.describe(
-        leaderboard_name="Name of the competition / kernel to optimize",
-        script="The Python / CUDA script file to run",
-    )
-    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
-    async def submit_modal(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        script: discord.Attachment,
-    ):
-        return await self.submit(
-            "Modal", interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD
-        )
-
-    @app_commands.command(name="github", description="Submit leaderboard data for GitHub")
-    @app_commands.describe(
-        leaderboard_name="Name of the competition / kernel to optimize",
-        script="The Python / CUDA script file to run",
-    )
-    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
-    async def submit_github(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        script: discord.Attachment,
-    ):
-        return await self.submit(
-            "GitHub", interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD
-        )
-
     @app_commands.command(name="test", description="Start a testing/debugging run")
     @app_commands.describe(
         leaderboard_name="Name of the competition / kernel to optimize",
-        runner="Name of the runner to run on",
         script="The Python / CUDA script file to run",
+        gpu="Select GPU. Leave empty for interactive or automatic selection.",
     )
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     async def submit_test(
         self,
         interaction: discord.Interaction,
-        runner: str,
-        leaderboard_name: str,
         script: discord.Attachment,
+        leaderboard_name: Optional[str] = None,
+        gpu: Optional[str] = None,
     ):
-        runner = {"github": "GitHub", "modal": "Modal"}[runner.lower()]
         return await self.submit(
-            runner, interaction, leaderboard_name, script, mode=SubmissionMode.TEST
+            interaction, leaderboard_name, script, mode=SubmissionMode.TEST, gpu=gpu
         )
 
     @app_commands.command(name="benchmark", description="Start a benchmarking run")
     @app_commands.describe(
         leaderboard_name="Name of the competition / kernel to optimize",
-        runner="Name of the runner to run on",
         script="The Python / CUDA script file to run",
+        gpu="Select GPU. Leave empty for interactive or automatic selection.",
     )
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     async def submit_bench(
         self,
         interaction: discord.Interaction,
-        runner: str,
-        leaderboard_name: str,
         script: discord.Attachment,
+        leaderboard_name: Optional[str],
+        gpu: Optional[str],
     ):
-        runner = {"github": "GitHub", "modal": "Modal"}[runner.lower()]
         return await self.submit(
-            runner, interaction, leaderboard_name, script, mode=SubmissionMode.BENCHMARK
+            interaction, leaderboard_name, script, mode=SubmissionMode.BENCHMARK, gpu=gpu
+        )
+
+    @app_commands.command(
+        name="ranked", description="Start a ranked run for an official leaderboard submission"
+    )
+    @app_commands.describe(
+        leaderboard_name="Name of the competition / kernel to optimize",
+        script="The Python / CUDA script file to run",
+        gpu="Select GPU. Leave empty for interactive or automatic selection.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    async def submit_ranked(
+        self,
+        interaction: discord.Interaction,
+        script: discord.Attachment,
+        leaderboard_name: Optional[str] = None,
+        gpu: Optional[str] = None,
+    ):
+        return await self.submit(
+            interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD, gpu=gpu
         )
 
 
+async def lang_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[discord.app_commands.Choice[str]]:
+    """
+    "Autocompletion" for language selection in template command.
+    This does not really autocomplete; I just provides a drop-down
+    with all _available_ languages for the chosen leaderboard
+    (opposed to a Choice argument, which cannot adapt).
+    """
+    lb = interaction.namespace["leaderboard_name"]
+    bot = interaction.client
+
+    with bot.leaderboard_db as db:
+        leaderboard_item = db.get_leaderboard(lb)  # type: LeaderboardItem
+        if not leaderboard_item:
+            raise ValueError("Invalid leaderboard")
+
+    candidates = leaderboard_item["task"].templates
+    return [discord.app_commands.Choice(name=c, value=c) for c in candidates]
+
+
+def add_header_to_template(lang: str, lb: LeaderboardItem):
+    template_file = lb["task"].templates[lang]
+
+    comment_char = {"CUDA": "//", "Python": "#", "Triton": "#"}[lang]
+
+    description_comment = [
+        f"{comment_char} > {line}\n" for line in lb["task"].description.splitlines()
+    ]
+    header = f"""
+{comment_char}!POPCORN leaderboard {lb['name']}
+
+{comment_char} This is a submission template for popcorn leaderboard '{lb['name']}'.
+{comment_char} Your task is as follows:
+{str.join('\n', description_comment)}
+{comment_char} The deadline for this leaderboard is {lb["deadline"]}
+
+{comment_char} You can automatically route this file to specific GPUs by adding a line
+{comment_char} `{comment_char}!POPCORN gpus <GPUs>` to the header of this file.
+{comment_char} Happy hacking!
+
+"""[1:]
+    return header + template_file + "\n"
+
+
 class LeaderboardCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot: commands.Bot = bot
+    def __init__(self, bot: "ClusterBot"):
+        self.bot = bot
 
         bot.leaderboard_group.add_command(LeaderboardSubmitCog(bot))
 
         self.get_leaderboards = bot.leaderboard_group.command(
             name="list", description="Get all leaderboards"
         )(self.get_leaderboards)
-
-        self.leaderboard_create = bot.leaderboard_group.command(
-            name="create", description="Create a new leaderboard"
-        )(self.leaderboard_create)
-
-        self.leaderboard_create_local = bot.leaderboard_group.command(
-            name="create-local", description="Create or update a leaderboard from a local directory"
-        )(self.leaderboard_create_local)
-
-        self.delete_leaderboard = bot.leaderboard_group.command(
-            name="delete", description="Delete a leaderboard"
-        )(self.delete_leaderboard)
 
         self.get_leaderboard_submissions = bot.leaderboard_group.command(
             name="show", description="Get all submissions for a leaderboard"
@@ -437,6 +499,10 @@ class LeaderboardCog(commands.Cog):
         self.get_leaderboard_task = bot.leaderboard_group.command(
             name="task", description="Get leaderboard reference codes"
         )(self.get_leaderboard_task)
+
+        self.get_task_template = bot.leaderboard_group.command(
+            name="template", description="Get a starter template file for a task"
+        )(self.get_task_template)
 
         # Start updating leaderboard
         self.leaderboard_update.start()
@@ -480,25 +546,6 @@ class LeaderboardCog(commands.Cog):
         if not channel:
             channel = await guild.create_text_channel(channel_name)
         return channel
-
-    async def admin_check(self, interaction: discord.Interaction) -> bool:
-        if not interaction.user.get_role(self.bot.leaderboard_admin_role_id):
-            return False
-        return True
-
-    async def creator_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.get_role(self.bot.leaderboard_creator_role_id):
-            return True
-        return False
-
-    async def is_creator_check(
-        self, interaction: discord.Interaction, leaderboard_name: str
-    ) -> bool:
-        with self.bot.leaderboard_db as db:
-            leaderboard_item = db.get_leaderboard(leaderboard_name)
-            if leaderboard_item["creator_id"] == interaction.user.id:
-                return True
-            return False
 
     async def _display_lb_submissions_helper(
         self,
@@ -697,259 +744,55 @@ class LeaderboardCog(commands.Cog):
 
         await send_discord_message(interaction, message, ephemeral=True, files=files)
 
-    @discord.app_commands.describe(
-        directory="Directory of the kernel definition. Also used as the leaderboard's name",
-        gpu="The GPU to submit to. Leave empty for interactive selection/multiple GPUs",
-    )
-    @app_commands.autocomplete(directory=leaderboard_dir_autocomplete)
-    @app_commands.choices(
-        gpu=[app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in GitHubGPU]
-        + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in ModalGPU]
-    )
-    async def leaderboard_create_local(
-        self,
-        interaction: discord.Interaction,
-        directory: str,
-        gpu: Optional[app_commands.Choice[str]],
-    ):
-        is_admin = await self.admin_check(interaction)
-        if not is_admin:
-            await send_discord_message(
-                interaction,
-                "Debug command, only for admins.",
-                ephemeral=True,
-            )
-            return
-
-        directory = Path("examples") / directory
-        assert directory.resolve().is_relative_to(Path.cwd())
-        task = make_task(directory)
-
-        # clearly mark this leaderboard as development-only
-        leaderboard_name = directory.name + "-dev"
-
-        # create-local overwrites existing leaderboard
-        with self.bot.leaderboard_db as db:
-            db.delete_leaderboard(leaderboard_name)
-
-        if await self.create_leaderboard_in_db(
-            interaction,
-            leaderboard_name,
-            datetime.now(timezone.utc) + timedelta(days=365),
-            task=task,
-            gpu=gpu.value if gpu else None,
-        ):
-            await send_discord_message(
-                interaction,
-                f"Leaderboard '{leaderboard_name}' created.",
-            )
-
-    @discord.app_commands.describe(
+    @app_commands.describe(
         leaderboard_name="Name of the leaderboard",
-        deadline="Competition deadline in the form: 'Y-m-d'",
-        task_zip="Zipfile containing the task",
+        lang="The programming language for which to download a template file.",
     )
-    async def leaderboard_create(  # noqa: C901
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        deadline: str,
-        task_zip: discord.Attachment,
+    @app_commands.autocomplete(
+        leaderboard_name=leaderboard_name_autocomplete, lang=lang_autocomplete
+    )
+    async def get_task_template(
+        self, interaction: discord.Interaction, leaderboard_name: str, lang: str
     ):
-        is_admin = await self.admin_check(interaction)
-        is_creator = await self.creator_check(interaction)
-        thread = None
-        if len(leaderboard_name) > 95:
-            await send_discord_message(
-                interaction,
-                "Leaderboard name is too long. Please keep it under 95 characters.",
-                ephemeral=True,
-            )
-            return
-
-        if not (is_admin or is_creator):
-            await send_discord_message(
-                interaction,
-                "You need the Leaderboard Creator role or the Leaderboard Admin role to use this command.",  # noqa: E501
-                ephemeral=True,
-            )
-            return
-
-        # Try parsing with time first
-        try:
-            date_value = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
-        except ValueError:
-            try:
-                date_value = datetime.strptime(deadline, "%Y-%m-%d")
-            except ValueError as ve:
-                logger.error(f"Value Error: {str(ve)}", exc_info=True)
-                await send_discord_message(
-                    interaction,
-                    "Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DD HH:MM",
-                    ephemeral=True,
-                )
-                return
-
-        if date_value < datetime.now():
-            await send_discord_message(
-                interaction,
-                f"Deadline {date_value} has already passed.",
-                ephemeral=True,
-            )
-            return
+        await interaction.response.defer(ephemeral=True)
 
         try:
-            # Read the template file
-            with tempfile.TemporaryDirectory() as tmpdir:
-                with tempfile.NamedTemporaryFile("w+b") as temp:
-                    temp.write(await task_zip.read())
-                    temp.flush()
-                    with zipfile.ZipFile(temp, "r") as zip_ref:
-                        zip_ref.extractall(tmpdir)
+            with self.bot.leaderboard_db as db:
+                leaderboard_item = db.get_leaderboard(leaderboard_name)  # type: LeaderboardItem
+                if not leaderboard_item:
+                    await send_discord_message(
+                        interaction, "Leaderboard not found.", ephemeral=True
+                    )
+                    return
 
-                contents = list(Path(tmpdir).iterdir())
-                # support both a zipped directory, and files
-                # directly in the zip
-                if len(contents) == 1:
-                    task = make_task(contents[0])
-                else:
-                    task = make_task(tmpdir)
-
-            success = await self.create_leaderboard_in_db(
-                interaction, leaderboard_name, date_value, task
-            )
-            if not success:
-                return
-
-            forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
-
-            existing_threads = [
-                thread for thread in forum_channel.threads if thread.name == leaderboard_name
-            ]
-
-            if not existing_threads:
-                thread = await forum_channel.create_thread(
-                    name=leaderboard_name,
-                    content=(
-                        f"# New Leaderboard: {leaderboard_name}\n\n"
-                        f"**Deadline**: {date_value.strftime('%Y-%m-%d %H:%M')}\n\n"
-                        "Submit your entries using `/submit github` or `/submit modal` in the submissions channel.\n\n"  # noqa: E501
-                        f"Good luck to all participants! 🚀 <@&{self.bot.leaderboard_participant_role_id}>"  # noqa: E501
-                    ),
-                    auto_archive_duration=10080,  # 7 days
+            if lang not in leaderboard_item["task"].templates:
+                langs = "\n".join(
+                    (f"* {lang} " for lang in leaderboard_item["task"].templates.keys())
                 )
-
                 await send_discord_message(
                     interaction,
-                    f"Leaderboard '{leaderboard_name}'.\n"
-                    + f"Submission deadline: {date_value}"
-                    + f"\nForum thread: {thread.thread.mention}",
+                    f"Task `{leaderboard_name}` does not have a template for `{lang}`.\n"
+                    f"Choose from:\n{langs}",
+                    ephemeral=True,
                 )
                 return
 
-        except discord.Forbidden:
+            template = add_header_to_template(lang, leaderboard_item)
+            ext = {"CUDA": "cu", "Python": "py", "Triton": "py"}
+            file_name = f"{leaderboard_name}.{ext[lang]}"
+            file = discord.File(fp=StringIO(template), filename=file_name)
+            message = f"**Starter code for {leaderboard_name}**\n"
+            await send_discord_message(interaction, message, ephemeral=True, file=file)
+        except Exception as E:
+            logger.exception(
+                "Error fetching template %s for %s", lang, leaderboard_name, exc_info=E
+            )
             await send_discord_message(
                 interaction,
-                "Error: Bot doesn't have permission to create forum threads. Leaderboard was not created.",  # noqa: E501
+                f"Could not fetch template {lang} for {leaderboard_name}",
                 ephemeral=True,
             )
-        except discord.HTTPException:
-            await send_discord_message(
-                interaction,
-                "Error creating forum thread. Leaderboard was not created.",
-                ephemeral=True,
-            )
-        except FileNotFoundError as e:
-            file = Path(e.filename).name
-            if file == "task.yml":
-                await send_discord_message(
-                    interaction,
-                    "Error in leaderboard creation. Missing `task.yml`.",
-                    ephemeral=True,
-                )
-            else:
-                await send_discord_message(
-                    interaction,
-                    f"Error in leaderboard creation. Could not find `{file}`.",
-                    ephemeral=True,
-                )
-        except zipfile.BadZipFile:
-            # Handle any other errors
-            await send_discord_message(
-                interaction,
-                "Error in leaderboard creation. Is the uploaded file a valid zip archive?",
-                ephemeral=True,
-            )
-        except Exception as e:
-            logger.error(f"Error in leaderboard creation: {e}", exc_info=e)
-            # Handle any other errors
-            await send_discord_message(
-                interaction,
-                "Error in leaderboard creation.",
-                ephemeral=True,
-            )
-        if thread:
-            await thread.thread.delete()
-
-        with self.bot.leaderboard_db as db:  # Cleanup in case lb was created
-            db.delete_leaderboard(leaderboard_name)
-
-    async def create_leaderboard_in_db(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        date_value: datetime,
-        task: LeaderboardTask,
-        gpu: Optional[str] = None,
-    ) -> bool:
-        if gpu is None:
-            # Ask the user to select GPUs
-            view = GPUSelectionView(
-                [gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU]
-            )
-
-            await send_discord_message(
-                interaction,
-                "Please select GPUs for this leaderboard.",
-                view=view,
-                ephemeral=True,
-            )
-
-            await view.wait()
-            selected_gpus = view.selected_gpus
-        else:
-            selected_gpus = [gpu]
-
-        with self.bot.leaderboard_db as db:
-            err = db.create_leaderboard(
-                {
-                    "name": leaderboard_name,
-                    "deadline": date_value,
-                    "task": task,
-                    "gpu_types": selected_gpus,
-                    "creator_id": interaction.user.id,
-                }
-            )
-
-            if err:
-                if "duplicate key" in err:
-                    await send_discord_message(
-                        interaction,
-                        "Error: Tried to create a leaderboard "
-                        f'"{leaderboard_name}" that already exists.',
-                        ephemeral=True,
-                    )
-                else:
-                    # Handle any other errors
-                    logger.error(f"Error in leaderboard creation: {err}")
-                    await send_discord_message(
-                        interaction,
-                        "Error in leaderboard creation.",
-                        ephemeral=True,
-                    )
-                return False
-
-            return True
+            return
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
@@ -968,40 +811,3 @@ class LeaderboardCog(commands.Cog):
         leaderboard_name: str,
     ):
         await self._get_submissions_helper(interaction, leaderboard_name, str(interaction.user.id))
-
-    @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
-    @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
-    async def delete_leaderboard(self, interaction: discord.Interaction, leaderboard_name: str):
-        is_admin = await self.admin_check(interaction)
-        is_creator = await self.creator_check(interaction)
-        is_creator_of_leaderboard = await self.is_creator_check(interaction, leaderboard_name)
-
-        if not (is_admin):
-            if not is_creator:
-                await send_discord_message(
-                    interaction,
-                    "You need the Leaderboard Creator role or the Leaderboard Admin role to use this command.",  # noqa: E501
-                    ephemeral=True,
-                )
-                return
-            if not is_creator_of_leaderboard:
-                await send_discord_message(
-                    interaction,
-                    "You need to be the creator of the leaderboard to use this command.",
-                    ephemeral=True,
-                )
-                return
-
-        modal = DeleteConfirmationModal("leaderboard", leaderboard_name, self.bot.leaderboard_db)
-
-        forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
-        threads = [thread for thread in forum_channel.threads if thread.name == leaderboard_name]
-
-        if threads:
-            thread = threads[0]
-            new_name = (
-                f"{leaderboard_name} - archived at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-            await thread.edit(name=new_name, archived=True)
-
-        await interaction.response.send_modal(modal)

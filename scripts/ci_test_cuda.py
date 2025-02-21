@@ -15,8 +15,8 @@ from run_eval import compile_cuda_script, run_cuda_script
 
 ref = Path("examples/identity_cuda/reference.cuh").read_text()
 task_h = Path("examples/identity_cuda/task.h").read_text()
-utils_h = Path("examples/identity_cuda/utils.h").read_text()
-eval_cu = Path("examples/identity_cuda/eval.cu").read_text()
+utils_h = Path("examples/utils.h").read_text()
+eval_cu = Path("examples/eval.cu").read_text()
 
 header_files = {"reference.cuh": ref, "task.h": task_h, "utils.h": utils_h}
 
@@ -25,9 +25,14 @@ def run_cuda_helper(sources: dict, headers: dict = None, arch=None, **kwargs):
     if headers is None:
         headers = header_files
 
-    comp, runs = run_cuda_script(sources, headers, arch=arch, mode=SubmissionMode.TEST.value,
-                                 tests="size: 256; seed: 42\n",
-                                 **kwargs)
+    comp, runs = run_cuda_script(
+        sources,
+        headers,
+        arch=arch,
+        mode=SubmissionMode.TEST.value,
+        tests="size: 256; seed: 42\n",
+        **kwargs,
+    )
     run = runs.get("test", None)
     return comp, run
 
@@ -48,7 +53,7 @@ def test_does_not_compile():
     assert 'submission.cu(3): error: identifier "input_tt" is undefined' in comp.stderr
     assert '1 error detected in the compilation of "submission.cu".' in comp.stderr
     # "/usr/local/cuda/bin/nvcc"
-    #assert comp.command.startswith("/usr/local/cuda/bin/nvcc")
+    # assert comp.command.startswith("/usr/local/cuda/bin/nvcc")
     assert "nvcc: NVIDIA (R) Cuda compiler driver" in comp.nvcc_version
 
 
@@ -76,7 +81,7 @@ output_t custom_kernel(input_t data)
     assert run.success is False
     assert run.command.startswith("./eval.out test")
     assert run.stdout == ""
-    assert "cudaDeviceSynchronize() at eval.cu(316) in `run_testing`" in run.stderr
+    assert "cudaDeviceSynchronize() at eval.cu(342) in `run_testing`" in run.stderr
     assert "an illegal memory access was encountered" in run.stderr
     assert run.exit_code == ExitCode.CUDA_FAIL
     # we get test-count and test.0.spec, but no other test data
@@ -110,7 +115,7 @@ def test_cuda_validation_fail():
     assert run.result["test.0.spec"] == "size: 256; seed: 42"
     assert run.result["test.0.spec"] == "size: 256; seed: 42"
     assert run.result["test.0.status"] == "fail"
-    assert run.result["test.0.error"] == "error at 0: 0 0.374540"
+    assert run.result["test.0.error"] == "error at 0: 0.37454 0.000000"
     assert run.result["check"] == "fail"
 
 
@@ -155,9 +160,7 @@ output_t custom_kernel(input_t data)
 }
             """
     # doesn't compile without define
-    comp, run = run_cuda_helper(
-        {"eval.cu": eval_cu, "submission.cu": sub}
-    )
+    comp, run = run_cuda_helper({"eval.cu": eval_cu, "submission.cu": sub})
     assert comp.success is False
 
     # compiles with define

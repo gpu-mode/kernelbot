@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Dict, Union
 
-import leaderboard_eval
 from consts import Language
 
 
@@ -44,6 +43,7 @@ class LeaderboardTask:
         tests: List of test case specifications. Each test case is specified
             as a dict mapping function argument names to their values.
         benchmarks: List of benchmark specifications (same format as tests)
+        templates: Template files for participants to download
 
     """
 
@@ -54,6 +54,7 @@ class LeaderboardTask:
     libraries: list[str] = dataclasses.field(default_factory=list)
     tests: list[TestCaseType] = dataclasses.field(default_factory=list)
     benchmarks: list[TestCaseType] = dataclasses.field(default_factory=list)
+    templates: dict[str, str] = dataclasses.field(default_factory=dict)
 
     @staticmethod
     def from_dict(data: dict):
@@ -106,29 +107,15 @@ def make_task(yaml_file: str | Path) -> LeaderboardTask:
             file_dict[name] = (root / source).read_text()
 
     raw["files"] = file_dict
+
+    # load template files
+    templates = {}
+    for lang, source in raw.get("templates", {}).items():
+        assert lang in ["CUDA", "Python", "Triton"]
+        templates[lang] = (root / source).read_text()
+    raw["templates"] = templates
+
     return LeaderboardTask.from_dict(raw)
-
-
-# TODO remove this as soon as possible
-def build_from_legacy_reference(ref: str):
-    if "#include " in ref:
-        lang = Language.CUDA
-        config = CudaTaskData(sources=["eval.cu"])
-        files = {
-            "eval.cu": leaderboard_eval.cu_eval,
-            "reference.cuh": ref,
-            "submission.cuh": "@SUBMISSION@",
-        }
-    elif "import " in ref:
-        lang = Language.Python
-        config = PythonTaskData(main="eval.py")
-        files = {
-            "eval.py": leaderboard_eval.py_eval,
-            "reference.py": ref,
-            "submission.py": "@SUBMISSION@",
-        }
-
-    return LeaderboardTask(lang=lang, files=files, config=config, libraries=[])
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import List, Optional
 
@@ -13,7 +12,7 @@ from env import (
     POSTGRES_USER,
 )
 from psycopg2 import Error
-from task import LeaderboardTask, build_from_legacy_reference
+from task import LeaderboardTask
 from utils import LeaderboardItem, LRUCache, SubmissionItem
 
 leaderboard_name_cache = LRUCache(max_size=512)
@@ -118,6 +117,20 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             return f"Error during leaderboard creation: {e}"
         return None
+
+    def update_leaderboard(self, name, deadline, task):
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard
+                SET deadline = %s, task = %s
+                WHERE name = %s;
+                """,
+                (deadline, task.to_str(), name),
+            )
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            return f"Error during leaderboard update: {e}"
 
     def delete_leaderboard(self, leaderboard_name: str) -> Optional[str]:
         try:
@@ -231,13 +244,7 @@ class LeaderboardDB:
         res = self.cursor.fetchone()
 
         if res:
-            # TODO: This is just a clutch to keep compatibility with old leaderboards
-            try:
-                task = LeaderboardTask.from_dict(res[3])
-            except json.JSONDecodeError:
-                logging.error("json decoding error in LB %s. Legacy task?", leaderboard_name)
-                task = build_from_legacy_reference(res[3])
-
+            task = LeaderboardTask.from_dict(res[3])
             return LeaderboardItem(
                 id=res[0],
                 name=res[1],

@@ -1,7 +1,11 @@
 import argparse
+import asyncio
 from datetime import datetime
 
 import discord
+import uvicorn
+from api.main import app, init_api
+from cogs.admin_cog import AdminCog
 from cogs.github_cog import GitHubCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
@@ -39,11 +43,14 @@ class ClusterBot(commands.Bot):
         self.run_group = app_commands.Group(
             name="run", description="Run jobs on different platforms"
         )
-        self.tree.add_command(self.run_group)
 
         self.leaderboard_group = app_commands.Group(
             name="leaderboard", description="Leaderboard commands"
         )
+        self.admin_group = app_commands.Group(name="admin", description="Admin commands")
+
+        self.tree.add_command(self.run_group)
+        self.tree.add_command(self.admin_group)
         self.tree.add_command(self.leaderboard_group)
 
         self.leaderboard_db = LeaderboardDB(
@@ -54,6 +61,15 @@ class ClusterBot(commands.Bot):
             POSTGRES_PORT,
         )
 
+        try:
+            if not self.leaderboard_db.connect():
+                logger.error("Could not connect to database, shutting down")
+                exit(1)
+        finally:
+            self.leaderboard_db.disconnect()
+
+        self.accepts_jobs = True
+
     async def setup_hook(self):
         logger.info(f"Syncing commands for staging guild {DISCORD_CLUSTER_STAGING_ID}")
         try:
@@ -63,6 +79,7 @@ class ClusterBot(commands.Bot):
             await self.add_cog(BotManagerCog(self))
             await self.add_cog(LeaderboardCog(self))
             await self.add_cog(VerifyRunCog(self))
+            await self.add_cog(AdminCog(self))
 
             guild_id = (
                 DISCORD_CLUSTER_STAGING_ID
@@ -233,6 +250,30 @@ class ClusterBot(commands.Bot):
             else:
                 await channel.send(chunk)
 
+    async def start_bot(self, token: str):
+        try:
+            await self.start(token)
+        except Exception as e:
+            logger.error(f"Failed to start bot: {e}", exc_info=e)
+            raise e
+
+
+async def start_bot_and_api(debug_mode: bool):
+    token = DISCORD_DEBUG_TOKEN if debug_mode else DISCORD_TOKEN
+
+    if debug_mode and not token:
+        raise ValueError("DISCORD_DEBUG_TOKEN not found")
+
+    bot_instance = ClusterBot(debug_mode=debug_mode)
+
+    init_api(bot_instance)
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info", limit_concurrency=10)
+    server = uvicorn.Server(config)
+
+    # we need this as discord and fastapi both run on the same event loop
+    await asyncio.gather(bot_instance.start_bot(token), server.serve())
+
 
 def main():
     init_environment()
@@ -241,14 +282,9 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Run in debug/staging mode")
     args = parser.parse_args()
 
-    logger.info("Starting bot...")
-    token = DISCORD_DEBUG_TOKEN if args.debug else DISCORD_TOKEN
+    logger.info("Starting bot and API server...")
 
-    if args.debug and not token:
-        raise ValueError("DISCORD_DEBUG_TOKEN not found")
-
-    client = ClusterBot(debug_mode=args.debug)
-    client.run(token)
+    asyncio.run(start_bot_and_api(args.debug))
 
 
 if __name__ == "__main__":
