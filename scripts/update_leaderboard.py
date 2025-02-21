@@ -3,7 +3,26 @@ import os
 from datetime import datetime
 
 import psycopg2
+import requests
 from jinja2 import Template
+
+TOKEN = os.environ.get("DISCORD_DUMMY_TOKEN")
+
+
+def get_name_from_id(user_id: str) -> str:
+    """
+    Get Discord global name from USER_ID
+    """
+    url = f"https://discord.com/api/v10/users/{user_id}"
+    headers = {"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"}
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        user_data = response.json()
+        return user_data.get("global_name", user_id)
+    else:
+        return f"User_{user_id}"
+
 
 print("Starting leaderboard update script...")
 
@@ -44,10 +63,11 @@ TEMPLATE = """
 """
 
 # Database connection - use environment variable
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set")
 print("Connecting to database...")
+
 
 def fetch_leaderboard_data():
     print("Fetching data from database...")
@@ -103,31 +123,31 @@ def fetch_leaderboard_data():
                         gpu_submissions = []
                         for sub in submissions_json:
                             if sub is not None:  # Skip NULL entries from array_agg
-                                gpu_submissions.append({
-                                    'user': f"User_{sub['user_id']}",
-                                    'time': f"{sub['time']:.9f}",
-                                    'is_fastest': sub['rank'] == 1
-                                })
+                                global_name = get_name_from_id(sub["user_id"])
+                                gpu_submissions.append(
+                                    {
+                                        "user": f"{global_name}",
+                                        "time": f"{sub['time']:.9f}",
+                                        "is_fastest": sub["rank"] == 1,
+                                    }
+                                )
 
                         # Sort submissions by time
-                        gpu_submissions.sort(key=lambda x: float(x['time']))
+                        gpu_submissions.sort(key=lambda x: float(x["time"]))
 
                         gpu_type_data[gpu_type][name] = {
-                            'name': name,
-                            'deadline': deadline.strftime('%Y-%m-%d %H:%M'),
-                            'submissions': gpu_submissions
+                            "name": name,
+                            "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
+                            "submissions": gpu_submissions,
                         }
 
                 # Convert to final format
                 formatted_data = {
-                    'gpu_types': [
-                        {
-                            'name': gpu_type,
-                            'problems': list(problems.values())
-                        }
+                    "gpu_types": [
+                        {"name": gpu_type, "problems": list(problems.values())}
                         for gpu_type, problems in gpu_type_data.items()
                     ],
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
                 }
 
                 print("Data fetched successfully")
@@ -136,13 +156,14 @@ def fetch_leaderboard_data():
         print(f"Error fetching data: {str(e)}")
         raise
 
+
 def write_html_file(data):
     try:
         # Define the paths
         paths = [
-            'static/leaderboard',
-            'docs/static/leaderboard',
-            'docs/build/leaderboard'  # Add build directory as well
+            "static/leaderboard",
+            "docs/static/leaderboard",
+            "docs/build/leaderboard",  # Add build directory as well
         ]
 
         # Create directories if they don't exist
@@ -155,10 +176,10 @@ def write_html_file(data):
         html_content = template.render(**data)
 
         # Write to all locations
-        filename = 'table.html'
+        filename = "table.html"
         for path in paths:
             full_path = os.path.join(path, filename)
-            with open(full_path, 'w') as f:
+            with open(full_path, "w") as f:
                 f.write(html_content)
             print(f"Written to {full_path}")
 
@@ -167,15 +188,18 @@ def write_html_file(data):
         print(f"Error writing HTML file: {str(e)}")
         return False
 
+
 def main():
     try:
         # Generate and save leaderboard
         data = fetch_leaderboard_data()
         if write_html_file(data):
             # Print contents of directories
-            for static_dir in ['static/leaderboard',
-                            'docs/static/leaderboard',
-                            'docs/build/leaderboard']:
+            for static_dir in [
+                "static/leaderboard",
+                "docs/static/leaderboard",
+                "docs/build/leaderboard",
+            ]:
                 print(f"\nContents of {static_dir}:")
                 for file in os.listdir(static_dir):
                     print(f"- {file}")
@@ -183,6 +207,7 @@ def main():
     except Exception as e:
         print(f"Error updating leaderboard: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     main()
