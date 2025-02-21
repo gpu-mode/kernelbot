@@ -2,13 +2,10 @@
 # Adapted from https://github.com/All-Hands-AI/OpenHands/blob/main/.github/workflows/deploy-docs.yml
 name: Deploy Docs to GitHub Pages
 
-# * Always run on "main"
-# * Run on PRs that target the "main" branch and have changes in the "docs" folder or this workflow
 on:
-  workflow_run:
-    workflows: ["Update Leaderboard"]
-    types:
-      - completed
+  schedule:
+    - cron: '0 0 * * *'  # Runs at 00:00 UTC daily
+  push:
     branches:
       - main
   pull_request:
@@ -17,6 +14,7 @@ on:
       - '.github/workflows/deploy-docs.yml'
     branches:
       - main
+  workflow_dispatch:
 
 # If triggered by a PR, it will be in the same group. However, each commit on main will be in its own unique group
 concurrency:
@@ -24,56 +22,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build the documentation website
   build:
-    name: Build Docusaurus
+    name: Build and Deploy Docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      # Update Leaderboard
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install psycopg2-binary jinja2
+          
+      - name: Update leaderboard
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/update_leaderboard.py
+
+      # Build and Deploy Docs
       - name: Set up node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
           cache-dependency-path: docs/yarn.lock
+
       - name: Install dependencies
         working-directory: docs
         run: yarn install --frozen-lockfile --non-interactive
-      - name: Copy leaderboard table
-        run: |
-          mkdir -p docs/static/leaderboard
-          cp static/leaderboard/table.html docs/static/leaderboard/
-      - name: yarn build
+
+      - name: Build docs
         working-directory: docs
         run: yarn build
+
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build
 
-  # Deploy the documentation website
-  deploy:
-    if: github.ref == 'refs/heads/main'
-    name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
-    # This job only runs on "main" so only run one of these jobs at a time
-    # otherwise it will fail if one is already running
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-    needs: build
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
-    permissions:
-      pages: write # to deploy to Pages
-      id-token: write # to verify the deployment originates from an appropriate source
-    # Deploy to the github-pages environment
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
