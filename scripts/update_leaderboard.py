@@ -1,9 +1,9 @@
-# scripts/update_leaderboard.py
+# ruff: noqa: E501
 import os
-import psycopg2
 from datetime import datetime
+
+import psycopg2
 from jinja2 import Template
-from urllib.parse import urlparse
 
 print("Starting leaderboard update script...")
 
@@ -27,8 +27,8 @@ TEMPLATE = """
                 <div class="problem-deadline">Deadline: {{ problem.deadline }}</div>
                 <div class="submissions-list">
                     {% for submission in problem.submissions %}
-                    <div class="submission{% if submission.is_fastest %} fastest{% endif %}" 
-                         data-user="{{ submission.user }}" 
+                    <div class="submission{% if submission.is_fastest %} fastest{% endif %}"
+                         data-user="{{ submission.user }}"
                          data-time="{{ submission.time }}">
                         {{ submission.user }} - {{ submission.time }}
                     </div>
@@ -47,7 +47,7 @@ TEMPLATE = """
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set")
-print(f"Connecting to database...")
+print("Connecting to database...")
 
 def fetch_leaderboard_data():
     print("Fetching data from database...")
@@ -57,7 +57,7 @@ def fetch_leaderboard_data():
                 # Get active leaderboards with their GPU types and submission counts
                 cur.execute("""
                     WITH ranked_submissions AS (
-                        SELECT 
+                        SELECT
                             l.id,
                             l.name,
                             l.deadline,
@@ -70,13 +70,13 @@ def fetch_leaderboard_data():
                         LEFT JOIN leaderboard.submission s ON s.leaderboard_id = l.id AND s.gpu_type = gt.gpu_type
                         WHERE l.deadline > NOW()
                     )
-                    SELECT 
+                    SELECT
                         id,
                         name,
                         deadline,
                         gpu_type,
                         array_agg(
-                            CASE WHEN user_id IS NOT NULL THEN 
+                            CASE WHEN user_id IS NOT NULL THEN
                                 json_build_object(
                                     'user_id', user_id,
                                     'time', time,
@@ -89,17 +89,16 @@ def fetch_leaderboard_data():
                     HAVING COUNT(user_id) > 0
                     ORDER BY deadline ASC;
                 """)
-                
+
                 leaderboards = cur.fetchall()
                 print(f"Found {len(leaderboards)} active leaderboards with submissions")
-                
-                formatted_boards = []
+
                 gpu_type_data = {}
-                
-                for lb_id, name, deadline, gpu_type, submissions_json in leaderboards:
+
+                for _lb_id, name, deadline, gpu_type, submissions_json in leaderboards:
                     if gpu_type not in gpu_type_data:
                         gpu_type_data[gpu_type] = {}
-                    
+
                     if submissions_json:
                         gpu_submissions = []
                         for sub in submissions_json:
@@ -109,16 +108,16 @@ def fetch_leaderboard_data():
                                     'time': f"{sub['time']:.9f}",
                                     'is_fastest': sub['rank'] == 1
                                 })
-                        
+
                         # Sort submissions by time
                         gpu_submissions.sort(key=lambda x: float(x['time']))
-                        
+
                         gpu_type_data[gpu_type][name] = {
                             'name': name,
                             'deadline': deadline.strftime('%Y-%m-%d %H:%M'),
                             'submissions': gpu_submissions
                         }
-                
+
                 # Convert to final format
                 formatted_data = {
                     'gpu_types': [
@@ -130,7 +129,7 @@ def fetch_leaderboard_data():
                     ],
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
                 }
-                
+
                 print("Data fetched successfully")
                 return formatted_data
     except Exception as e:
@@ -145,16 +144,16 @@ def write_html_file(data):
             'docs/static/leaderboard',
             'docs/build/leaderboard'  # Add build directory as well
         ]
-        
+
         # Create directories if they don't exist
         for path in paths:
             os.makedirs(path, exist_ok=True)
             print(f"Ensured directory exists: {path}")
-        
+
         # Render the template
         template = Template(TEMPLATE)
         html_content = template.render(**data)
-        
+
         # Write to all locations
         filename = 'table.html'
         for path in paths:
@@ -162,7 +161,7 @@ def write_html_file(data):
             with open(full_path, 'w') as f:
                 f.write(html_content)
             print(f"Written to {full_path}")
-        
+
         return True
     except Exception as e:
         print(f"Error writing HTML file: {str(e)}")
@@ -174,11 +173,13 @@ def main():
         data = fetch_leaderboard_data()
         if write_html_file(data):
             # Print contents of directories
-            for static_dir in ['static/leaderboard', 'docs/static/leaderboard', 'docs/build/leaderboard']:
+            for static_dir in ['static/leaderboard',
+                            'docs/static/leaderboard',
+                            'docs/build/leaderboard']:
                 print(f"\nContents of {static_dir}:")
                 for file in os.listdir(static_dir):
                     print(f"- {file}")
-            
+
     except Exception as e:
         print(f"Error updating leaderboard: {str(e)}")
         raise
