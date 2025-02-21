@@ -5,7 +5,10 @@ name: Deploy Docs to GitHub Pages
 # * Always run on "main"
 # * Run on PRs that target the "main" branch and have changes in the "docs" folder or this workflow
 on:
-  push:
+  workflow_run:
+    workflows: ["Update Leaderboard"]
+    types:
+      - completed
     branches:
       - main
   pull_request:
@@ -39,6 +42,10 @@ jobs:
       - name: Install dependencies
         working-directory: docs
         run: yarn install --frozen-lockfile --non-interactive
+      - name: Copy leaderboard table
+        run: |
+          mkdir -p docs/static/leaderboard
+          cp static/leaderboard/table.html docs/static/leaderboard/
       - name: yarn build
         working-directory: docs
         run: yarn build
