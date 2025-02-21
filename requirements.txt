@@ -9,3 +9,4 @@ psycopg2-binary
 yoyo-migrations
 ruff
 pre-commit
+jinja2
