@@ -46,6 +46,7 @@ jobs:
       - name: Update leaderboard
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DISCORD_DUMMY_TOKEN: ${{ secrets.DISCORD_DUMMY_TOKEN }}
         run: python scripts/update_leaderboard.py
 
       # Build Docs

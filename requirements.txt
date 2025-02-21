@@ -16,3 +16,4 @@ uvicorn
 
 # docs
 jinja2
+requests
