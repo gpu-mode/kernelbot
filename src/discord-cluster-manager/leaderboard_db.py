@@ -13,6 +13,7 @@ from env import (
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_USER,
+    DISABLE_SSL,
 )
 from run_eval import CompileResult, RunResult
 from task import LeaderboardTask
@@ -63,7 +64,7 @@ class LeaderboardDB:
         """Establish connection to the database"""
         try:
             self.connection = (
-                psycopg2.connect(DATABASE_URL, sslmode="require")
+                psycopg2.connect(DATABASE_URL, sslmode="require" if not DISABLE_SSL else "disable")
                 if DATABASE_URL
                 else psycopg2.connect(**self.connection_params)
             )
