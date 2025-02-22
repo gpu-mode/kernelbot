@@ -8,12 +8,12 @@ import discord
 import psycopg2
 from env import (
     DATABASE_URL,
+    DISABLE_SSL,
     POSTGRES_DATABASE,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
     POSTGRES_PORT,
     POSTGRES_USER,
-    DISABLE_SSL,
 )
 from run_eval import CompileResult, RunResult
 from task import LeaderboardTask
