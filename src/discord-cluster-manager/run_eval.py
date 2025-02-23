@@ -382,11 +382,13 @@ def run_pytorch_script(  # noqa: C901
         # Write submission files to directory
         _create_files(sources)
 
+        run = run_single_evaluation(["python", main], **kwargs)
+
         return EvalResult(
             start=start,
             end=datetime.datetime.now(),
             compilation=None,
-            run=run_single_evaluation(["python", main], **kwargs),
+            run=run,
         )
     finally:
         for f in sources.keys():
