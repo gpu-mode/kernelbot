@@ -1,3 +1,4 @@
+import copy
 import datetime
 import functools
 import logging
@@ -6,7 +7,8 @@ from typing import Any, List, Optional, TypedDict
 
 import discord
 from consts import Language, SubmissionMode
-from task import LeaderboardTask
+from env import RANKED_SECRET_SEED
+from task import LeaderboardTask, TestCaseType
 
 
 def setup_logging(name: Optional[str] = None):
@@ -223,6 +225,18 @@ class SubmissionItem(TypedDict):
     runs: List[RunItem]
 
 
+def patch_benchmarks(benchmarks: list[TestCaseType], mode: SubmissionMode):
+    if mode != SubmissionMode.PRIVATE:
+        return benchmarks
+    else:
+        def reseed(test: TestCaseType):
+            copied = copy.copy(test)
+            if "seed" in copied:
+                copied["seed"] += RANKED_SECRET_SEED
+            return copied
+        return [reseed(test) for test in benchmarks]
+
+
 def build_task_config(
     task: LeaderboardTask = None,
     submission_content: str = None,
@@ -264,7 +278,7 @@ def build_task_config(
                 "arch": arch,
                 "main": task.config.main,
                 "sources": all_files,
-                "benchmarks": task.benchmarks,
+                "benchmarks": patch_benchmarks(task.benchmarks, mode),
                 "tests": task.tests,
                 "mode": mode.value,
                 "test_timeout": task.test_timeout,
@@ -286,7 +300,7 @@ def build_task_config(
                 "sources": sources,
                 "headers": headers,
                 "tests": task.tests,
-                "benchmarks": task.benchmarks,
+                "benchmarks": patch_benchmarks(task.benchmarks, mode),
                 "include_dirs": task.config.include_dirs,
                 "mode": mode.value,
                 "test_timeout": task.test_timeout,
