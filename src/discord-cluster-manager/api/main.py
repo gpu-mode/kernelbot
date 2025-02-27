@@ -150,5 +150,6 @@ async def get_gpus(leaderboard_name: str) -> list[str]:
 
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
 async def get_submissions(leaderboard_name: str, gpu_name: str) -> list[dict]:
+    await simple_rate_limit()
     with bot_instance.leaderboard_db as db:
         return db.get_leaderboard_submissions(leaderboard_name, gpu_name)
