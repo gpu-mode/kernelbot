@@ -23,6 +23,98 @@ class BotManagerCog(commands.Cog):
         """Simple ping command to check if the bot is responsive"""
         await send_discord_message(interaction, "pong")
 
+    @app_commands.command(name="get-names")
+    async def get_id_to_name_mapping(self, interaction: discord.Interaction):
+        """Get a mapping of user IDs to their names"""
+        await interaction.response.defer()
+        try:
+            with self.bot.leaderboard_db as db:
+                db.cursor.execute("""
+                    SELECT DISTINCT user_id
+                    FROM leaderboard.submission
+                """)
+                user_ids = [row[0] for row in db.cursor.fetchall()]
+
+            user_mapping = {}
+            for user_id in user_ids:
+                try:
+                    discord_id = int(user_id)
+                    user = await self.bot.fetch_user(discord_id)
+                    user_mapping[user_id] = user.global_name or user.name
+                except (ValueError, discord.NotFound, discord.HTTPException) as e:
+                    logger.error(f"Error fetching user {user_id}: {str(e)}")
+                    user_mapping[user_id] = "Unknown User"
+            import json
+            import tempfile
+
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w")
+            json.dump(user_mapping, temp_file, indent=2)
+            temp_file.close()
+
+            await interaction.followup.send(
+                content="Here's the mapping of user IDs to names:",
+                file=discord.File(temp_file.name, filename="user_mapping.json"),
+            )
+
+            import os
+
+            os.unlink(temp_file.name)
+
+        except Exception as e:
+            error_message = f"Error generating user mapping: {str(e)}"
+            logger.error(error_message, exc_info=True)
+            await send_discord_message(interaction, error_message)
+
+    @app_commands.command(name="update-db-with-names")
+    @app_commands.describe(attachment="The JSON file containing user ID to name mapping")
+    async def update_db_with_names(
+        self, interaction: discord.Interaction, attachment: discord.Attachment
+    ):
+        """Update the database with user names from a JSON file"""
+        await interaction.response.defer()
+
+        try:
+            if not attachment.filename.endswith(".json"):
+                await send_discord_message(
+                    interaction, "Please attach a JSON file with .json extension."
+                )
+                return
+
+            json_content = await attachment.read()
+            import json
+
+            user_mapping = json.loads(json_content)
+
+            updated_count = 0
+            with self.bot.leaderboard_db as db:
+                for user_id, user_name in user_mapping.items():
+                    try:
+                        db.cursor.execute(
+                            """
+                            UPDATE leaderboard.submission
+                            SET user_name = %s
+                            WHERE user_id = %s
+                        """,
+                            (user_name, user_id),
+                        )
+                        updated_count += db.cursor.rowcount
+                    except Exception as e:
+                        logger.error(f"Error updating user {user_id}: {str(e)}")
+
+                db.connection.commit()
+
+            await send_discord_message(
+                interaction,
+                f"Successfully updated {updated_count} submission records with user names.",
+            )
+
+        except json.JSONDecodeError:
+            await send_discord_message(interaction, "Invalid JSON format in the attached file.")
+        except Exception as e:
+            error_message = f"Error updating database with user names: {str(e)}"
+            logger.error(error_message, exc_info=True)
+            await send_discord_message(interaction, error_message)
+
     @app_commands.command(name="verifydb")
     async def verify_db(self, interaction: discord.Interaction):
         """Command to verify database connectivity"""
