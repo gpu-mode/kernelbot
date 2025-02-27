@@ -429,6 +429,7 @@ class LeaderboardDB:
                     s.submission_time,
                     r.score,
                     r.runner,
+                    s.id,
                     RANK() OVER (ORDER BY r.score ASC) as rank
                 FROM leaderboard.runs r
                 JOIN leaderboard.submission s ON r.submission_id = s.id
@@ -451,7 +452,8 @@ class LeaderboardDB:
                         s.user_id,
                         s.submission_time,
                         r.score,
-                        r.runner
+                        r.runner,
+                        s.id
                     FROM leaderboard.runs r
                     JOIN leaderboard.submission s ON r.submission_id = s.id
                     JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
@@ -465,6 +467,7 @@ class LeaderboardDB:
                     submission_time,
                     score,
                     runner,
+                    id,
                     RANK() OVER (ORDER BY score ASC) as rank
                 FROM best_submissions
                 ORDER BY score ASC
@@ -481,7 +484,8 @@ class LeaderboardDB:
                 submission_time=submission[2],
                 submission_score=submission[3],
                 gpu_type=gpu_name,
-                rank=submission[5],
+                rank=submission[6],
+                submission_id=submission[5],
             )
             for submission in self.cursor.fetchall()
         ]
