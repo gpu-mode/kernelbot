@@ -128,8 +128,8 @@ async def get_leaderboards() -> list[LeaderboardItem]:
         return db.get_leaderboards()
 
 
-@app.get("/{leaderboard_name}/{runner_name}/gpus")
-async def get_gpus(leaderboard_name: str, runner_name: str) -> list[str]:
+@app.get("/gpus/{leaderboard_name}")
+async def get_gpus(leaderboard_name: str) -> list[str]:
     """An endpoint that returns all GPU types that are available for a given leaderboard and runner.
 
     Args:
