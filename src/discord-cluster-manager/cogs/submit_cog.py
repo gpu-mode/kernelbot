@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from bot import ClusterBot
 
 import discord
+from better_profanity import profanity
 from consts import SubmissionMode
 from discord import app_commands
 from discord.ext import commands
@@ -12,7 +13,6 @@ from report import generate_report
 from run_eval import FullResult
 from task import LeaderboardTask
 from utils import build_task_config, send_discord_message, setup_logging, with_error_handling
-from better_profanity import profanity
 
 logger = setup_logging()
 
@@ -190,7 +190,7 @@ class SubmitCog(commands.Cog):
                 ephemeral=True,
             )
             return None
-        
+
         if profanity.contains_profanity(script.filename):
             await send_discord_message(
                 interaction,
@@ -198,7 +198,7 @@ class SubmitCog(commands.Cog):
                 ephemeral=True,
             )
             return None
-        
+
         #  load and decode
         try:
             return (await script.read()).decode("utf-8")
