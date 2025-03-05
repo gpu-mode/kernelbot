@@ -279,11 +279,7 @@ def run_single_evaluation(
             tests_file.flush()
             return run_program(call + [mode, tests_file.name], seed=seed, timeout=Timeout.TEST)
     elif mode in ["benchmark", "profile", "leaderboard"]:
-        timeout = {
-            "benchmark": Timeout.BENCHMARK,
-            "profile": Timeout.BENCHMARK,
-            "leaderboard": Timeout.LEADERBOARD,
-        }[mode]
+        timeout = Timeout.LEADERBOARD if mode == "leaderboard" else Timeout.BENCHMARK
         with tempfile.NamedTemporaryFile("w") as bench_file:
             bench_file.write(benchmarks)
             bench_file.flush()
