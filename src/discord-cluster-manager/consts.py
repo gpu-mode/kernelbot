@@ -2,6 +2,10 @@ import dataclasses
 from enum import Enum, IntEnum
 from typing import Type
 
+class Timeout(IntEnum):
+    TEST = 60
+    BENCHMARK = 120
+    LEADERBOARD = 180
 
 class GPUType(Enum):
     NVIDIA = "nvidia_workflow.yml"
