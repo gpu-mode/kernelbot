@@ -181,7 +181,8 @@ def compile_cuda_script(  # # noqa: C901
 
     print_("[Compiling]")
     try:
-        compile_process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=Timeout.COMPILE)
+        compile_process = subprocess.run(command, capture_output=True,
+                                          text=True, check=True, timeout=Timeout.COMPILE)
     except subprocess.CalledProcessError as e:
         return CompileResult(
             nvcc_found=True,
