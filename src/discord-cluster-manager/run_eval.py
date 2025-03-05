@@ -204,7 +204,7 @@ def compile_cuda_script(  # # noqa: C901
     )
 
 
-def run_program(args: list[str], seed: int, timeout: int = Timeout.TEST) -> RunResult:
+def run_program(args: list[str], seed: int, timeout: int) -> RunResult:
     print("[Running]")
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
@@ -267,6 +267,9 @@ def run_single_evaluation(
     mode: str,
     tests: Optional[str] = None,
     benchmarks: Optional[str] = None,
+    test_timeout: int = Timeout.TEST,
+    benchmark_timeout: int = Timeout.BENCHMARK,
+    ranked_timeout: int = Timeout.RANKED,
     seed: Optional[int] = 42,
 ) -> RunResult:
     """
@@ -277,9 +280,9 @@ def run_single_evaluation(
         with tempfile.NamedTemporaryFile("w") as tests_file:
             tests_file.write(tests)
             tests_file.flush()
-            return run_program(call + [mode, tests_file.name], seed=seed, timeout=Timeout.TEST)
+            return run_program(call + [mode, tests_file.name], seed=seed, timeout=test_timeout)
     elif mode in ["benchmark", "profile", "leaderboard"]:
-        timeout = Timeout.LEADERBOARD if mode == "leaderboard" else Timeout.BENCHMARK
+        timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
         with tempfile.NamedTemporaryFile("w") as bench_file:
             bench_file.write(benchmarks)
             bench_file.flush()

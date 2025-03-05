@@ -6,7 +6,8 @@ from typing import Type
 class Timeout(IntEnum):
     TEST = 60
     BENCHMARK = 120
-    LEADERBOARD = 180
+    RANKED = 180
+    COMPILE = 120
 
 class GPUType(Enum):
     NVIDIA = "nvidia_workflow.yml"
