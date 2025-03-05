@@ -8,6 +8,8 @@ class Timeout(IntEnum):
     BENCHMARK = 120
     RANKED = 180
     COMPILE = 120
+    SCRIPT = 120
+
 
 class GPUType(Enum):
     NVIDIA = "nvidia_workflow.yml"

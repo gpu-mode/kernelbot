@@ -181,7 +181,7 @@ def compile_cuda_script(  # # noqa: C901
 
     print_("[Compiling]")
     try:
-        compile_process = subprocess.run(command, capture_output=True, text=True, check=True)
+        compile_process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=Timeout.COMPILE)
     except subprocess.CalledProcessError as e:
         return CompileResult(
             nvcc_found=True,
@@ -289,7 +289,7 @@ def run_single_evaluation(
             return run_program(call + [mode, bench_file.name], seed=seed, timeout=timeout)
     else:
         assert mode == "script"
-        return run_program(call, seed=seed)
+        return run_program(call, seed=seed, timeout=Timeout.SCRIPT)
 
 
 def run_cuda_script(  # # noqa: C901
@@ -381,7 +381,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"], seed=1)
+            compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
             if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                 comp = CompileResult(
                     nvcc_found=True,
