@@ -101,9 +101,12 @@ def custom_kernel(data: input_t) -> output_t:
     time.sleep(5)
     return data
 """
+    from consts import Timeout
+    from unittest.mock import patch
 
-    run = run_pytorch_helper({**files, "submission.py": sub}, test_timeout=2)
-    assert run.success is False
-    assert run.stdout == ""
-    assert run.exit_code == ExitCode.TIMEOUT_EXPIRED
-    assert len(run.result) == 0
+    with patch.object(Timeout, 'TEST', 2):
+        run = run_pytorch_helper({**files, "submission.py": sub}, test_timeout=Timeout.TEST)
+        assert run.success is False
+        assert run.stdout == ""
+        assert run.exit_code == ExitCode.TIMEOUT_EXPIRED
+        assert len(run.result) == 0
