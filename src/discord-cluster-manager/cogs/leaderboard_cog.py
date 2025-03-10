@@ -347,6 +347,17 @@ class LeaderboardSubmitCog(app_commands.Group):
         return sub_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Check if user has the Leaderboard Participant role
+        participant_role = discord.utils.get(interaction.guild.roles, name="Leaderboard Participant")
+        if not participant_role or participant_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "You need the **Leaderboard Participant** role to use submit commands. "
+                "Please go to the #start-here channel and react with a robot emoji to the Carl-Bot message to get the role.",
+                ephemeral=True,
+            )
+            return False
+            
+        # Check if in the correct channel
         if interaction.channel_id != self.bot.leaderboard_submissions_id:
             await interaction.response.send_message(
                 f"Submissions are only allowed in <#{self.bot.leaderboard_submissions_id}> channel",
