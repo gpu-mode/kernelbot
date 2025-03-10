@@ -363,7 +363,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 ephemeral=True,
             )
             return False
-        
+
         # Allow all other commands without role check
         return True
 
