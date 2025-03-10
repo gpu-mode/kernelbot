@@ -104,7 +104,6 @@ def compile_cuda_script(  # # noqa: C901
     libraries: Optional[list[str]] = None,
     flags: Optional[list[str]] = None,
     verbose: bool = False,
-    generate_ptx: bool = False,
 ) -> CompileResult:
     """
     Compiles a set of cuda files with nvcc.
@@ -117,7 +116,6 @@ def compile_cuda_script(  # # noqa: C901
         libraries: Additional libraries to link to
         flags: Other compiler flags
         verbose: whether to print progress or be silent
-        generate_ptx: whether to compile to PTX instead of binary executable
     Returns:
         A `CompileResult` that summarizes the compilation process.
 
@@ -179,10 +177,7 @@ def compile_cuda_script(  # # noqa: C901
     else:
         ARCH = f"-gencode=arch=compute_{arch},code=sm_{arch}"
 
-    if generate_ptx:
-        command = [nvcc] + flags + ["-ptx"] + files + [ARCH, "-o", "eval.ptx"]
-    else:
-        command = [nvcc] + flags + files + [ARCH, "-o", "eval.out"]
+    command = [nvcc] + flags + files + [ARCH, "-o", "eval.out"]
 
     print_("[Compiling]")
     try:
@@ -306,7 +301,6 @@ def run_cuda_script(  # # noqa: C901
     include_dirs: Optional[list[str]] = None,
     libraries: Optional[list[str]] = None,
     flags: Optional[list[str]] = None,
-    generate_ptx: bool = False,
     **kwargs,
 ) -> EvalResult:
     """
@@ -322,7 +316,6 @@ def run_cuda_script(  # # noqa: C901
         defines: Preprocessor defines
         libraries: Additional libraries to link to
         flags: Additional flags to give to the compiler
-        generate_ptx: whether to compile to PTX instead of binary executable
         seed: Random seed to initialize the RNG for testing
 
     Returns:
@@ -342,7 +335,6 @@ def run_cuda_script(  # # noqa: C901
             libraries=libraries,
             flags=flags,
             verbose=True,
-            generate_ptx=generate_ptx,
         )
 
         if not compile_result.success:
@@ -358,16 +350,10 @@ def run_cuda_script(  # # noqa: C901
             if os.path.exists(f):
                 os.remove(f)
 
-    if generate_ptx:
-        # When generating PTX, we don't execute the code
-        return EvalResult(
-            start=start, end=datetime.datetime.now(), compilation=compile_result, run=None
-        )
-    else:
-        run_result = run_single_evaluation(["./eval.out"], **kwargs)
-        return EvalResult(
-            start=start, end=datetime.datetime.now(), compilation=compile_result, run=run_result
-        )
+    run_result = run_single_evaluation(["./eval.out"], **kwargs)
+    return EvalResult(
+        start=start, end=datetime.datetime.now(), compilation=compile_result, run=run_result
+    )
 
 
 def run_pytorch_script(  # noqa: C901
@@ -506,7 +492,6 @@ def run_config(config: dict):
             include_dirs=config.get("include_dirs", []),
             libraries=config.get("libraries", []),
             flags=CUDA_FLAGS,
-            generate_ptx=config.get("generate_ptx", False),
             **common_args,
         )
     else:
