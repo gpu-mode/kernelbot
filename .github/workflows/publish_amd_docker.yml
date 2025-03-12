@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: amdgpu-mi300-x86-64
+    runs-on: amdgpu-mi250-x86-64
     # Sets the permissions granted to the `PUBLISH_TOKEN` for the actions in this job.
     permissions:
       contents: read
