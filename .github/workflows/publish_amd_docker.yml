@@ -1,6 +1,5 @@
 name: Publish ghascale amd image
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '30 5 * * *'
