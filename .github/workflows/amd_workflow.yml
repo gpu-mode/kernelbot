@@ -60,7 +60,9 @@ jobs:
     - name: Run script
       shell: bash
       run: |
-        source ${VENV_DIR}/bin/activate
+        if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
+          source ${VENV_DIR}/bin/activate
+        fi
         python3 .github/workflows/runner.py
         cat result.json  # Debug: show output
 
