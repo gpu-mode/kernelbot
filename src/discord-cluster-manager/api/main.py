@@ -149,7 +149,20 @@ async def get_gpus(leaderboard_name: str) -> list[str]:
 
 
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
-async def get_submissions(leaderboard_name: str, gpu_name: str) -> list[dict]:
+async def get_submissions(
+    leaderboard_name: str, gpu_name: str, limit: int = None, offset: int = 0
+) -> list[dict]:
     await simple_rate_limit()
     with bot_instance.leaderboard_db as db:
-        return db.get_leaderboard_submissions(leaderboard_name, gpu_name)
+        return db.get_leaderboard_submissions(
+            leaderboard_name, gpu_name, limit=limit, offset=offset
+        )
+
+
+@app.get("/submission_count/{leaderboard_name}/{gpu_name}")
+async def get_submission_count(leaderboard_name: str, gpu_name: str, user_id: str = None) -> dict:
+    """Get the total count of submissions for pagination"""
+    await simple_rate_limit()
+    with bot_instance.leaderboard_db as db:
+        count = db.get_leaderboard_submission_count(leaderboard_name, gpu_name, user_id)
+        return {"count": count}

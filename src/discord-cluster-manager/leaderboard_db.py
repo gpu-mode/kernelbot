@@ -417,7 +417,12 @@ class LeaderboardDB:
             return None
 
     def get_leaderboard_submissions(
-        self, leaderboard_name: str, gpu_name: str, user_id: Optional[str] = None
+        self,
+        leaderboard_name: str,
+        gpu_name: str,
+        user_id: Optional[str] = None,
+        limit: int = None,
+        offset: int = 0,
     ) -> list[LeaderboardRankedEntry]:
         # separate cases, for personal we want all submissions, for general we want best per user
         if user_id:
@@ -431,11 +436,12 @@ class LeaderboardDB:
                     r.score,
                     r.runner,
                     s.id,
-                    s.user_name,
+                    ui.user_name,
                     RANK() OVER (ORDER BY r.score ASC) as rank
                 FROM leaderboard.runs r
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                JOIN leaderboard.user_info ui ON s.user_id = ui.id
                 WHERE l.name = %s
                     AND r.runner = %s
                     AND NOT r.secret
@@ -443,8 +449,9 @@ class LeaderboardDB:
                     AND r.passed
                     AND s.user_id = %s
                 ORDER BY r.score ASC
+                LIMIT %s OFFSET %s
                 """
-            args = (leaderboard_name, gpu_name, user_id)
+            args = (leaderboard_name, gpu_name, user_id, limit, offset)
         else:
             # Query best submission per user if no user_id (means called from show)
             query = """
@@ -456,29 +463,31 @@ class LeaderboardDB:
                         s.submission_time,
                         r.score,
                         r.runner,
-                        s.id,
-                        s.user_name
+                        s.id
                     FROM leaderboard.runs r
                     JOIN leaderboard.submission s ON r.submission_id = s.id
                     JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                    JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
                     ORDER BY s.user_id, r.score ASC
                 )
                 SELECT
-                    file_name,
-                    submission_id,
-                    user_id,
-                    submission_time,
-                    score,
-                    runner,
-                    id,
-                    user_name,
-                    RANK() OVER (ORDER BY score ASC) as rank
-                FROM best_submissions
-                ORDER BY score ASC
+                    bs.file_name,
+                    bs.submission_id,
+                    bs.user_id,
+                    bs.submission_time,
+                    bs.score,
+                    bs.runner,
+                    bs.id,
+                    ui.user_name,
+                    RANK() OVER (ORDER BY bs.score ASC) as rank
+                FROM best_submissions bs
+                JOIN leaderboard.user_info ui ON bs.user_id = ui.id
+                ORDER BY bs.score ASC
+                LIMIT %s OFFSET %s
                 """
-            args = (leaderboard_name, gpu_name)
+            args = (leaderboard_name, gpu_name, limit, offset)
 
         self.cursor.execute(query, args)
 
@@ -491,7 +500,8 @@ class LeaderboardDB:
                 submission_time=submission[3],
                 submission_score=submission[4],
                 gpu_type=gpu_name,
-                rank=submission[6],
+                user_name=submission[7],
+                rank=submission[8],
             )
             for submission in self.cursor.fetchall()
         ]
@@ -671,6 +681,44 @@ class LeaderboardDB:
             code=submission[6],
             runs=runs,
         )
+
+    def get_leaderboard_submission_count(
+        self,
+        leaderboard_name: str,
+        gpu_name: str,
+        user_id: Optional[str] = None,
+    ) -> int:
+        """Get the total count of submissions for a leaderboard"""
+        if user_id:
+            query = """
+                SELECT COUNT(*)
+                FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s
+                    AND r.runner = %s
+                    AND NOT r.secret
+                    AND r.score IS NOT NULL
+                    AND r.passed
+                    AND s.user_id = %s
+                """
+            args = (leaderboard_name, gpu_name, user_id)
+        else:
+            query = """
+                SELECT COUNT(DISTINCT s.user_id)
+                FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s
+                    AND r.runner = %s
+                    AND NOT r.secret
+                    AND r.score IS NOT NULL
+                    AND r.passed
+                """
+            args = (leaderboard_name, gpu_name)
+
+        self.cursor.execute(query, args)
+        return self.cursor.fetchone()[0]
 
 
 if __name__ == "__main__":
