@@ -15,36 +15,36 @@
 </head>
 <body class="bg-white">
     <!-- Navigation -->
-    <nav class="bg-white border-b"> <!-- TODO: name class nav-base -->
-        <div class="header-container">
-            <div class="header-layout">
-                <div class="flex items-center">
-                    <a href="{{ url_for('index') }}" class="font-bold text-xl text-gray-900 flex items-center">
-                        <span class="header-brand-icon">⚡</span>
+    <nav class="nav-base">
+        <div class="nav-container">
+            <div class="nav-layout">
+                <div class="nav-row">
+                    <a href="{{ url_for('index') }}" class="nav-brand-item">
+                        <span class="nav-brand-icon">⚡</span>
                         <span>GPU MODE</span>
                     </a>
-                    <div class="header-nav-item">
-                        <a href="{{ url_for('lectures') }}" class="header-nav-link">
+                    <div class="nav-item">
+                        <a href="{{ url_for('lectures') }}" class="nav-link">
                             Lectures
                         </a>
                     </div>
-                    <div class="header-nav-item">
-                        <a href="{{ url_for('index') }}" class="header-nav-link">
+                    <div class="nav-item">
+                        <a href="{{ url_for('index') }}" class="nav-link">
                             Leaderboards
                         </a>
                     </div>
-                    <div class="header-nav-item">
-                        <a href="{{ url_for('index') }}" class="header-nav-link">
+                    <div class="nav-item">
+                        <a href="{{ url_for('index') }}" class="nav-link">
                             My Submissions
                         </a>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="{{ url_for('index') }}" class="text-sm font-medium text-gray-900 hover:text-gray-700">
-                        Log In
+                <div class="nav-row space-x-4">
+                    <a href="{{ url_for('index') }}" class="nav-link">
+                        Log Out
                     </a>
-                    <a href="{{ url_for('index') }}" class="px-4 py-2 rounded-full bg-gray-900 text-sm font-medium text-white hover:bg-gray-800">
-                        Sign Up
+                    <a href="{{ url_for('index') }}" class="nav-login-button">
+                        Sign In With Discord
                     </a>
                 </div>
             </div>
@@ -52,7 +52,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"> <!-- TODO: name class main-base -->
+    <main class="main-base">
         {% block content %}{% endblock %}
     </main>
 

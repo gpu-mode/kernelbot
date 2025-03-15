@@ -8,20 +8,35 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
 @tailwind utilities;
 
 @layer components {
-  .header-container {
+  .nav-base {
+    @apply bg-white border-b;
+  }
+  .nav-container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
-  .header-layout {
+  .nav-layout {
     @apply flex items-center justify-between h-16;
   }
-  .header-brand-icon {
+  .nav-row {
+    @apply flex items-center;
+  }
+  .nav-brand-item {
+    @apply font-bold text-xl text-gray-900 flex items-center;
+  }
+  .nav-brand-icon {
     @apply text-lg mr-1;
   }
-  .header-nav-item {
+  .nav-item {
     @apply ml-10 flex items-baseline space-x-4;
   }
-  .header-nav-link {
+  .nav-link {
     @apply px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100;
+  }
+  .nav-login-button {
+    @apply px-4 py-2 rounded-full bg-discord text-sm font-medium text-white hover:bg-discord/80;
+  }
+  .main-base {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8
   }
   .footer-base {
     @apply bg-white border-t fixed bottom-0 left-0 right-0;
