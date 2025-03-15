@@ -4,8 +4,8 @@ data/
 *.pyc
 .DS_Store
 node_modules/
-package.json
-package-lock.json
+/package.json
+/package-lock.json
 .ruff_cache/
 reference-kernels/
 yoyo.ini
