@@ -810,12 +810,9 @@ class AdminCog(commands.Cog):
                 except (ValueError, discord.NotFound, discord.HTTPException) as e:
                     logger.error(f"Error fetching user {user_id}: {str(e)}")
                     user_mapping[user_id] = "Unknown User"
-            import json
-            import tempfile
 
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w")
-            json.dump(user_mapping, temp_file, indent=2)
-            temp_file.close()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as temp_file:
+                json.dump(user_mapping, temp_file, indent=2)
 
             await interaction.followup.send(
                 content="Here's the mapping of user IDs to names:",
@@ -835,6 +832,7 @@ class AdminCog(commands.Cog):
     async def update_user_names(
         self, interaction: discord.Interaction, attachment: discord.Attachment
     ):
+        """Update the database with user names from a JSON file"""
         if not await self.admin_check(interaction):
             await send_discord_message(
                 interaction,
@@ -842,7 +840,6 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
             return
-        """Update the database with user names from a JSON file"""
         await interaction.response.defer()
 
         try:
@@ -853,8 +850,6 @@ class AdminCog(commands.Cog):
                 return
 
             json_content = await attachment.read()
-            import json
-
             user_mapping = json.loads(json_content)
 
             updated_count = 0
@@ -864,7 +859,7 @@ class AdminCog(commands.Cog):
                         # First check if user exists in user_info
                         db.cursor.execute(
                             """
-                            SELECT 1 FROM leaderboard.user_info WHERE user_id = %s
+                            SELECT 1 FROM leaderboard.user_info WHERE id = %s LIMIT 1
                             """,
                             (user_id,),
                         )
@@ -874,7 +869,7 @@ class AdminCog(commands.Cog):
                                 """
                                 UPDATE leaderboard.user_info
                                 SET user_name = %s
-                                WHERE user_id = %s
+                                WHERE id = %s
                                 """,
                                 (user_name, user_id),
                             )
@@ -882,7 +877,7 @@ class AdminCog(commands.Cog):
                             # Insert new user
                             db.cursor.execute(
                                 """
-                                INSERT INTO leaderboard.user_info (user_id, user_name)
+                                INSERT INTO leaderboard.user_info (id, user_name)
                                 VALUES (%s, %s)
                                 """,
                                 (user_id, user_name),
