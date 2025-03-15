@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from bot import ClusterBot
 
 import discord
+from better_profanity import profanity
 from consts import SubmissionMode
 from discord import app_commands
 from discord.ext import commands
@@ -164,7 +165,7 @@ class SubmitCog(commands.Cog):
             task=task, submission_content=script_content, arch=self._get_arch(gpu_type), mode=mode
         )
 
-        logger.info("submitting task %s to runner %s", config, self.name)
+        logger.info("submitting task to runner %s", self.name)
 
         result = await self._run_submission(config, gpu_type, status)
         await status.update_header(f"Running on {self.name}... ✅ success")
@@ -186,6 +187,14 @@ class SubmitCog(commands.Cog):
             await send_discord_message(
                 interaction,
                 "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
+                ephemeral=True,
+            )
+            return None
+
+        if profanity.contains_profanity(script.filename):
+            await send_discord_message(
+                interaction,
+                "Please provide a non rude filename",
                 ephemeral=True,
             )
             return None
