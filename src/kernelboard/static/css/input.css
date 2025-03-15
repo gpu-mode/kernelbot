@@ -1,9 +1,29 @@
+/*
+Generate main.css with:
+npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
+*/
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer components {
+  .header-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  .header-layout {
+    @apply flex items-center justify-between h-16;
+  }
+  .header-brand-icon {
+    @apply text-lg mr-1;
+  }
+  .header-nav-item {
+    @apply ml-10 flex items-baseline space-x-4;
+  }
   .header-nav-link {
     @apply px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100;
   }
-} 
+  .footer-link {
+    @apply text-gray-600 hover:text-gray-900;
+  }
+}

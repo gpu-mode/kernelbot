@@ -16,24 +16,24 @@
 <body class="bg-white">
     <!-- Navigation -->
     <nav class="bg-white border-b">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
+        <div class="header-container">
+            <div class="header-layout">
                 <div class="flex items-center">
                     <a href="{{ url_for('index') }}" class="font-bold text-xl text-gray-900 flex items-center">
-                        <span class="text-lg mr-1">⚡</span>
+                        <span class="header-brand-icon">⚡</span>
                         <span>GPU MODE</span>
                     </a>
-                    <div class="ml-10 flex items-baseline space-x-4">
+                    <div class="header-nav-item">
                         <a href="{{ url_for('lectures') }}" class="header-nav-link">
                             Lectures
                         </a>
                     </div>
-                    <div class="ml-10 flex items-baseline space-x-4">
+                    <div class="header-nav-item">
                         <a href="{{ url_for('index') }}" class="header-nav-link">
                             Leaderboards
                         </a>
                     </div>
-                    <div class="ml-10 flex items-baseline space-x-4">
+                    <div class="header-nav-item">
                         <a href="{{ url_for('index') }}" class="header-nav-link">
                             My Submissions
                         </a>
@@ -61,11 +61,11 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div class="text-center text-sm text-gray-600">
                 <div class="space-x-6">
-                    <a href="https://discord.gg/gpumode" class="text-gray-600 hover:text-gray-900">Discord</a>
-                    <a href="https://x.com/GPU_MODE" class="text-gray-600 hover:text-gray-900">X</a>
-                    <a href="https://www.youtube.com/@GPUMODE" class="text-gray-600 hover:text-gray-900">YouTube</a>
-                    <a href="https://github.com/gpu-mode/" class="text-gray-600 hover:text-gray-900">GitHub</a>
-                    <a href="https://gpu-mode.github.io/discord-cluster-manager/docs/intro" class="text-gray-600 hover:text-gray-900">Docs</a>
+                    <a href="https://discord.gg/gpumode" class="footer-link">Discord</a>
+                    <a href="https://x.com/GPU_MODE" class="footer-link">X</a>
+                    <a href="https://www.youtube.com/@GPUMODE" class="footer-link">YouTube</a>
+                    <a href="https://github.com/gpu-mode/" class="footer-link">GitHub</a>
+                    <a href="https://gpu-mode.github.io/discord-cluster-manager/docs/intro" class="footer-link">Docs</a>
                 </div>
             </div>
         </div>
