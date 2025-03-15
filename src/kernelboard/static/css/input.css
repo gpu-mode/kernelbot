@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+@layer components {
+  .header-nav-link {
+    @apply px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100;
+  }
+} 

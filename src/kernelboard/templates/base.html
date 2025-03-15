@@ -6,7 +6,7 @@
     <title>{% block title %}GPU MODE{% endblock %}</title>
     
     <!-- Emoji Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍿</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
@@ -20,21 +20,21 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <a href="{{ url_for('index') }}" class="font-bold text-xl text-gray-900 flex items-center">
-                        <span class="text-lg mr-1">🍿</span>
+                        <span class="text-lg mr-1">⚡</span>
                         <span>GPU MODE</span>
                     </a>
                     <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{{ url_for('lectures') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+                        <a href="{{ url_for('lectures') }}" class="header-nav-link">
                             Lectures
                         </a>
                     </div>
                     <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{{ url_for('index') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+                        <a href="{{ url_for('index') }}" class="header-nav-link">
                             Leaderboards
                         </a>
                     </div>
                     <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{{ url_for('index') }}" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+                        <a href="{{ url_for('index') }}" class="header-nav-link">
                             My Submissions
                         </a>
                     </div>
