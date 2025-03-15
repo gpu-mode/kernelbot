@@ -23,6 +23,12 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .header-nav-link {
     @apply px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100;
   }
+  .footer-base {
+    @apply bg-white border-t fixed bottom-0 left-0 right-0;
+  }
+  .footer-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-600 space-x-6;
+  }
   .footer-link {
     @apply text-gray-600 hover:text-gray-900;
   }
