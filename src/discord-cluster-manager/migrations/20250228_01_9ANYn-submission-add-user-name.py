@@ -7,7 +7,6 @@ from yoyo import step
 __depends__ = {"20250221_01_GA8ro-submission-collection"}
 
 steps = [
-    step("DROP TABLE IF EXISTS leaderboard.user_info CASCADE;"),
     step("""
         CREATE TABLE leaderboard.user_info (
             id TEXT PRIMARY KEY,
