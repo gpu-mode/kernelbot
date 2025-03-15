@@ -5,9 +5,7 @@
 {# Define our color palette. This is very much a hack at present. We have a
    number of colors defined here. Below, we hash each leaderboard name, and
    then use the hash to lookup a color in this table. The leaderboard page
-   seems very drab otherwise. It would be really nice to have an organization
-   associated with each leaderboard, and then to use the organization's color
-   as the color for the leaderboard. #}
+   seems very drab otherwise. #}
 {% set colors = [
     '#FF6B6B',
     '#4ECDC4',
@@ -23,18 +21,18 @@
 
 {% block content %}
 <div class="space-y-6">
-    <h1 class="text-3xl font-bold text-dark">Active Leaderboards</h1>
+    <h1 class="headline">Active Leaderboards</h1>
     
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="leaderboard-grid">
         {% for name, gpu_types, time_left in leaderboards %}
             {# Get a deterministic color index based on name hash #}
             {% set color_index = name|hash|int % colors|length %}
-            <div class="p-4 bg-white rounded-lg border border-neutral hover:border-secondary transition-colors">
-                <div class="font-mono text-lg mb-2 text-dark">
-                    <div class="w-4 h-4 rounded inline-block mr-2" style="background-color: {{ colors[color_index] }}"></div>
+            <div class="leaderboard-tile">
+                <div class="leaderboard-tile-name">
+                    <div class="leaderboard-icon" style="background-color: {{ colors[color_index] }}"></div>
                     {{ name }}
                 </div>
-                <div class="text-dark/70 text-sm">{{ time_left }}</div>
+                <div class="leaderboard-time-left">{{ time_left }}</div>
             </div>
         {% endfor %}
     </div>

@@ -8,6 +8,9 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
 @tailwind utilities;
 
 @layer components {
+  .headline {
+    @apply text-3xl font-bold text-dark;
+  }
   .nav-base {
     @apply bg-white border-b;
   }
@@ -61,5 +64,20 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   }
   .error-description {
     @apply text-gray-600 mb-8 font-mono
+  }
+  .leaderboard-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+  }
+  .leaderboard-tile {
+    @apply p-4 bg-white rounded-lg border border-neutral hover:border-secondary transition-colors;
+  }
+  .leaderboard-tile-name {
+    @apply font-mono text-lg mb-2 text-dark;
+  }
+  .leaderboard-icon {
+    @apply w-4 h-4 rounded inline-block mr-2;
+  }
+  .leaderboard-time-left {
+    @apply text-dark/70 text-sm;
   }
 }

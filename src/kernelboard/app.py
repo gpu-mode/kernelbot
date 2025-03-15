@@ -1,9 +1,8 @@
 from flask import Flask, render_template
-from datetime import datetime, UTC
 import dotenv
 import psycopg2
 import os
-import hashlib
+import mmh3
 
 app = Flask(__name__)
 
@@ -11,7 +10,7 @@ app = Flask(__name__)
 @app.template_filter('hash')
 def hash_filter(s):
     """Convert string to a number using Python's built-in hash"""
-    return abs(hash(str(s)))
+    return abs(mmh3.hash(str(s)))
 
 # Load environment variables
 dotenv.load_dotenv()
