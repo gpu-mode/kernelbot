@@ -194,7 +194,6 @@ class LeaderboardItem(TypedDict):
 class LeaderboardRankedEntry(TypedDict):
     submission_id: int
     rank: int
-    submission_id: int
     submission_name: str
     submission_time: datetime.datetime
     submission_score: float

@@ -449,13 +449,12 @@ class LeaderboardDB:
             # Query all if user_id (means called from show-personal)
             query = """
                 SELECT
-                    s.id,
                     s.file_name,
+                    s.id,
                     s.user_id,
                     s.submission_time,
                     r.score,
                     r.runner,
-                    s.id,
                     ui.user_name,
                     RANK() OVER (ORDER BY r.score ASC) as rank
                 FROM leaderboard.runs r
@@ -482,8 +481,7 @@ class LeaderboardDB:
                         s.user_id,
                         s.submission_time,
                         r.score,
-                        r.runner,
-                        s.id
+                        r.runner
                     FROM leaderboard.runs r
                     JOIN leaderboard.submission s ON r.submission_id = s.id
                     JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
@@ -499,7 +497,6 @@ class LeaderboardDB:
                     bs.submission_time,
                     bs.score,
                     bs.runner,
-                    bs.id,
                     ui.user_name,
                     RANK() OVER (ORDER BY bs.score ASC) as rank
                 FROM best_submissions bs
@@ -513,15 +510,15 @@ class LeaderboardDB:
 
         return [
             LeaderboardRankedEntry(
-                leaderboard_name=leaderboard_name,
                 submission_name=submission[0],
                 submission_id=submission[1],
                 user_id=submission[2],
                 submission_time=submission[3],
                 submission_score=submission[4],
+                user_name=submission[6],
+                rank=submission[7],
+                leaderboard_name=leaderboard_name,
                 gpu_type=gpu_name,
-                user_name=submission[7],
-                rank=submission[8],
             )
             for submission in self.cursor.fetchall()
         ]
