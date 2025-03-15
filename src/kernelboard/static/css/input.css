@@ -32,4 +32,19 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .footer-link {
     @apply text-gray-600 hover:text-gray-900;
   }
+  .error-layout {
+    @apply grid grid-cols-2 gap-8 items-center;
+  }
+  .error-message {
+    @apply text-left;
+  }
+  .error-image {
+    @apply flex justify-center;
+  }
+  .error-headline {
+    @apply text-4xl font-bold mb-4;
+  }
+  .error-description {
+    @apply text-gray-600 mb-8 font-mono
+  }
 }

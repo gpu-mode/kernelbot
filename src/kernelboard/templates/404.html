@@ -3,14 +3,14 @@
 {% block title %}Kernel Leaderboards &ndash; Page Not Found{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-2 gap-8 items-center">
-    <div class="text-left">
-        <h1 class="text-4xl font-bold mb-4">404. Page not found</h1>
-        <p class="text-gray-600 mb-8 font-mono">
+<div class="error-layout">
+    <div class="error-message">
+        <h1 class="error-headline">404. Page not found</h1>
+        <p class="error-description">
             We could not find the page you are looking for.
         </p>
     </div>
-    <div class="flex justify-center">
+    <div class="error-image">
         <img src="{{ url_for('static', filename='images/kernelbot-sad.png') }}" alt="404 illustration" class="max-w-full h-auto">
     </div>
 </div>
