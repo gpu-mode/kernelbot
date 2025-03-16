@@ -575,6 +575,8 @@ class AdminCog(commands.Cog):
                     f"Directory `{source}` for problem `{name}` does not exist, skipping.",
                 )
                 continue
+            if "deadline" not in problem:
+                problem["deadline"] = competition["deadline"]
 
             # check if that leaderboard already exists
             if name in leaderboards:

@@ -163,13 +163,17 @@ class LeaderboardDB:
             logger.exception("Could not assign forum thread", exc_info=e)
             raise KernelBotError("Could not assign forum thread") from e
 
-    def update_leaderboard(self, name, deadline, task):
+    def update_leaderboard(self, name, deadline: datetime.datetime, task):
+        """
+        Update an active leaderboard in place. Only use this for changes that do not invalidate
+        existing submission (e.g., updating deadlines, templates, description).
+        """
         try:
             self.cursor.execute(
                 """
                 UPDATE leaderboard.leaderboard
                 SET deadline = %s, task = %s
-                WHERE name = %s;
+                WHERE name = %s AND active is TRUE;
                 """,
                 (deadline, task.to_str(), name),
             )
@@ -178,7 +182,25 @@ class LeaderboardDB:
             logger.exception("Error during leaderboard update", exc_info=e)
             raise KernelBotError("Error during leaderboard update") from e
 
+    def get_leaderboard_id(self, name: str) -> int:
+        self.cursor.execute(
+            """
+            SELECT id FROM leaderboard.leaderboard
+            WHERE name = %s AND active is TRUE
+            """,
+            (name,),
+        )
+        return int(self.cursor.fetchone()[0])
+
     def delete_leaderboard(self, leaderboard_name: str, force: bool = False):
+        """
+        Delete a leaderboard with a given name. If `force` is given, deletes
+        all (active and inactive) leaderboards with the given name,
+        deleting *all* corresponding submissions.
+
+        If `force` is false, only delete the leaderboard if there are no
+        existing submissions, otherwise just mark it as inactive.
+        """
         try:
             if force:
                 self.cursor.execute(
@@ -205,12 +227,36 @@ class LeaderboardDB:
                     (leaderboard_name,),
                 )
 
+            lb_id = self.get_leaderboard_id(name=leaderboard_name)
+
+            # count submissions
             self.cursor.execute(
                 """
-                DELETE FROM leaderboard.leaderboard WHERE name = %s
+                SELECT COUNT(*) FROM leaderboard.submission
+                WHERE leaderboard_id = %s
                 """,
-                (leaderboard_name,),
+                (lb_id,),
             )
+            sub_count = int(self.cursor.fetchone()[0])
+
+            if sub_count > 0:
+                # mark as inactive
+                self.cursor.execute(
+                    """
+                    UPDATE leaderboard.leaderboard
+                    SET active = FALSE 
+                    WHERE name = %s AND active is TRUE;
+                    """,
+                    (leaderboard_name,),
+                )
+            else:
+                # empty LB, actually delete
+                self.cursor.execute(
+                    """
+                    DELETE FROM leaderboard.leaderboard WHERE id = %s
+                    """,
+                    (sub_count,),
+                )
             self.connection.commit()
             leaderboard_name_cache.invalidate()  # Invalidate autocomplete cache
         except psycopg2.Error as e:
@@ -275,7 +321,7 @@ class LeaderboardDB:
                 INSERT INTO leaderboard.submission (leaderboard_id, file_name,
                     user_id, code_id, submission_time)
                 VALUES (
-                    (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
+                    (SELECT id FROM leaderboard.leaderboard WHERE name = %s AND active is TRUE),
                     %s, %s, %s, %s)
                 RETURNING id
                 """,
@@ -376,14 +422,17 @@ class LeaderboardDB:
             raise KernelBotError("Could not create leaderboard submission entry in database") from e
 
     def get_leaderboard_names(self) -> list[str]:
-        self.cursor.execute("SELECT name FROM leaderboard.leaderboard")
+        self.cursor.execute(
+            "SELECT name FROM leaderboard.leaderboard WHERE leaderboard.active is TRUE"
+        )
         return [x[0] for x in self.cursor.fetchall()]
 
     def get_leaderboards(self) -> list[LeaderboardItem]:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id
+            SELECT id, name, deadline, task, creator_id, forum_id
             FROM leaderboard.leaderboard
+            WHERE active is TRUE;
             """
         )
 
@@ -395,7 +444,6 @@ class LeaderboardDB:
                 "SELECT * from leaderboard.gpu_type WHERE leaderboard_id = %s", [lb[0]]
             )
             gpu_types = [x[1] for x in self.cursor.fetchall()]
-
             leaderboards.append(
                 LeaderboardItem(
                     id=lb[0],
@@ -404,6 +452,7 @@ class LeaderboardDB:
                     task=LeaderboardTask.from_dict(lb[3]),
                     gpu_types=gpu_types,
                     creator_id=lb[4],
+                    forum_id=lb[5],
                 )
             )
 
@@ -417,7 +466,7 @@ class LeaderboardDB:
             WHERE leaderboard_id = (
                 SELECT id
                 FROM leaderboard.leaderboard
-                WHERE name = %s
+                WHERE name = %s AND active is TRUE
             )
             """,
             (leaderboard_name,),
@@ -435,7 +484,7 @@ class LeaderboardDB:
             """
             SELECT id, name, deadline, task, creator_id, forum_id
             FROM leaderboard.leaderboard
-            WHERE name = %s
+            WHERE name = %s AND active is TRUE
             """,
             (leaderboard_name,),
         )
@@ -450,7 +499,7 @@ class LeaderboardDB:
                 deadline=res[2],
                 task=task,
                 creator_id=res[4],
-                forum_id=res[5]
+                forum_id=res[5],
             )
         else:
             return None
@@ -474,7 +523,7 @@ class LeaderboardDB:
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 WHERE l.name = %s
-                    AND r.runner = %s
+                    AND l.active is TRUE AND r.runner = %s
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
