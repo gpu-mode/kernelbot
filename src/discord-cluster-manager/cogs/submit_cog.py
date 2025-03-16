@@ -102,10 +102,18 @@ class SubmitCog(commands.Cog):
         """
         Function invoked by `leaderboard_cog` to handle a leaderboard run.
         """
-        thread, result = await self._handle_submission(
-            interaction,
+        script_content = await self._validate_input_file(interaction, script)
+        if script_content is None:
+            return None, None
+
+        thread_name = f"{self.name} - Script Job"
+        thread = await self.bot.create_thread(interaction, gpu_type.name, f"{thread_name}")
+
+        result = await self._handle_submission(
+            thread,
             gpu_type,
-            script=script,
+            script_content=script_content,
+            script_name=script.filename,
             task=task,
             mode=mode,
         )
@@ -122,38 +130,43 @@ class SubmitCog(commands.Cog):
         """
         Function invoked by the `run` command to run a single script.
         """
+        script_content = await self._validate_input_file(interaction, script)
+        if script_content is None:
+            return
+
+        thread_name = f"{self.name} - Script Job"
+        thread = await self.bot.create_thread(interaction, gpu_type.name, f"{thread_name}")
+
         await self._handle_submission(
-            interaction, gpu_type, script=script, task=None, mode=SubmissionMode.SCRIPT
+            thread,
+            gpu_type,
+            script_content=script_content,
+            script_name=script.filename,
+            task=None,
+            mode=SubmissionMode.SCRIPT,
         )
 
     async def _handle_submission(
         self,
-        interaction: discord.Interaction,
+        thread: discord.Thread,
         gpu_type: app_commands.Choice[str],
-        script: discord.Attachment,
+        script_content: str,
+        script_name: str,
         task: Optional[LeaderboardTask],
         mode: SubmissionMode,
-    ) -> Tuple[Optional[discord.Thread], Optional[FullResult]]:
+    ) -> FullResult:
         """
         Generic function to handle code submissions.
         Args:
-            interaction: Interaction that started this command.
+            thread: Thread in which to report results
             gpu_type: Which GPU to run on.
-            script: File that contains the submitted script.
+            script_content: Submitted source code
+            script_name: (File) name of the submission
             task: Task specification, of provided
 
         Returns:
-            if successful, returns the created discord thread, and the result of
-            the run.
+            the result of the run.
         """
-        thread_name = f"{self.name} - {mode.value.capitalize()} Job"
-
-        script_content = await self._validate_input_file(interaction, script)
-        if script_content is None:
-            return None, None
-
-        # TODO figure out the correct way to handle messaging here
-        thread = await self.bot.create_thread(interaction, gpu_type.name, f"{thread_name}")
         run_msg = f"Running {mode.value.capitalize()} job for `{script_name}` on {self.name} with {gpu_type.name}"
         status = await ProgressReporter.make_reporter(thread, f"{run_msg}...")
 
@@ -168,7 +181,7 @@ class SubmitCog(commands.Cog):
         if not result.success:
             await status.update_header(f"{run_msg}... ✅ failure")
             await status.push(result.error)
-            return thread, result
+            return result
         else:
             await status.update_header(f"{run_msg}... ✅ success")
 
@@ -178,7 +191,7 @@ class SubmitCog(commands.Cog):
             logger.error("Error generating report. Result: %s", result, exc_info=E)
             raise
 
-        return thread, result
+        return result
 
     async def _validate_input_file(
         self,
