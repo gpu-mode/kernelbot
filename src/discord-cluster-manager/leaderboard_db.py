@@ -264,6 +264,9 @@ class LeaderboardDB:
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard {leaderboard_name}.") from e
 
+    def prepare_leaderboard_migration(self):
+        pass
+
     def create_submission(
         self,
         leaderboard: str,

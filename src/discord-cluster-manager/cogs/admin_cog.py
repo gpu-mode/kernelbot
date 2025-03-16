@@ -21,7 +21,7 @@ from utils import (
     SubmissionItem,
     send_discord_message,
     setup_logging,
-    with_error_handling,
+    with_error_handling, LeaderboardRankedEntry,
 )
 
 if TYPE_CHECKING:
@@ -300,6 +300,7 @@ class AdminCog(commands.Cog):
         leaderboard_name: str,
         date_value: datetime,
         task: LeaderboardTask,
+        opening: Optional[datetime] = None,
         gpu: Optional[str | list[str]] = None,
     ) -> bool:
         if gpu is None:
@@ -696,13 +697,40 @@ class AdminCog(commands.Cog):
             for entry in update_list:
                 with self.bot.leaderboard_db as db:
                     db.update_leaderboard(
-                        entry["name"], entry["deadline"], make_task(root / entry["directory"])
+                        entry["name"],
+                        entry["deadline"],
+                        make_task(root / entry["directory"]),
                     )
 
             header += " DONE"
             await interaction.edit_original_response(content=f"{header}\n\n{plan}\n\n{steps}")
         except Exception as e:
             logger.exception("Error updating problem set", exc_info=e)
+
+    async def _migrate_leaderboard(self, interaction: discord.Interaction, problem: ProblemData):
+        name = problem['name']
+
+        # get the id of the existing leaderboard of the same name
+        with self.bot.leaderboard_db as db:
+            old_id = db.get_leaderboard_id(name)
+            gpus = db.get_leaderboard_gpu_types(name)
+            submissions: list[LeaderboardRankedEntry] = []
+            for gpu in gpus:
+                submissions += db.get_leaderboard_submissions(name, gpu)
+
+            # make the old leaderboard inactive
+            db.delete_leaderboard(name, force=False)
+
+        # create the new leaderboard
+        await self.leaderboard_create_impl(
+            interaction,
+            problem["name"],
+            problem["deadline"],
+            "",
+            make_task(root / problem["directory"]),
+            problem["gpus"],
+        )
+
 
     @with_error_handling
     async def show_bot_stats(self, interaction: discord.Interaction):
