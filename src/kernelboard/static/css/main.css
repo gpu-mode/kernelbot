@@ -768,6 +768,11 @@ video {
   color: rgb(17 24 39 / var(--tw-text-opacity, 1));
 }
 
+.footer-text {
+  --tw-text-opacity: 1;
+  color: rgb(75 85 99 / var(--tw-text-opacity, 1));
+}
+
 .error-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

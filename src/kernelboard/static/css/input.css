@@ -56,6 +56,9 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .footer-link {
     @apply text-gray-600 hover:text-gray-900;
   }
+  .footer-text {
+    @apply text-gray-600;
+  }
   .error-layout {
     @apply grid grid-cols-2 gap-8 items-center;
   }
