@@ -47,6 +47,7 @@ cuda_image = (
         "git clone https://github.com/HazyResearch/ThunderKittens.git",
         # "cd /ThunderKittens && pwd && python setup.py install",
     )
+    .pip_install("requests")
 )
 
 cuda_image = cuda_image.add_local_python_source(

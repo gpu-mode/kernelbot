@@ -1,7 +1,8 @@
 # This file contains wrapper functions for running
 # Modal apps on specific devices. We will fix this later.
-import modal
 from modal_runner import app, cuda_image, modal_run_config
+from modal_utils import deserialize_full_result
+from run_eval import FullResult, SystemInfo
 
 gpus = ["T4", "L4", "A100-80GB", "H100!"]
 for gpu in gpus:
@@ -14,10 +15,8 @@ for gpu in gpus:
     )
 
 
-@app.function(
-    image=modal.Image.debian_slim().pip_install("requests"), max_containers=1, timeout=600
-)
-def run_pytorch_script_b200(config: dict, timeout: int):
+@app.function(image=cuda_image, max_containers=1, timeout=600)
+def run_pytorch_script_b200(config: dict, timeout: int = 300):
     """Send a config and timeout to the server and return the response."""
     import requests
 
@@ -29,9 +28,12 @@ def run_pytorch_script_b200(config: dict, timeout: int):
     try:
         response = requests.post(f"http://{ip_addr}:{port}", json=payload, timeout=timeout + 5)
         response.raise_for_status()
-        return response.json()
+        print("ORIGINAL", response.json())
+
+        print("DESERIALIZED", deserialize_full_result(response.json()))
+        return deserialize_full_result(response.json())
     except requests.RequestException as e:
-        return {"success": False, "error": str(e)}
+        return FullResult(success=False, error=str(e), runs={}, system=SystemInfo())
 
 
 @app.local_entrypoint()
