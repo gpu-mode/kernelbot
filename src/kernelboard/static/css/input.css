@@ -11,6 +11,12 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .headline {
     @apply text-3xl font-bold text-dark;
   }
+  .colored-square {
+    @apply w-4 h-4 rounded inline-block mr-2;
+  }
+  .content-stack {
+    @apply space-y-6;
+  }
   .nav-base {
     @apply bg-white border-b;
   }
@@ -53,6 +59,21 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .error-layout {
     @apply grid grid-cols-2 gap-8 items-center;
   }
+  .lecture-list {
+    @apply flex flex-col space-y-4;
+  }
+  .lecture-item {
+    @apply p-4 bg-white rounded-lg border border-neutral hover:border-secondary transition-colors;
+  }
+  .lecture-title {
+    @apply font-mono text-lg text-dark;
+  }
+  .lecture-speaker {
+    @apply mt-2 text-dark/70;
+  }
+  .lecture-date {
+    @apply mt-2 text-dark/70;
+  }
   .error-message {
     @apply text-left;
   }
@@ -73,9 +94,6 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   }
   .leaderboard-tile-name {
     @apply font-mono text-lg mb-2 text-dark;
-  }
-  .leaderboard-icon {
-    @apply w-4 h-4 rounded inline-block mr-2;
   }
   .leaderboard-time-left {
     @apply text-dark/70 text-sm;

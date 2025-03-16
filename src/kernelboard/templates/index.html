@@ -20,7 +20,7 @@
 ] %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="content-stack">
     <h1 class="headline">Active Leaderboards</h1>
     
     <div class="leaderboard-grid">
@@ -29,7 +29,7 @@
             {% set color_index = name|hash|int % colors|length %}
             <div class="leaderboard-tile">
                 <div class="leaderboard-tile-name">
-                    <div class="leaderboard-icon" style="background-color: {{ colors[color_index] }}"></div>
+                    <div class="colored-square" style="background-color: {{ colors[color_index] }}"></div>
                     {{ name }}
                 </div>
                 <div class="leaderboard-time-left">{{ time_left }}</div>

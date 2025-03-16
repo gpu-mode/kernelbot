@@ -3,21 +3,21 @@
 {% block title %}Lectures &ndash; GPU MODE{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="content-stack">
     <h1 class="headline">Future Lectures</h1>
     <p class="mb-4">Future lectures are listed below. Each will be held on Zoom unless otherwise noted.</p>
     
     {# TODO: This is where we'll list the lectures -- once I figure out where
        the data is coming from. #}
-    <div class="flex flex-col space-y-4">
+    <div class="lecture-list">
         {% for lecture in lectures %}
-            <div class="p-4 bg-white rounded-lg border border-neutral hover:border-secondary transition-colors">
+            <div class="lecture-item">
                 <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded" style="background-color: {{ colors[lecture.title|hash|int % colors|length] }}"></div>
-                    <div class="font-mono text-lg text-dark">{{ lecture.title }}</div>
+                    <div class="colored-square" style="background-color: {{ colors[lecture.title|hash|int % colors|length] }}"></div>
+                    <div class="lecture-title">{{ lecture.title }}</div>
                 </div>
-                <div class="mt-2 text-dark/70">{{ lecture.speaker }}</div>
-                <div class="text-dark/60 text-sm">{{ lecture.date }}</div>
+                <div class="lecture-speaker">{{ lecture.speaker }}</div>
+                <div class="lecture-date">{{ lecture.date }}</div>
             </div>
         {% endfor %}
     </div>
