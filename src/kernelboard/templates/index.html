@@ -21,18 +21,20 @@
 
 {% block content %}
 <div class="content-stack">
-    <h1 class="headline">Active Leaderboards</h1>
+    <h1>Active Leaderboards</h1>
     
     <div class="leaderboard-grid">
-        {% for name, gpu_types, time_left in leaderboards %}
+        {% for id, name, deadline in leaderboards %}
             {# Get a deterministic color index based on name hash #}
-            {% set color_index = name|hash|int % colors|length %}
             <div class="leaderboard-tile">
-                <div class="leaderboard-tile-name">
-                    <div class="colored-square" style="background-color: {{ colors[color_index] }}"></div>
-                    {{ name }}
-                </div>
-                <div class="leaderboard-time-left">{{ time_left }}</div>
+                <a href="{{ url_for('leaderboard', id=id) }}">
+                    <div class="leaderboard-tile-name">
+                        {% set color = name|to_color %}
+                        <div class="colored-square" style="background-color: {{ color }}"></div>
+                        {{ name }}
+                    </div>
+                    <div class="leaderboard-deadline text-sm">{{ deadline|to_time_left }}</div>
+                </a>
             </div>
         {% endfor %}
     </div>

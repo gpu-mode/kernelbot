@@ -7,10 +7,19 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .headline {
-    @apply text-3xl font-bold text-dark;
+@layer base {
+  body {
+    @apply flex flex-col min-h-screen;
   }
+  h1 {
+    @apply text-3xl mt-4 font-bold text-dark;
+  }
+  h2 {
+    @apply text-2xl mt-4 font-bold text-dark;
+  }
+}
+
+@layer components {
   .colored-square {
     @apply w-4 h-4 rounded inline-block mr-2;
   }
@@ -45,10 +54,10 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
     @apply px-4 py-2 rounded-full bg-discord text-sm font-medium text-white hover:bg-discord/80;
   }
   .main-base {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8
+    @apply flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8
   }
   .footer-base {
-    @apply bg-white border-t fixed bottom-0 left-0 right-0;
+    @apply bg-white border-t;
   }
   .footer-container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-600 space-x-6;
@@ -98,7 +107,10 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .leaderboard-tile-name {
     @apply font-mono text-lg mb-2 text-dark;
   }
-  .leaderboard-time-left {
-    @apply text-dark/70 text-sm;
+  .leaderboard-deadline {
+    @apply text-dark/70;
+  }
+  .code-block {
+    @apply bg-gray-100 p-4 rounded-md overflow-x-auto mt-4 mb-8;
   }
 }

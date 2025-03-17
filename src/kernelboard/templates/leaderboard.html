@@ -13,7 +13,6 @@
     <div>
         <h2>Deadline</h2>
         <p>
-            <!-- match this deadline style elsewhere (don't compute in SQL)-->
             {% if time_left != None %}
                 {{ time_left }} ({{ deadline.strftime('%Y-%m-%d %H:%M UTC') }})
             {% else %}
@@ -25,6 +24,11 @@
     <div>
         <h2>Language</h2>
         <p>{{ lang }}</p>
+    </div>
+
+    <div>
+        <h2 class="text-lg font-semibold">GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
+        <p>{{ gpu_types|join(', ') if gpu_types|length > 0 else '' }}</p>
     </div>
 
     <div>
