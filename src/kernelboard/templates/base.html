@@ -14,52 +14,52 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-white">
-    <!-- Navigation -->
-    <nav class="nav-base">
-        <div class="nav-container">
-            <div class="nav-layout">
-                <div class="nav-row">
-                    <a href="{{ url_for('index') }}" class="nav-brand-item">
-                        <span class="nav-brand-icon">⚡</span>
+    <!-- Header -->
+    <header class="header-base">
+        <div class="header-container">
+            <div class="header-layout">
+                <div class="header-row">
+                    <a href="{{ url_for('index') }}" class="header-brand-item">
+                        <span class="header-brand-icon">⚡</span>
                         <span>GPU MODE</span>
                     </a>
-                    <div class="nav-item">
-                        <a href="{{ url_for('index') }}" class="nav-link">
+                    <div class="header-item">
+                        <a href="{{ url_for('index') }}" class="header-link">
                             Leaderboards
                         </a>
                     </div>
-                    <div class="nav-item">
-                        <a href="{{ url_for('index') }}" class="nav-link">
+                    <div class="header-item">
+                        <a href="{{ url_for('index') }}" class="header-link">
                             My Submissions
                         </a>
                     </div>
-                    <div class="nav-item">
-                        <a href="{{ url_for('lectures') }}" class="nav-link">
+                    <div class="header-item">
+                        <a href="{{ url_for('lectures') }}" class="header-link">
                             Lectures
                         </a>
                     </div>
-                    <div class="nav-item">
-                        <a href="https://github.com/gpu-mode/resource-stream" class="nav-link">
+                    <div class="header-item">
+                        <a href="https://github.com/gpu-mode/resource-stream" class="header-link">
                             Resources
                         </a>
                     </div>
-                    <div class="nav-item">
-                        <a href="{{ url_for('index') }}" class="nav-link">
+                    <div class="header-item">
+                        <a href="{{ url_for('index') }}" class="header-link">
                             About
                         </a>
                     </div>
                 </div>
-                <div class="nav-row space-x-4">
-                    <a href="{{ url_for('index') }}" class="nav-link">
+                <div class="header-row space-x-4">
+                    <a href="{{ url_for('index') }}" class="header-link">
                         Log Out
                     </a>
-                    <a href="{{ url_for('index') }}" class="nav-login-button">
+                    <a href="{{ url_for('index') }}" class="header-login-button">
                         Sign In With Discord
                     </a>
                 </div>
             </div>
         </div>
-    </nav>
+    </header>
 
     <!-- Main Content -->
     <main class="main-container">

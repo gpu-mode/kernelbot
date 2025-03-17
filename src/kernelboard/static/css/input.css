@@ -32,31 +32,31 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .page-container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full;
   }
-  .nav-base {
+  .header-base {
     @apply bg-white border-b;
   }
-  .nav-container {
+  .header-container {
     @apply page-container;
   }
-  .nav-layout {
+  .header-layout {
     @apply flex items-center justify-between h-16;
   }
-  .nav-row {
+  .header-row {
     @apply flex items-center;
   }
-  .nav-brand-item {
+  .header-brand-item {
     @apply font-bold text-xl text-gray-900 flex items-center;
   }
-  .nav-brand-icon {
+  .header-brand-icon {
     @apply text-lg mr-1;
   }
-  .nav-item {
+  .header-item {
     @apply ml-10 flex items-baseline space-x-4;
   }
-  .nav-link {
+  .header-link {
     @apply px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100;
   }
-  .nav-login-button {
+  .header-login-button {
     @apply px-4 py-2 rounded-full bg-discord text-sm font-medium text-white hover:bg-discord/80;
   }
   .main-container {

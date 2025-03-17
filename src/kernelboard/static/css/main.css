@@ -601,13 +601,13 @@ h2 {
   margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
 }
 
-.nav-base {
+.header-base {
   border-bottom-width: 1px;
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
 
-.nav-container {
+.header-container {
   margin-left: auto;
   margin-right: auto;
   width: 100%;
@@ -617,32 +617,32 @@ h2 {
 }
 
 @media (min-width: 640px) {
-  .nav-container {
+  .header-container {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
   }
 }
 
 @media (min-width: 1024px) {
-  .nav-container {
+  .header-container {
     padding-left: 2rem;
     padding-right: 2rem;
   }
 }
 
-.nav-layout {
+.header-layout {
   display: flex;
   height: 4rem;
   align-items: center;
   justify-content: space-between;
 }
 
-.nav-row {
+.header-row {
   display: flex;
   align-items: center;
 }
 
-.nav-brand-item {
+.header-brand-item {
   display: flex;
   align-items: center;
   font-size: 1.25rem;
@@ -652,25 +652,25 @@ h2 {
   color: rgb(17 24 39 / var(--tw-text-opacity, 1));
 }
 
-.nav-brand-icon {
+.header-brand-icon {
   margin-right: 0.25rem;
   font-size: 1.125rem;
   line-height: 1.75rem;
 }
 
-.nav-item {
+.header-item {
   margin-left: 2.5rem;
   display: flex;
   align-items: baseline;
 }
 
-.nav-item > :not([hidden]) ~ :not([hidden]) {
+.header-item > :not([hidden]) ~ :not([hidden]) {
   --tw-space-x-reverse: 0;
   margin-right: calc(1rem * var(--tw-space-x-reverse));
   margin-left: calc(1rem * calc(1 - var(--tw-space-x-reverse)));
 }
 
-.nav-link {
+.header-link {
   border-radius: 0.375rem;
   padding-left: 0.75rem;
   padding-right: 0.75rem;
@@ -683,12 +683,12 @@ h2 {
   color: rgb(17 24 39 / var(--tw-text-opacity, 1));
 }
 
-.nav-link:hover {
+.header-link:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(243 244 246 / var(--tw-bg-opacity, 1));
 }
 
-.nav-login-button {
+.header-login-button {
   border-radius: 9999px;
   --tw-bg-opacity: 1;
   background-color: rgb(88 101 242 / var(--tw-bg-opacity, 1));
@@ -703,7 +703,7 @@ h2 {
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
 }
 
-.nav-login-button:hover {
+.header-login-button:hover {
   background-color: rgb(88 101 242 / 0.8);
 }
 
