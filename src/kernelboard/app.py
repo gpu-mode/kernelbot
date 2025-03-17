@@ -72,10 +72,6 @@ def index():
         app.logger.error(f"Database error: {e}")
         return render_template('500.html'), 500
 
-@app.route('/lectures')
-def lectures():
-    return render_template('lectures.html')
-
 @app.route('/leaderboard/<int:id>')
 def leaderboard(id: int):
     # Query the database for the specific leaderboard
@@ -126,6 +122,10 @@ def leaderboard(id: int):
                          gpu_types=gpu_types,
                          description=description,
                          reference=reference)
+
+@app.route('/coming-soon')
+def coming_soon():
+    return render_template('coming_soon.html')
 
 @app.errorhandler(404)
 def page_not_found(e):

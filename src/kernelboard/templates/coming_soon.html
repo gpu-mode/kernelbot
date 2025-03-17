@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Coming Soon{% endblock %}
+
+{% block content %}
+<div class="error-layout">
+    <div class="error-message">
+        <h1 class="error-headline">Coming Soon</h1>
+        <p class="error-description">
+            We have not yet implemented this page.
+        </p>
+    </div>
+    <div class="error-image">
+        <img src="{{ url_for('static', filename='images/kernelbot-building.png') }}" alt="404 illustration" class="max-w-full h-auto">
+    </div>
+</div>
+{% endblock %} 
