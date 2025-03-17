@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ name }} - Kernel Leaderboards{% endblock %}
+
+{% block content %}
+<div class="content-stack">
+    <h1 class="font-mono">
+        {% set color = name|to_color %}
+        <div class="colored-square" style="background-color: {{ color }}"></div>
+        {{ name }}
+    </h1>
+    
+    <div>
+        <h2>Deadline</h2>
+        <p>
+            <!-- match this deadline style elsewhere (don't compute in SQL)-->
+            {% if time_left != None %}
+                {{ time_left }} ({{ deadline.strftime('%Y-%m-%d %H:%M UTC') }})
+            {% else %}
+                {{ deadline.strftime('%Y-%m-%d %H:%M UTC') }}
+            {% endif %}
+        </p>
+    </div>
+
+    <div>
+        <h2>Language</h2>
+        <p>{{ lang }}</p>
+    </div>
+
+    <div>
+        <h2>Description</h2>
+        <p class="whitespace-pre-wrap">{{ description }}</p>
+    </div>
+
+    <div>
+        <h2>Reference Implementation</h2>
+        <pre class="code-block"><code>{{ reference }}</code></pre>
+    </div>
+</div>
+{% endblock %} 
