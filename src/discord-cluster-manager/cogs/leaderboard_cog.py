@@ -12,8 +12,6 @@ from consts import (
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import LeaderboardDB, leaderboard_name_autocomplete
-from run_eval import FullResult
-from task import LeaderboardTask
 from ui.misc import GPUSelectionView
 from ui.table import create_table
 from utils import (
@@ -25,6 +23,7 @@ from utils import (
     setup_logging,
     with_error_handling,
 )
+from .submit_cog import SubmitCog
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot
@@ -36,82 +35,6 @@ class LeaderboardSubmitCog(app_commands.Group):
     def __init__(self, bot: "ClusterBot"):
         super().__init__(name="submit", description="Submit to leaderboard")
         self.bot = bot
-
-    async def async_submit_cog_job(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        script: discord.Attachment,
-        command: Callable,
-        task: LeaderboardTask,
-        submission_content,
-        gpu: app_commands.Choice[str],
-        runner_name: str,
-        mode: SubmissionMode,
-        submission_id: int,
-    ):
-        discord_thread, result = await command(
-            interaction,
-            script,
-            gpu,
-            task=task,
-            mode=mode,
-        )
-        result: FullResult
-
-        # no point going further if this already failed
-        if discord_thread is None:
-            return -1
-
-        try:
-            if result.success:
-                user_id = (
-                    interaction.user.global_name
-                    if interaction.user.nick is None
-                    else interaction.user.nick
-                )
-
-                score = None
-                if "leaderboard" in result.runs and result.runs["leaderboard"].run.success:
-                    score = 0.0
-                    num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
-                    for i in range(num_benchmarks):
-                        score += (
-                            float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"])
-                            / 1e9
-                        )
-                    score /= num_benchmarks
-
-                with self.bot.leaderboard_db as db:
-                    db: LeaderboardDB
-                    for key, value in result.runs.items():
-                        db.create_submission_run(
-                            submission_id,
-                            value.start,
-                            value.end,
-                            mode=key,
-                            runner=gpu.name,
-                            score=None if key != "leaderboard" else score,
-                            secret=mode == SubmissionMode.PRIVATE,
-                            compilation=value.compilation,
-                            result=value.run,
-                            system=result.system,
-                        )
-
-                if score is not None:
-                    await discord_thread.send(
-                        "## Result:\n"
-                        + f"Leaderboard `{leaderboard_name}`:\n"
-                        + f"> **{user_id}**'s `{script.filename}` on `{gpu.name}` ran "
-                        + f"for `{score:.9f}` seconds!",
-                    )
-        except Exception as e:
-            logger.error("Error in leaderboard submission", exc_info=e)
-            await discord_thread.send(
-                "## Result:\n"
-                + f"Leaderboard submission to '{leaderboard_name}' on {gpu.name} "
-                + f"using {runner_name} runners failed!\n",
-            )
 
     async def select_gpu_view(
         self,
@@ -170,12 +93,12 @@ class LeaderboardSubmitCog(app_commands.Group):
         return task, gpus
 
     def _get_run_command(self, gpu) -> Optional[Callable]:
-        runner_cog = self.bot.get_cog(f"{gpu.runner}Cog")
+        runner_cog: SubmitCog = self.bot.get_cog(f"{gpu.runner}Cog")
 
         if not all([runner_cog]):
             logger.error("Cog for runner %s for gpu %s not found!", f"{gpu.runner}Cog", gpu.name)
             return None
-        return runner_cog.submit_leaderboard
+        return runner_cog.submit_leaderboard_single
 
     @staticmethod
     def _get_popcorn_directives(submission: str) -> dict:
@@ -308,18 +231,14 @@ class LeaderboardSubmitCog(app_commands.Group):
 
         try:
             tasks = [
-                self.async_submit_cog_job(
+                command(
                     interaction,
                     leaderboard_name,
                     script,
-                    command,
                     task,
-                    submission_content,
                     app_commands.Choice(name=gpu.name, value=gpu.value),
-                    gpu.runner,
                     mode,
-                    sub_id,
-                )
+                    sub_id,)
                 for gpu, command in zip(selected_gpus, commands, strict=False)
             ]
 

@@ -53,7 +53,7 @@ class SubmitCog(commands.Cog):
     method to translate the selected GPU to an architecture argument for Cuda,
     and a
     ```
-    run_submission(self, config: dict, gpu_type: GPUType,
+    _run_submission(self, config: dict, gpu_type: GPUType,
         status: ProgressReporter) -> FullResult
     ```
     coroutine, which handles the actual submission.
@@ -91,34 +91,84 @@ class SubmitCog(commands.Cog):
                 name=self.name.lower(), description=f"Run a script using {self.name}"
             )(run)
 
-    async def submit_leaderboard(
+    async def submit_leaderboard_single(
         self,
         interaction: discord.Interaction,
+        leaderboard_name: str,
         script: discord.Attachment,
-        gpu_type: app_commands.Choice[str],
         task: LeaderboardTask,
+        gpu: app_commands.Choice[str],
         mode: SubmissionMode,
-    ) -> Tuple[Optional[discord.Thread], Optional[FullResult]]:
+        submission_id: int,
+    ):
         """
-        Function invoked by `leaderboard_cog` to handle a leaderboard run.
+        Handle a single leaderboard submission, i.e., one code submitted with one mode
+        to one runner.
         """
         script_content = await self._validate_input_file(interaction, script)
         if script_content is None:
             return None, None
 
-        thread_name = f"{self.name} - Script Job"
-        thread = await self.bot.create_thread(interaction, gpu_type.name, f"{thread_name}")
+        thread_name = f"{self.name} - {mode} {leaderboard_name}"
+        thread = await self.bot.create_thread(interaction, gpu.name, f"{thread_name}")
 
         result = await self._handle_submission(
             thread,
-            gpu_type,
+            gpu,
             script_content=script_content,
             script_name=script.filename,
             task=task,
             mode=mode,
         )
 
-        return thread, result
+        try:
+            if result.success:
+                user_id = (
+                    interaction.user.global_name
+                    if interaction.user.nick is None
+                    else interaction.user.nick
+                )
+
+                score = None
+                if "leaderboard" in result.runs and result.runs["leaderboard"].run.success:
+                    score = 0.0
+                    num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
+                    for i in range(num_benchmarks):
+                        score += (
+                            float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"])
+                            / 1e9
+                        )
+                    score /= num_benchmarks
+
+                with self.bot.leaderboard_db as db:
+                    for key, value in result.runs.items():
+                        db.create_submission_run(
+                            submission_id,
+                            value.start,
+                            value.end,
+                            mode=key,
+                            runner=gpu.name,
+                            score=None if key != "leaderboard" else score,
+                            secret=mode == SubmissionMode.PRIVATE,
+                            compilation=value.compilation,
+                            result=value.run,
+                            system=result.system,
+                        )
+
+                if score is not None:
+                    await thread.send(
+                        "## Result:\n"
+                        + f"Leaderboard `{leaderboard_name}`:\n"
+                        + f"> **{user_id}**'s `{script.filename}` on `{gpu.name}` ran "
+                        + f"for `{score:.9f}` seconds!",
+                    )
+        except Exception as e:
+            logger.error("Error in leaderboard submission", exc_info=e)
+            await thread.send(
+                "## Result:\n"
+                + f"Leaderboard submission to '{leaderboard_name}' on {gpu.name} "
+                + f"using {self.name} runners failed!\n",
+            )
 
     @with_error_handling
     async def run_script(
