@@ -1,6 +1,12 @@
 name: Publish ghascale amd image
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types:
+      - closed
+    paths:
+      - ".github/workflows/publish_amd_docker.yml"
   schedule:
     - cron: '30 5 * * *'
 
@@ -10,6 +16,7 @@ env:
 
 jobs:
   build-and-push-image:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: amd-docker
     # Sets the permissions granted to the `PUBLISH_TOKEN` for the actions in this job.
     permissions:
