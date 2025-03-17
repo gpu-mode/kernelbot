@@ -559,6 +559,10 @@ video {
   display: none;
 }
 
+html {
+  overflow-y: scroll;
+}
+
 body {
   display: flex;
   min-height: 100vh;
@@ -606,6 +610,7 @@ h2 {
 .nav-container {
   margin-left: auto;
   margin-right: auto;
+  width: 100%;
   max-width: 80rem;
   padding-left: 1rem;
   padding-right: 1rem;
@@ -702,29 +707,33 @@ h2 {
   background-color: rgb(88 101 242 / 0.8);
 }
 
-.main-base {
+.main-container {
   margin-left: auto;
   margin-right: auto;
+  width: 100%;
   max-width: 80rem;
-  flex-grow: 1;
   padding-left: 1rem;
   padding-right: 1rem;
-  padding-top: 2rem;
-  padding-bottom: 2rem;
 }
 
 @media (min-width: 640px) {
-  .main-base {
+  .main-container {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
   }
 }
 
 @media (min-width: 1024px) {
-  .main-base {
+  .main-container {
     padding-left: 2rem;
     padding-right: 2rem;
   }
+}
+
+.main-container {
+  flex-grow: 1;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
 }
 
 .footer-base {
@@ -736,25 +745,10 @@ h2 {
 .footer-container {
   margin-left: auto;
   margin-right: auto;
+  width: 100%;
   max-width: 80rem;
-}
-
-.footer-container > :not([hidden]) ~ :not([hidden]) {
-  --tw-space-x-reverse: 0;
-  margin-right: calc(1.5rem * var(--tw-space-x-reverse));
-  margin-left: calc(1.5rem * calc(1 - var(--tw-space-x-reverse)));
-}
-
-.footer-container {
   padding-left: 1rem;
   padding-right: 1rem;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  --tw-text-opacity: 1;
-  color: rgb(75 85 99 / var(--tw-text-opacity, 1));
 }
 
 @media (min-width: 640px) {
@@ -769,6 +763,23 @@ h2 {
     padding-left: 2rem;
     padding-right: 2rem;
   }
+}
+
+.footer-container > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
+  --tw-space-x-reverse: 0;
+  margin-right: calc(1.5rem * var(--tw-space-x-reverse));
+  margin-left: calc(1.5rem * calc(1 - var(--tw-space-x-reverse)));
+}
+
+.footer-container {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  text-align: center;
+  --tw-text-opacity: 1;
+  color: rgb(75 85 99 / var(--tw-text-opacity, 1));
 }
 
 .footer-link {
@@ -981,18 +992,9 @@ h2 {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.text-lg {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
-}
-
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
-}
-
-.font-semibold {
-  font-weight: 600;
 }
 
 .italic {

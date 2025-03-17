@@ -8,6 +8,9 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply overflow-y-scroll;
+  }
   body {
     @apply flex flex-col min-h-screen;
   }
@@ -26,11 +29,14 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .content-stack {
     @apply space-y-6;
   }
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full;
+  }
   .nav-base {
     @apply bg-white border-b;
   }
   .nav-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+    @apply page-container;
   }
   .nav-layout {
     @apply flex items-center justify-between h-16;
@@ -53,14 +59,14 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .nav-login-button {
     @apply px-4 py-2 rounded-full bg-discord text-sm font-medium text-white hover:bg-discord/80;
   }
-  .main-base {
-    @apply flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8
+  .main-container {
+    @apply page-container flex-grow py-8;
   }
   .footer-base {
     @apply bg-white border-t;
   }
   .footer-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-sm text-gray-600 space-x-6;
+    @apply page-container text-center py-4 text-gray-600 space-y-6 space-x-6;
   }
   .footer-link {
     @apply text-gray-600 hover:text-gray-900;
