@@ -881,7 +881,7 @@ h3 {
   color: rgb(32 32 32 / var(--tw-text-opacity, 1));
 }
 
-.leaderboard-deadline {
+.leaderboard-content {
   color: rgb(32 32 32 / 0.7);
 }
 
@@ -922,6 +922,7 @@ h3 {
   font-size: 0.75rem;
   line-height: 1rem;
   font-weight: 500;
+  text-transform: uppercase;
   letter-spacing: 0.05em;
   --tw-text-opacity: 1;
   color: rgb(107 114 128 / var(--tw-text-opacity, 1));
@@ -982,11 +983,6 @@ h3 {
 
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-.text-sm {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 .italic {

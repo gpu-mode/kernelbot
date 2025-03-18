@@ -101,7 +101,7 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .leaderboard-tile-name {
     @apply font-mono text-lg mb-2 text-dark;
   }
-  .leaderboard-deadline {
+  .leaderboard-content {
     @apply text-dark/70;
   }
   .code-block {

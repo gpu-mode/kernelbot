@@ -24,17 +24,23 @@
     <h1>Active Leaderboards</h1>
     
     <div class="leaderboard-grid">
-        {% for id, name, deadline in leaderboards %}
-            {# Get a deterministic color index based on name hash #}
+        {% for leaderboard in leaderboards %}
             <div class="leaderboard-tile">
-                <a href="{{ url_for('leaderboard', id=id) }}">
-                    <div class="leaderboard-tile-name">
-                        {% set color = name|to_color %}
-                        <div class="colored-square" style="background-color: {{ color }}"></div>
-                        {{ name }}
+                <div class="leaderboard-tile-name">
+                    {% set color = leaderboard['name']|to_color %}
+                    <div class="colored-square" style="background-color: {{ color }}"></div>
+                    {{ leaderboard['name'] }}
+                </div>
+                
+                <div class="leaderboard-content">
+                    {{ leaderboard['deadline']|to_time_left }} remaining
+                </div>
+
+                {% if leaderboard['top_users'] %}
+                    <div class="leaderboard-content">
+                        {{ leaderboard['top_users']|join(', ') }}
                     </div>
-                    <div class="leaderboard-deadline text-sm">{{ deadline|to_time_left }} remaining</div>
-                </a>
+                {% endif %}
             </div>
         {% endfor %}
     </div>

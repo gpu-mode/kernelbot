@@ -32,7 +32,7 @@ def to_color(name: str) -> str:
     return colors[hash % len(colors)]
 
 @app.template_filter('to_time_left')
-def to_time_left(deadline: datetime) -> str | None:
+def to_time_left(deadline: str) -> str | None:
     """
     Calculate time left until deadline.
 
@@ -40,11 +40,17 @@ def to_time_left(deadline: datetime) -> str | None:
         - formatted string if deadline is in the future
         - None if deadline has passed
     """
+    try:
+        d = datetime.fromisoformat(deadline)
+    except ValueError:
+        return None
+
     now = datetime.now(timezone.utc)
-    if deadline <= now:
+
+    if d <= now:
         return None
         
-    delta = deadline - now
+    delta = d - now
     days = delta.days
     hours = delta.seconds // 3600
     return f"{days} days {hours} hours"
@@ -79,20 +85,46 @@ def get_db_connection():
 
 @app.route('/')
 def index():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('''
-                    SELECT id, name, deadline
-                    FROM leaderboard.leaderboard
-                    WHERE deadline > NOW()
-                    ORDER BY deadline ASC;
-                ''')
-                leaderboards = cur.fetchall()
-        return render_template('index.html', leaderboards=leaderboards)
-    except psycopg2.Error as e:
-        app.logger.error(f"Database error: {e}")
-        return render_template('500.html'), 500
+    # Get a list of JSON objects like the following to build the active
+    # leaderboard tiles:
+    # {
+    #   "id": 42,
+    #   "name": "prefix-sum",
+    #   "deadline": "2025-04-29T17:00:00Z",
+    #   "top_users": ["alice", "bob", "carol"]
+    # }
+    query = """
+        SELECT jsonb_build_object(
+            'id', l.id,
+            'name', l.name,
+            'deadline', l.deadline,
+            'top_users', (
+                SELECT jsonb_agg(u.user_name)
+                FROM (
+                    SELECT DISTINCT ON (u.user_name) u.user_name
+                    FROM leaderboard.runs r
+                    JOIN leaderboard.submission s ON r.submission_id = s.id
+                    LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+                    WHERE s.leaderboard_id = l.id 
+                        AND NOT r.secret
+                        AND r.score IS NOT NULL 
+                        AND r.passed
+                    ORDER BY u.user_name, r.score ASC
+                    LIMIT 3
+                ) u
+            )
+        )
+        FROM leaderboard.leaderboard l
+        WHERE l.deadline > NOW()
+        ORDER BY l.deadline ASC;
+    """
+    with get_db_connection().cursor() as cur:
+        cur.execute(query)
+        leaderboards = [row[0] for row in cur.fetchall()]
+    
+    return render_template('index.html', 
+                         leaderboards=leaderboards,
+                         now=datetime.now(timezone.utc))
 
 def get_rankings(id: int, gpu_type: str, conn: psycopg2.connect):
     """
