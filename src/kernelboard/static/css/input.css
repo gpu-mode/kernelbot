@@ -20,6 +20,9 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   h2 {
     @apply text-2xl mt-4 font-bold text-dark;
   }
+  h3 {
+    @apply text-xl mt-4 font-bold text-dark;
+  }
 }
 
 @layer components {

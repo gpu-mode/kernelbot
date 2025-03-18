@@ -49,6 +49,28 @@ def to_time_left(deadline: datetime) -> str | None:
     hours = delta.seconds // 3600
     return f"{days} days {hours} hours"
 
+@app.template_filter('format_datetime')
+def format_datetime(dt: datetime) -> str:
+    """
+    Common formatting for datetime objects.
+    """
+    return dt.strftime('%Y-%m-%d %H:%M UTC')
+
+@app.template_filter('decorate_rank')
+def decorate_rank(rank: int) -> str:
+    """
+    Adds a medal emoji to ranks 1, 2, and 3.
+    """
+    emoji = ""
+    if rank == 1:
+        emoji = "🥇"
+    elif rank == 2:
+        emoji = "🥈"
+    elif rank == 3:
+        emoji = "🥉"
+
+    return f"{rank} {emoji}"
+
 # Load environment variables
 dotenv.load_dotenv()
 
@@ -72,6 +94,50 @@ def index():
         app.logger.error(f"Database error: {e}")
         return render_template('500.html'), 500
 
+def get_rankings(id: int, gpu_type: str, conn: psycopg2.connect):
+    """
+    For the given leaderboard id and GPU type, get the submissions ordered by
+    score.
+
+    Returns:
+        Tuple of (file_name, user_name, submission_time, score, rank)
+    """
+
+    query = """
+        WITH best_submissions AS (
+            SELECT DISTINCT ON (u.user_name) s.file_name, u.user_name,
+                s.submission_time, r.score
+            FROM leaderboard.runs r
+            JOIN leaderboard.submission s ON r.submission_id = s.id
+            JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+            LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+            WHERE l.id = %s AND r.runner = %s AND NOT r.secret
+                    AND r.score IS NOT NULL AND r.passed
+            ORDER BY u.user_name, r.score ASC
+        )
+        SELECT file_name, user_name, submission_time, score,
+            RANK() OVER (ORDER BY score ASC) AS rank
+        FROM best_submissions
+        ORDER BY score ASC;
+    """
+
+    result = []
+
+    with conn.cursor() as cur:
+        cur.execute(query, (id, gpu_type))
+        rankings = cur.fetchall()
+
+        for ranking in rankings:
+            file_name = ranking[0]
+            user_name = ranking[1]
+            submission_time = ranking[2]
+            score = ranking[3]
+            rank = ranking[4]
+
+            result.append((file_name, user_name, submission_time, score, rank))
+                
+    return result
+
 @app.route('/leaderboard/<int:id>')
 def leaderboard(id: int):
     # Query the database for the specific leaderboard
@@ -87,13 +153,21 @@ def leaderboard(id: int):
         GROUP BY l.id, l.name, l.deadline, l.task
     """
 
+    gpu_types = []
+    rankings = [] # list of rankings for each gpu type
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(query, (id,))
             result = cur.fetchone()
-            
-    if result is None:
-        abort(404)
+        
+        if result is None:
+            abort(404)
+
+        gpu_types = result[5]
+        
+        for gpu_type in gpu_types:
+            rankings.append(get_rankings(id, gpu_type, conn))
 
     name = result[0]
 
@@ -121,7 +195,8 @@ def leaderboard(id: int):
                          lang=lang,
                          gpu_types=gpu_types,
                          description=description,
-                         reference=reference)
+                         reference=reference,
+                         rankings=rankings)
 
 @app.route('/coming-soon')
 def coming_soon():

@@ -14,9 +14,9 @@
         <h2>Deadline</h2>
         <p>
             {% if time_left != None %}
-                {{ time_left }} ({{ deadline.strftime('%Y-%m-%d %H:%M UTC') }})
+                {{ time_left }} ({{ deadline|format_datetime }})
             {% else %}
-                {{ deadline.strftime('%Y-%m-%d %H:%M UTC') }}
+                {{ deadline|format_datetime }}
             {% endif %}
         </p>
     </div>
@@ -28,7 +28,7 @@
 
     <div>
         <h2>GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
-        <p>{{ gpu_types|join(', ') if gpu_types|length > 0 else '' }}</p>
+        <p>{{ gpu_types|join(', ') if gpu_types|length > 0 else 'none' }}</p>
     </div>
 
     <div>
@@ -40,5 +40,42 @@
         <h2>Reference Implementation</h2>
         <pre class="code-block"><code>{{ reference }}</code></pre>
     </div>
+
+    {# If there are rankings, show rankings table/s. #}
+    {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
+
+    {% if has_rankings %}
+        <h2>Rankings</h2>
+
+        {% for i in range(gpu_types|length) %}
+            {# Only show the table if there are rankings for this GPU type. #}
+            {% if rankings[i]|length > 0 %}
+                <h3>{{ gpu_types[i] }}</h3>
+
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submission Time</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for row in rankings[i] %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ row[4]|decorate_rank }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ row[1] }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ "%.9f"|format(row[3]) }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ row[2]|format_datetime }}</td> <!-- TODO pretty print date -->
+                                <td class="px-6 py-4 font-mono">{{ row[0] }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
 </div>
 {% endblock %} 
