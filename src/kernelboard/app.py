@@ -32,7 +32,7 @@ def to_color(name: str) -> str:
     return colors[hash % len(colors)]
 
 @app.template_filter('to_time_left')
-def to_time_left(deadline: str) -> str | None:
+def to_time_left(deadline: str | datetime) -> str | None:
     """
     Calculate time left until deadline.
 
@@ -40,10 +40,13 @@ def to_time_left(deadline: str) -> str | None:
         - formatted string if deadline is in the future
         - None if deadline has passed
     """
-    try:
-        d = datetime.fromisoformat(deadline)
-    except ValueError:
-        return None
+    if isinstance(deadline, str):
+        try:
+            d = datetime.fromisoformat(deadline)
+        except ValueError:
+            return None
+    else:
+        d = deadline
 
     now = datetime.now(timezone.utc)
 
