@@ -36,10 +36,19 @@
         <p class="whitespace-pre-wrap">{{ description }}</p>
     </div>
 
-    <div>
-        <h2>Reference Implementation</h2>
-        <pre class="code-block"><code>{{ reference }}</code></pre>
+    <div class="relative">
+        <div class="flex items-center justify-between mb-2">
+            <h2>Reference Implementation</h2>
+            <button onclick="toggleCode()" class="text-sm text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-300 rounded">
+                <span id="expand-button">Show more ▽</span>
+                <span id="collapse-button" class="hidden">Show less △</span>
+            </button>
+        </div>
+        <pre class="code-block transition-all duration-200 border border-gray-200 rounded-md scrollbar-none" style="max-height: 200px; overflow-x: auto; overflow-y: hidden;" id="code-container"><code>{{ reference }}</code></pre>
+        <div id="fade-overlay" class="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
     </div>
+
+    <script src="{{ url_for('static', filename='js/code_toggle.js') }}"></script>
 
     {# If there are rankings, show rankings table/s. #}
     {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
