@@ -81,8 +81,28 @@ def decorate_rank(rank: int) -> str:
 def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
     """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
     medals = ["🥇", "🥈", "🥉"]
-    return [(f"{medals[i]}{user['user_name']}", f"{user['score'] * 1_000_000:.2e}μs")
+    results = [(f"{medals[i]}{user['user_name']}", f"{user['score'] * 1_000_000:.2e}μs")
             for i, user in enumerate(users[:3])]
+
+    # Pad with empty rows until we have 3 total.
+    while len(results) < 3:
+        results.append(("", ""))
+
+    return results
+
+@app.template_filter('select_gpu_type')
+def select_gpu_type(top_users_by_gpu: dict) -> tuple[str, list]:
+    """
+    Select the highest priority GPU type that has data.
+    Returns tuple of (gpu_type, users) or None if no data available.
+    """
+    priority = ['H100', 'B200', 'A100', 'L4', 'T4']
+    
+    for gpu_type in priority:
+        if top_users_by_gpu.get(gpu_type):
+            return (gpu_type, top_users_by_gpu[gpu_type])
+            
+    return (None, None)
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -95,41 +115,62 @@ def index():
     # Get a list of JSON objects like the following to build the active
     # leaderboard tiles:
     # {
-    #   "id": 42,
-    #   "name": "prefix-sum",
-    #   "deadline": "2025-04-29T17:00:00Z",
-    #   "top_users": ["alice", "bob", "carol"]
-    # }
+    # "id": 339,
+    # "name": "conv2d",
+    # "deadline": "2025-04-29T17:00:00-07:00",
+    # "top_users_by_gpu": {
+    #     "L4": [
+    #         {
+    #             "rank": 1,
+    #             "score": 0.123
+    #             "user_name": "alice"
+    #         }
+    #         ],
+    #         "T4": ...
+    # This query has unfortunately gotten too complex, and should be refactored.
     query = """
         SELECT jsonb_build_object(
             'id', l.id,
             'name', l.name,
             'deadline', l.deadline,
-            'top_users', (
-                SELECT jsonb_agg(top.user_data)
+            'top_users_by_gpu', (
+                SELECT jsonb_object_agg(runner, user_data)
                 FROM (
-                    WITH best_submissions AS (
-                        SELECT DISTINCT ON (u.user_name) 
-                            jsonb_build_object(
-                                'user_name', u.user_name,
-                                'score', r.score,
-                                'rank', RANK() OVER (ORDER BY r.score ASC)
-                            ) as user_data
-                        FROM leaderboard.runs r
-                        JOIN leaderboard.submission s ON r.submission_id = s.id
-                        LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
-                        WHERE s.leaderboard_id = l.id 
-                            AND NOT r.secret
-                            AND r.score IS NOT NULL 
-                            AND r.passed
-                        ORDER BY u.user_name, r.score ASC
-                    )
-                    SELECT user_data
-                    FROM best_submissions
-                    WHERE (user_data->>'rank')::int <= 3
-                    ORDER BY (user_data->>'score')::float ASC
-                    LIMIT 3
-                ) top
+                    SELECT r.runner,
+                        (SELECT jsonb_agg(top.user_data)
+                         FROM (
+                             WITH best_submissions AS (
+                                 SELECT DISTINCT ON (u.user_name) 
+                                     jsonb_build_object(
+                                         'user_name', u.user_name,
+                                         'score', r2.score,
+                                         'rank', RANK() OVER (ORDER BY r2.score ASC)
+                                     ) as user_data
+                                 FROM leaderboard.runs r2
+                                 JOIN leaderboard.submission s ON r2.submission_id = s.id
+                                 LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+                                 WHERE s.leaderboard_id = l.id 
+                                     AND NOT r2.secret
+                                     AND r2.score IS NOT NULL 
+                                     AND r2.passed
+                                     AND r2.runner = r.runner
+                                 ORDER BY u.user_name, r2.score ASC
+                             )
+                             SELECT user_data
+                             FROM best_submissions
+                             WHERE (user_data->>'rank')::int <= 3
+                             ORDER BY (user_data->>'score')::float ASC
+                             LIMIT 3
+                         ) top
+                        ) as user_data
+                    FROM (SELECT DISTINCT runner 
+                          FROM leaderboard.runs 
+                          WHERE submission_id IN (
+                              SELECT id FROM leaderboard.submission 
+                              WHERE leaderboard_id = l.id
+                          )
+                    ) r
+                ) gpu_data
             )
         )
         FROM leaderboard.leaderboard l
