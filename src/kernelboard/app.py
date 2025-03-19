@@ -81,8 +81,13 @@ def decorate_rank(rank: int) -> str:
 def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
     """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
     medals = ["🥇", "🥈", "🥉"]
-    results = [(f"{medals[i]}{user['user_name']}", f"{user['score'] * 1_000_000:.2e}μs")
-            for i, user in enumerate(users[:3])]
+
+    results = [
+        (
+            f"{medals[i]}{user['user_name']}",
+            f"{user['score'] * 1_000_000:.3f}μs"
+        )
+        for i, user in enumerate(users[:3])]
 
     # Pad with empty rows until we have 3 total.
     while len(results) < 3:
