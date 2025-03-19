@@ -95,20 +95,32 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .leaderboard-grid {
     @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
   }
+  .leaderboard-tile-link {
+    @apply block hover:no-underline h-full;
+  }
   .leaderboard-tile {
-    @apply p-4 bg-white rounded-lg border border-neutral hover:border-secondary transition-colors;
+    @apply p-4 bg-white rounded-lg h-full border border-neutral hover:border-secondary transition-colors;
   }
   .leaderboard-tile-name {
     @apply font-mono text-lg mb-2 text-dark;
   }
-  .leaderboard-score-box {
-    @apply bg-white/10 rounded-lg p-3 border border-neutral/50;
-  }
-  .leaderboard-score-box-chip {
-    @apply inline-block px-2 py-0.5 text-sm bg-gray-100 text-gray-700 rounded-full;
-  }
   .leaderboard-content {
     @apply text-dark/70;
+  }
+  .score-box {
+    @apply bg-white/10 rounded-lg p-3 space-y-1 border border-neutral/50;
+  }
+  .score-row {
+    @apply flex justify-between;
+  }
+  .score {
+    @apply font-mono;
+  }
+  .chip-container {
+    @apply text-center mb-2;
+  }
+  .chip-span {
+    @apply inline-block px-2 py-0.5 text-sm bg-gray-100 text-gray-700 rounded-full;
   }
   .code-block {
     @apply bg-gray-100 p-4 rounded-md overflow-x-auto mt-4 mb-8;

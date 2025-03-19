@@ -854,7 +854,17 @@ h3 {
   }
 }
 
+.leaderboard-tile-link {
+  display: block;
+  height: 100%;
+}
+
+.leaderboard-tile-link:hover {
+  text-decoration-line: none;
+}
+
 .leaderboard-tile {
+  height: 100%;
   border-radius: 0.5rem;
   border-width: 1px;
   --tw-border-opacity: 1;
@@ -881,7 +891,17 @@ h3 {
   color: rgb(32 32 32 / var(--tw-text-opacity, 1));
 }
 
-.leaderboard-score-box {
+.leaderboard-content {
+  color: rgb(32 32 32 / 0.7);
+}
+
+.score-box > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
+}
+
+.score-box {
   border-radius: 0.5rem;
   border-width: 1px;
   border-color: rgb(201 201 201 / 0.5);
@@ -889,7 +909,21 @@ h3 {
   padding: 0.75rem;
 }
 
-.leaderboard-score-box-chip {
+.score-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.score {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.chip-container {
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.chip-span {
   display: inline-block;
   border-radius: 9999px;
   --tw-bg-opacity: 1;
@@ -902,10 +936,6 @@ h3 {
   line-height: 1.25rem;
   --tw-text-opacity: 1;
   color: rgb(55 65 81 / var(--tw-text-opacity, 1));
-}
-
-.leaderboard-content {
-  color: rgb(32 32 32 / 0.7);
 }
 
 .code-block {
@@ -973,10 +1003,6 @@ h3 {
   position: static;
 }
 
-.mb-2 {
-  margin-bottom: 0.5rem;
-}
-
 .mt-4 {
   margin-top: 1rem;
 }
@@ -997,10 +1023,6 @@ h3 {
   height: auto;
 }
 
-.h-full {
-  height: 100%;
-}
-
 .max-w-full {
   max-width: 100%;
 }
@@ -1015,12 +1037,6 @@ h3 {
   margin-left: calc(1rem * calc(1 - var(--tw-space-x-reverse)));
 }
 
-.space-y-1 > :not([hidden]) ~ :not([hidden]) {
-  --tw-space-y-reverse: 0;
-  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
-}
-
 .whitespace-pre-wrap {
   white-space: pre-wrap;
 }
@@ -1028,10 +1044,6 @@ h3 {
 .bg-white {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
-}
-
-.text-center {
-  text-align: center;
 }
 
 .font-mono {
@@ -1044,8 +1056,4 @@ h3 {
 
 .text-dark\/60 {
   color: rgb(32 32 32 / 0.6);
-}
-
-.hover\:no-underline:hover {
-  text-decoration-line: none;
 }
