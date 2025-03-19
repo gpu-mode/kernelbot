@@ -997,6 +997,10 @@ h3 {
   height: auto;
 }
 
+.h-full {
+  height: 100%;
+}
+
 .max-w-full {
   max-width: 100%;
 }
@@ -1040,4 +1044,8 @@ h3 {
 
 .text-dark\/60 {
   color: rgb(32 32 32 / 0.6);
+}
+
+.hover\:no-underline:hover {
+  text-decoration-line: none;
 }

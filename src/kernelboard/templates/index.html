@@ -25,38 +25,40 @@
     
     <div class="leaderboard-grid">
         {% for leaderboard in leaderboards %}
-            <div class="leaderboard-tile">
-                <div class="leaderboard-tile-name">
-                    {% set color = leaderboard['name']|to_color %}
-                    <div class="colored-square" style="background-color: {{ color }}"></div>
-                    {{ leaderboard['name'] }}
-                </div>
-                
-                <div class="leaderboard-content">
-                    {{ leaderboard['deadline']|to_time_left }} remaining
-                </div>
+            <a href="{{ url_for('leaderboard', id=leaderboard['id']) }}" class="block hover:no-underline h-full">
+                <div class="leaderboard-tile h-full">
+                    <div class="leaderboard-tile-name">
+                        {% set color = leaderboard['name']|to_color %}
+                        <div class="colored-square" style="background-color: {{ color }}"></div>
+                        {{ leaderboard['name'] }}
+                    </div>
 
-                {% set gpu_type, top_users = leaderboard.top_users_by_gpu | select_gpu_type %}
-                {% if top_users %}
-                    <div class="leaderboard-content mt-4">
-                        <div class="leaderboard-score-box">
-                            <div class="space-y-1">
-                                <div class="text-center mb-2">
-                                    <span class="leaderboard-score-box-chip">
-                                        {{ gpu_type }}
-                                    </span>
-                                </div>
-                                {% for name, score in top_users|add_medals %}
-                                    <div class="flex justify-between">
-                                        <span>{{ name or "&nbsp;"|safe }}</span>
-                                        <span class="font-mono">{{ score or "&nbsp;"|safe }}</span>
+                    <div class="leaderboard-content">
+                        {{ leaderboard['deadline']|to_time_left }} remaining
+                    </div>
+
+                    {% set gpu_type, top_users = leaderboard.top_users_by_gpu | select_gpu_type %}
+                    {% if top_users %}
+                        <div class="leaderboard-content mt-4">
+                            <div class="leaderboard-score-box">
+                                <div class="space-y-1">
+                                    <div class="text-center mb-2">
+                                        <span class="leaderboard-score-box-chip">
+                                            {{ gpu_type }}
+                                        </span>
                                     </div>
-                                {% endfor %}
+                                    {% for name, score in top_users|add_medals %}
+                                        <div class="flex justify-between">
+                                            <span>{{ name or "&nbsp;"|safe }}</span>
+                                            <span class="font-mono">{{ score or "&nbsp;"|safe }}</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                {% endif %}
-            </div>
+                    {% endif %}
+                </div>
+            </a>
         {% endfor %}
     </div>
 
