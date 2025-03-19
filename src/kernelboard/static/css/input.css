@@ -101,6 +101,9 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .leaderboard-tile-name {
     @apply font-mono text-lg mb-2 text-dark;
   }
+  .leaderboard-score-box {
+    @apply bg-white/10 rounded-lg p-3 border border-neutral/50;
+  }
   .leaderboard-content {
     @apply text-dark/70;
   }

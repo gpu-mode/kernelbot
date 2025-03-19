@@ -37,8 +37,17 @@
                 </div>
 
                 {% if leaderboard['top_users'] %}
-                    <div class="leaderboard-content">
-                        {{ leaderboard['top_users']|join(', ') }}
+                    <div class="leaderboard-content mt-4">
+                        <div class="leaderboard-score-box">
+                            <div class="space-y-1">
+                                {% for name, score in leaderboard['top_users']|add_medals %}
+                                    <div class="flex justify-between">
+                                        <span>{{ name }}</span>
+                                        <span class="font-mono">{{ score }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
                 {% endif %}
             </div>

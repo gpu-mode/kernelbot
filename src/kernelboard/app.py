@@ -77,6 +77,13 @@ def decorate_rank(rank: int) -> str:
 
     return f"{rank} {emoji}"
 
+@app.template_filter('add_medals')
+def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
+    """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
+    medals = ["🥇", "🥈", "🥉"]
+    return [(f"{medals[i]}{user['user_name']}", f"{user['score'] * 1_000_000:.2e}μs")
+            for i, user in enumerate(users[:3])]
+
 # Load environment variables
 dotenv.load_dotenv()
 
@@ -99,19 +106,30 @@ def index():
             'name', l.name,
             'deadline', l.deadline,
             'top_users', (
-                SELECT jsonb_agg(u.user_name)
+                SELECT jsonb_agg(top.user_data)
                 FROM (
-                    SELECT DISTINCT ON (u.user_name) u.user_name
-                    FROM leaderboard.runs r
-                    JOIN leaderboard.submission s ON r.submission_id = s.id
-                    LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
-                    WHERE s.leaderboard_id = l.id 
-                        AND NOT r.secret
-                        AND r.score IS NOT NULL 
-                        AND r.passed
-                    ORDER BY u.user_name, r.score ASC
+                    WITH best_submissions AS (
+                        SELECT DISTINCT ON (u.user_name) 
+                            jsonb_build_object(
+                                'user_name', u.user_name,
+                                'score', r.score,
+                                'rank', RANK() OVER (ORDER BY r.score ASC)
+                            ) as user_data
+                        FROM leaderboard.runs r
+                        JOIN leaderboard.submission s ON r.submission_id = s.id
+                        LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+                        WHERE s.leaderboard_id = l.id 
+                            AND NOT r.secret
+                            AND r.score IS NOT NULL 
+                            AND r.passed
+                        ORDER BY u.user_name, r.score ASC
+                    )
+                    SELECT user_data
+                    FROM best_submissions
+                    WHERE (user_data->>'rank')::int <= 3
+                    ORDER BY (user_data->>'score')::float ASC
                     LIMIT 3
-                ) u
+                ) top
             )
         )
         FROM leaderboard.leaderboard l

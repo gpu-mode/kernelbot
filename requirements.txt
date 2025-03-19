@@ -12,6 +12,7 @@ pre-commit
 better_profanity
 flask
 mmh3
+pytest
 
 # api
 fastapi[all] # install all to avoid random bugs
