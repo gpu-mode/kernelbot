@@ -4,33 +4,35 @@
 
 {% block content %}
 <div class="content-stack">
-    <h1 class="font-mono">
+    <h1 class="font-mono text-3xl font-bold flex items-center gap-3 mb-6">
         {% set color = name|to_color %}
-        <div class="colored-square" style="background-color: {{ color }}"></div>
+        <div class="colored-square shadow-md" style="background-color: {{ color }}"></div>
         {{ name }}
     </h1>
     
-    <div>
-        <h2>Deadline</h2>
-        <p>
-            {% if time_left != None %}
-                {{ time_left }} ({{ deadline }})
-            {% else %}
-                {{ deadline }}
-            {% endif %}
-        </p>
-    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-xl font-semibold mb-2">Deadline</h2>
+            <p class="text-gray-800">
+                {% if time_left != None %}
+                    <span class="font-medium">{{ time_left }}</span> ({{ deadline|format_datetime }})
+                {% else %}
+                    {{ deadline }}
+                {% endif %}
+            </p>
+        </div>
 
-    <div>
-        <h2>Language</h2>
-        <p>{{ lang }}</p>
-    </div>
+        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-xl font-semibold mb-2">Language</h2>
+            <p class="text-gray-800">{{ lang }}</p>
+        </div>
 
-    <div>
-        <h2>GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
-        <p>{{ gpu_types|join(', ') if gpu_types|length > 0 else 'None' }}</p>
+        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-xl font-semibold mb-2">GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
+            <p class="text-gray-800">{{ gpu_types|join(', ') if gpu_types|length > 0 else 'None' }}</p>
+        </div>
     </div>
-
+    
     <div>
         <h2>Description</h2>
         <p class="whitespace-pre-wrap">{{ description }}</p>
