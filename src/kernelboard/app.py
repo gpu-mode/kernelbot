@@ -59,10 +59,13 @@ def to_time_left(deadline: str | datetime) -> str | None:
     return f"{days} days {hours} hours"
 
 @app.template_filter('format_datetime')
-def format_datetime(dt: datetime) -> str:
+def format_datetime(dt: datetime | str) -> str:
     """
     Common formatting for datetime objects.
     """
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt)
+
     return dt.strftime('%Y-%m-%d %H:%M UTC')
 
 @app.template_filter('decorate_rank')
@@ -80,6 +83,11 @@ def decorate_rank(rank: int) -> str:
 
     return f"{rank} {emoji}"
 
+@app.template_filter('format_score')
+def format_score(score: float) -> str:
+    """Format score as a string with 3 decimal places."""
+    return f"{score * 1_000_000:.3f}μs"
+
 @app.template_filter('add_medals')
 def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
     """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
@@ -88,7 +96,7 @@ def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
     results = [
         (
             f"{medals[i]}{user['user_name']}",
-            f"{user['score'] * 1_000_000:.3f}μs"
+            format_score(user['score'])
         )
         for i, user in enumerate(users[:3])]
 
@@ -239,55 +247,123 @@ def get_rankings(id: int, gpu_type: str, conn: psycopg2.connect):
 
 @app.route('/leaderboard/<int:id>')
 def leaderboard(id: int):
-    # Query the database for the specific leaderboard
+    # TODO Replace multiple %s parameters with a single named parameter.
     query = """
-        SELECT name, deadline, 
-            task->>'lang' as lang,
-            task->>'description' as description,
-            task->'files'->>'reference.py' as reference,
-            ARRAY_AGG(gt.gpu_type) as gpu_types
-        FROM leaderboard.leaderboard l
-        LEFT JOIN leaderboard.gpu_type gt ON gt.leaderboard_id = l.id
-        WHERE l.id = %s
-        GROUP BY l.id, l.name, l.deadline, l.task
+        WITH
+        
+        -- Basic info about the leaderboard.
+        leaderboard_info AS (
+            SELECT
+                name,
+                deadline,
+                task->>'lang' AS lang,
+                task->>'description' AS description,
+                task->'files'->>'reference.py' AS reference
+            FROM leaderboard.leaderboard
+            WHERE id = %s
+        ),
+        
+        -- All the different GPU types for this leaderboard.
+        gpu_types AS (
+            SELECT DISTINCT gpu_type
+            FROM leaderboard.gpu_type
+            WHERE leaderboard_id = %s
+        ),
+        
+        -- All the runs on this leaderboard. For each user and GPU type, the that user's
+        -- runs on that GPU type are ranked by score.
+        ranked_runs AS (
+            SELECT r.runner AS runner,
+                u.user_name AS user_name,
+                r.score AS score,
+                s.submission_time AS submission_time,
+                s.file_name AS file_name,
+                RANK() OVER (PARTITION BY r.runner, u.id ORDER BY r.score ASC) AS rank
+            FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+            WHERE NOT r.secret AND r.score IS NOT NULL AND r.passed AND s.leaderboard_id = %s
+        ),
+        
+        -- From ranked_runs, keep only the top run per user.
+        top_runs AS (SELECT * FROM ranked_runs WHERE rank = 1)
+        
+        SELECT jsonb_build_object(
+            'rankings', (SELECT jsonb_object_agg(g.gpu_type, (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'user_name', r.user_name,
+                        'score', r.score,
+                        'submission_time', r.submission_time,
+                        'file_name', r.file_name
+                    )
+                    ORDER BY r.score ASC
+                )
+                FROM top_runs r WHERE r.runner = g.gpu_type))),
+        
+            'leaderboard', (SELECT jsonb_build_object(
+                'name', name,
+                'deadline', deadline,
+                'lang', lang,
+                'description', description,
+                'reference', reference,
+                'gpu_types', (SELECT jsonb_agg(gpu_type) FROM gpu_types)
+            ) FROM leaderboard_info)
+        ) AS result FROM (SELECT gpu_type FROM gpu_types) g;
     """
-
-    gpu_types = []
-    rankings = [] # list of rankings for each gpu type
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (id,))
+            # TODO Pass the leaderboard ID three times as required by the query
+            cur.execute(query, (id, id, id))
             result = cur.fetchone()
         
-        if result is None:
+        if result is None or not result[0]:
             abort(404)
-
-        gpu_types = result[5]
+            
+        # Parse the JSON result
+        data = result[0]
         
-        for gpu_type in gpu_types:
-            rankings.append(get_rankings(id, gpu_type, conn))
-
-    name = result[0]
-
-    deadline = result[1]
+    # Extract leaderboard info
+    leaderboard_data = data['leaderboard']
+    name = leaderboard_data['name']
+    deadline = leaderboard_data['deadline']
     time_left = to_time_left(deadline)
-
-    lang = result[2]
+    
+    lang = leaderboard_data['lang']
     if lang == 'py':
-        lang = 'Python'        
-
-    description = result[3]
+        lang = 'Python'
+        
+    description = leaderboard_data['description']
     if description is not None:
         description = description.replace('\\n', '\n')
-
-    reference = result[4]
+        
+    reference = leaderboard_data['reference']
     if reference is not None:
         reference = reference.replace('\\n', '\n')
+        
+    gpu_types = leaderboard_data['gpu_types']
+    gpu_types.sort()
 
-    gpu_types = result[5]
-
-    return render_template('leaderboard.html', 
+    # Extract and format rankings
+    rankings = {}
+    for gpu_type, ranking_ in data['rankings'].items():
+        # Format each entry with rank information
+        ranking = []
+        for i, entry in enumerate(ranking_):
+            rank = i + 1  # Assign rank based on order (entries are already sorted by score)
+            entry = (
+                entry['file_name'],
+                entry['user_name'],
+                entry['submission_time'],
+                entry['score'],
+                rank
+            )
+            ranking.append(entry)
+        if len(ranking) > 0:
+            rankings[gpu_type] = ranking
+    
+    return render_template('leaderboard.html',
                          name=name,
                          deadline=deadline,
                          time_left=time_left,

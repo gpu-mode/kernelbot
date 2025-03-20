@@ -14,9 +14,9 @@
         <h2>Deadline</h2>
         <p>
             {% if time_left != None %}
-                {{ time_left }} ({{ deadline|format_datetime }})
+                {{ time_left }} ({{ deadline }})
             {% else %}
-                {{ deadline|format_datetime }}
+                {{ deadline }}
             {% endif %}
         </p>
     </div>
@@ -42,10 +42,10 @@
     {% if has_rankings %}
         <h2>Rankings</h2>
 
-        {% for i in range(gpu_types|length) %}
+        {% for gpu_type, ranking in rankings.items() %}
             {# Only show the table if there are rankings for this GPU type. #}
-            {% if rankings[i]|length > 0 %}
-                <h3>{{ gpu_types[i] }}</h3>
+            {% if ranking|length > 0 %}
+                <h3>{{ gpu_type }}</h3>
 
                 <table class="ranking-table">
                     <thead class="ranking-table-header">
@@ -53,18 +53,18 @@
                             <th scope="col" class="ranking-table-header-cell">Rank</th>
                             <th scope="col" class="ranking-table-header-cell">User</th>
                             <th scope="col" class="ranking-table-header-cell">Score</th>
-                            <th scope="col" class="ranking-table-header-cell">Submission Time</th>
                             <th scope="col" class="ranking-table-header-cell">File Name</th>
+                            <th scope="col" class="ranking-table-header-cell">Submission Time</th>
                         </tr>
                     </thead>
                     <tbody class="ranking-table-row">
-                        {% for row in rankings[i] %}
+                        {% for row in ranking %}
                             <tr>
                                 <td>{{ row[4]|decorate_rank }}</td>
                                 <td>{{ row[1] }}</td>
-                                <td>{{ "%.9f"|format(row[3]) }}</td>
-                                <td>{{ row[2]|format_datetime }}</td> 
+                                <td>{{ row[3]|format_score }}</td>
                                 <td>{{ row[0] }}</td>
+                                <td>{{ row[2]|format_datetime }}</td> 
                             </tr>
                         {% endfor %}
                     </tbody>
