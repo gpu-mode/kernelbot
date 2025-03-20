@@ -36,11 +36,6 @@
         <p class="whitespace-pre-wrap">{{ description }}</p>
     </div>
 
-    <div>
-        <h2>Reference Implementation</h2>
-        <pre class="code-block"><code>{{ reference }}</code></pre>
-    </div>
-
     {# If there are rankings, show rankings table/s. #}
     {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
 
@@ -78,4 +73,10 @@
         {% endfor %}
     {% endif %}
 </div>
+
+<div>
+    <h2>Reference Implementation</h2>
+    <pre class="code-block"><code>{{ reference }}</code></pre>
+</div>
+
 {% endblock %} 
