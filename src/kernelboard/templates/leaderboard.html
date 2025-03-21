@@ -12,7 +12,7 @@
     
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 class="text-xl font-semibold mb-2">Deadline</h2>
+            <h2 style="margin-top: 0; padding-top: 0;">Deadline</h2>
             <p class="text-gray-800">
                 {% if time_left != None %}
                     <span class="font-medium">{{ time_left }}</span> ({{ deadline|format_datetime }})
@@ -23,62 +23,175 @@
         </div>
 
         <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 class="text-xl font-semibold mb-2">Language</h2>
+            <h2 style="margin-top: 0; padding-top: 0;">Language</h2>
             <p class="text-gray-800">{{ lang }}</p>
         </div>
 
         <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 class="text-xl font-semibold mb-2">GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
+            <h2 style="margin-top: 0; padding-top: 0;">GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
             <p class="text-gray-800">{{ gpu_types|join(', ') if gpu_types|length > 0 else 'None' }}</p>
         </div>
     </div>
     
     <div>
-        <h2>Description</h2>
-        <p class="whitespace-pre-wrap">{{ description }}</p>
+        <h2 class="text-2xl font-bold mb-3">Description</h2>
+        <div class="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p class="whitespace-pre-wrap text-gray-800 leading-relaxed">{{ description }}</p>
+        </div>
     </div>
+
+    <div>
+        <h2 class="flex items-center gap-2">
+            Reference Implementation
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+        </h2>
+        <div class="relative">
+            <div class="absolute top-2 right-2 flex space-x-2">
+                <button id="toggleCodeBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded text-sm">Expand</button>
+                <button onclick="copyCode()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded text-sm">Copy</button>
+            </div>
+            <pre id="codeBlock" class="code-block" style="background-color: #f5f5f5; padding: 1rem; border-radius: 0.375rem; overflow-x: auto; max-height: 200px; overflow-y: hidden;"><code>{{ reference }}</code></pre>
+        </div>
+    </div>
+
+    <script>
+    // Simple implementation with no dependencies on CSS classes
+    document.addEventListener('DOMContentLoaded', function() {
+        const codeBlock = document.getElementById('codeBlock');
+        const toggleBtn = document.getElementById('toggleCodeBtn');
+        
+        let isExpanded = false;
+        
+        if (toggleBtn && codeBlock) {
+            toggleBtn.addEventListener('click', function() {
+                if (isExpanded) {
+                    // Collapse
+                    codeBlock.style.maxHeight = '200px';
+                    codeBlock.style.overflowY = 'hidden';
+                    toggleBtn.textContent = 'Expand';
+                    isExpanded = false;
+                } else {
+                    // Expand
+                    codeBlock.style.maxHeight = 'none';
+                    codeBlock.style.overflowY = 'auto';
+                    toggleBtn.textContent = 'Hide';
+                    isExpanded = true;
+                }
+            });
+        }
+    });
+
+    function copyCode() {
+        const codeElement = document.querySelector('.code-block code');
+        const textArea = document.createElement('textarea');
+        textArea.value = codeElement.textContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const button = document.querySelector('button[onclick="copyCode()"]');
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        setTimeout(() => {
+            button.textContent = originalText;
+        }, 2000);
+    }
+    </script>
 
     {# If there are rankings, show rankings table/s. #}
     {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
 
     {% if has_rankings %}
-        <h2>Rankings</h2>
+        <h2 class="border-b pb-2">Rankings</h2>
 
-        {% for gpu_type, ranking in rankings.items() %}
-            {# Only show the table if there are rankings for this GPU type. #}
-            {% if ranking|length > 0 %}
-                <h3>{{ gpu_type }}</h3>
+        <div class="ranking-container">
+            {% for gpu_type, ranking in rankings.items() %}
+                {% if ranking|length > 0 %}
+                    <div class="ranking-section" id="section-{{ gpu_type|lower|replace(' ', '-') }}">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3>{{ gpu_type }}</h3>
+                            {% if ranking|length > 3 %}
+                                <button class="toggle-rankings-btn" 
+                                        onclick="toggleRankings('{{ gpu_type|lower|replace(' ', '-') }}', {{ ranking|length }})">
+                                    Show All ({{ ranking|length }})
+                                </button>
+                            {% endif %}
+                        </div>
 
-                <table class="ranking-table">
-                    <thead class="ranking-table-header">
-                        <tr>
-                            <th scope="col" class="ranking-table-header-cell">Rank</th>
-                            <th scope="col" class="ranking-table-header-cell">User</th>
-                            <th scope="col" class="ranking-table-header-cell">Score</th>
-                            <th scope="col" class="ranking-table-header-cell">File Name</th>
-                            <th scope="col" class="ranking-table-header-cell">Submission Time</th>
-                        </tr>
-                    </thead>
-                    <tbody class="ranking-table-row">
-                        {% for row in ranking %}
-                            <tr>
-                                <td>{{ row[4]|decorate_rank }}</td>
-                                <td>{{ row[1] }}</td>
-                                <td>{{ row[3]|format_score }}</td>
-                                <td>{{ row[0] }}</td>
-                                <td>{{ row[2]|format_datetime }}</td> 
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% endif %}
-        {% endfor %}
+                        <table class="ranking-table">
+                            <tbody class="ranking-table-row">
+                                {% for row in ranking %}
+                                    {% set user = row[0] %}
+                                    {% set score = row[1] %}
+                                    {% set file_name = row[2] %}
+                                    {% set rank = row[3] %}
+                                    <tr class="rank-row {% if rank > 3 %}hidden-row{% endif %}" data-rank="{{ rank }}">
+                                        <td>
+                                            {% if rank == 1 %}
+                                                <span class="font-bold">{{ user }} <span class="medal gold-medal">🥇</span></span>
+                                            {% elif rank == 2 %}
+                                                <span class="font-bold">{{ user }} <span class="medal silver-medal">🥈</span></span>
+                                            {% elif rank == 3 %}
+                                                <span class="font-bold">{{ user }} <span class="medal bronze-medal">🥉</span></span>
+                                            {% else %}
+                                                {{ user }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="font-mono">{{ score|format_score }}</td>
+                                        <td class="font-mono">{{ file_name }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <script>
+        // Simple, direct JavaScript function that will fix the issue
+        function toggleRankings(gpuId, totalCount) {
+            const section = document.getElementById('section-' + gpuId);
+            const button = section.querySelector('.toggle-rankings-btn');
+            const rows = section.querySelectorAll('tr.rank-row');
+            
+            // Check if we're currently showing all (button text contains "Show Top 3")
+            const isShowingAll = button.textContent.includes('Show Top 3');
+            
+            // Toggle visibility based on current state
+            rows.forEach(row => {
+                const rank = parseInt(row.getAttribute('data-rank'));
+                if (rank > 3) {
+                    if (isShowingAll) {
+                        // Hide rows beyond top 3
+                        row.classList.add('hidden-row');
+                    } else {
+                        // Show all rows
+                        row.classList.remove('hidden-row');
+                    }
+                }
+            });
+            
+            // Update button text
+            if (isShowingAll) {
+                button.textContent = `Show All (${totalCount})`;
+            } else {
+                button.textContent = 'Show Top 3';
+            }
+        }
+        </script>
+    {% else %}
+        <div class="mt-8 mb-8 p-8 border-2 border-dashed border-gray-300 rounded-lg text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <h3 class="text-xl font-medium text-gray-700 mb-2">No submissions yet</h3>
+            <p class="text-gray-500">Be the first to submit a solution for this challenge!</p>
+        </div>
     {% endif %}
-</div>
-
-<div>
-    <h2>Reference Implementation</h2>
-    <pre class="code-block"><code>{{ reference }}</code></pre>
 </div>
 
 {% endblock %} 

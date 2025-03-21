@@ -68,26 +68,13 @@ def format_datetime(dt: datetime | str) -> str:
 
     return dt.strftime('%Y-%m-%d %H:%M UTC')
 
-@app.template_filter('decorate_rank')
-def decorate_rank(rank: int) -> str:
-    """
-    Adds a medal emoji to ranks 1, 2, and 3.
-    """
-    emoji = ""
-    if rank == 1:
-        emoji = "🥇"
-    elif rank == 2:
-        emoji = "🥈"
-    elif rank == 3:
-        emoji = "🥉"
-
-    return f"{rank} {emoji}"
-
 @app.template_filter('format_score')
 def format_score(score: float) -> str:
     """Format score as a string with 3 decimal places."""
     return f"{score * 1_000_000:.3f}μs"
 
+# TODO: This is confusing. It's used in index.html. It's not clear what is in
+#       the map parameter. It mixes display login into app.py.
 @app.template_filter('add_medals')
 def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
     """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
@@ -106,8 +93,9 @@ def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
 
     return results
 
-@app.template_filter('select_gpu_type')
-def select_gpu_type(top_users_by_gpu: dict) -> tuple[str, list]:
+# TODO: Another confusing function. It's used in index.html.
+@app.template_filter('select_highest_priority_gpu')
+def select_highest_priority_gpu(top_users_by_gpu: dict) -> tuple[str, list]:
     """
     Select the highest priority GPU type that has data.
     Returns tuple of (gpu_type, users) or None if no data available.
@@ -294,7 +282,6 @@ def leaderboard(id: int):
                     jsonb_build_object(
                         'user_name', r.user_name,
                         'score', r.score,
-                        'submission_time', r.submission_time,
                         'file_name', r.file_name
                     )
                     ORDER BY r.score ASC
@@ -353,10 +340,9 @@ def leaderboard(id: int):
         for i, entry in enumerate(ranking_):
             rank = i + 1  # Assign rank based on order (entries are already sorted by score)
             entry = (
-                entry['file_name'],
                 entry['user_name'],
-                entry['submission_time'],
                 entry['score'],
+                entry['file_name'],
                 rank
             )
             ranking.append(entry)
