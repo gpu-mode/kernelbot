@@ -6,16 +6,16 @@
 <script src="{{ url_for('static', filename='js/leaderboard.js') }}"></script>
 
 <div class="content-stack">
-    <h1 class="font-mono text-3xl font-bold flex items-center gap-3 mb-6">
+    <h1 class="font-mono">
         {% set color = name|to_color %}
         <div class="colored-square shadow-md" style="background-color: {{ color }}"></div>
         {{ name }}
     </h1>
     
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 style="margin-top: 0; padding-top: 0;">Deadline</h2>
-            <p class="text-gray-800">
+    <div class="leaderboard-grid">
+        <div class="leaderboard-card">
+            <h2>Deadline</h2>
+            <p>
                 {% if time_left != None %}
                     <span class="font-medium">{{ time_left }}</span> ({{ deadline|format_datetime }})
                 {% else %}
@@ -24,27 +24,27 @@
             </p>
         </div>
 
-        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 style="margin-top: 0; padding-top: 0;">Language</h2>
-            <p class="text-gray-800">{{ lang }}</p>
+        <div class="leaderboard-card">
+            <h2>Language</h2>
+            <p>{{ lang }}</p>
         </div>
 
-        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 style="margin-top: 0; padding-top: 0;">GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
-            <p class="text-gray-800">{{ gpu_types|join(', ') if gpu_types|length > 0 else 'None' }}</p>
+        <div class="leaderboard-card">
+            <h2>GPU Type{{ 's' if gpu_types|length > 1 or gpu_types|length == 0}}</h2>
+            <p>{{ gpu_types|join(', ') if gpu_types|length > 0 else 'None' }}</p>
         </div>
     </div>
     
     <div>
-        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h2 class="font-bold mt-0 mb-2">Description</h2>
+        <div class="leaderboard-card">
+            <h2>Description</h2>
             <p class="whitespace-pre-wrap leading-relaxed">{{ description }}</p>
         </div>
     </div>
 
     <div>
         <div class="relative">
-            <div class="absolute top-2 right-2 flex space-x-2">
+            <div class="code-block-btn-container">
                 <button id="toggleCodeBtn" class="code-block-btn">Show</button>
                 <button onclick="copyCode()" class="code-block-btn">Copy</button>
             </div>

@@ -143,6 +143,21 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .code-block {
     @apply p-4 bg-gray-50 border-gray-200 rounded-lg shadow-sm border border-gray-200 overflow-x-auto mt-4 mb-8 transition-all duration-300;
   }
+  .relative .code-block-btn-container {
+    @apply absolute top-2 right-2 flex space-x-2;
+  }
+  .leaderboard-grid {
+    @apply grid grid-cols-1 md:grid-cols-3 gap-6 mb-8;
+  }
+  .leaderboard-card {
+    @apply p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200;
+  }
+  .leaderboard-card h2 {
+    @apply font-bold mt-0 mb-2;
+  }
+  .leaderboard-grid .leaderboard-card p {
+    @apply text-gray-800;
+  }
   .code-block-btn {
     @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm;
   }
