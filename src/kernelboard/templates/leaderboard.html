@@ -88,11 +88,11 @@
                                     <tr class="rank-row {% if rank > 3 %}hidden-row{% endif %}" data-rank="{{ rank }}">
                                         <td>
                                             {% if rank == 1 %}
-                                                <span class="font-bold">{{ user }} <span class="medal gold-medal">🥇</span></span>
+                                                <span class="font-bold">{{ user }} <span class="medal gold">🥇</span></span>
                                             {% elif rank == 2 %}
-                                                <span class="font-bold">{{ user }} <span class="medal silver-medal">🥈</span></span>
+                                                <span class="font-bold">{{ user }} <span class="medal silver">🥈</span></span>
                                             {% elif rank == 3 %}
-                                                <span class="font-bold">{{ user }} <span class="medal bronze-medal">🥉</span></span>
+                                                <span class="font-bold">{{ user }} <span class="medal bronze">🥉</span></span>
                                             {% else %}
                                                 {{ user }}
                                             {% endif %}

@@ -1137,10 +1137,6 @@ h3 {
   display: block;
 }
 
-.inline-block {
-  display: inline-block;
-}
-
 .flex {
   display: flex;
 }
@@ -1187,10 +1183,6 @@ h3 {
 
 .whitespace-pre-wrap {
   white-space: pre-wrap;
-}
-
-.rounded-full {
-  border-radius: 9999px;
 }
 
 .bg-gray-100 {
