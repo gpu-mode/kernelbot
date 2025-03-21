@@ -8,7 +8,7 @@
 <div class="content-stack">
     <h1 class="font-mono">
         {% set color = name|to_color %}
-        <div class="colored-square shadow-md" style="background-color: {{ color }}"></div>
+        <div class="colored-square" style="background-color: {{ color }}"></div>
         {{ name }}
     </h1>
     
@@ -42,6 +42,7 @@
         </div>
     </div>
 
+    {# The 'max-h-[300px] overflow-y-hidden' is needed for toggleCodeBtn. #}
     <div id="referenceImpl" class="leaderboard-card relative max-h-[300px] overflow-y-hidden">
         <div class="absolute top-2 right-2 flex space-x-2">
             <button id="toggleCodeBtn" class="code-block-btn">Show</button>
@@ -55,14 +56,20 @@
     {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
 
     {% if has_rankings %}
-        <h2 class="border-b pb-2">Rankings</h2>
+        <h1>Rankings</h1>
 
         <div class="ranking-container">
             {% for gpu_type, ranking in rankings.items() %}
                 {% if ranking|length > 0 %}
                     <div class="ranking-section" id="section-{{ gpu_type|lower|replace(' ', '-') }}">
                         <div class="flex justify-between items-center mb-2">
-                            <h3>{{ gpu_type }}</h3>
+                            <h2 class="font-mono">
+                                <span class="chip px-3 py-1" 
+                                    style="background-color: {{ color }}40;">
+                                    {{ gpu_type }}
+                                </span>
+                            </h2>
+
                             {% if ranking|length > 3 %}
                                 <button class="rankings-btn" 
                                         onclick="toggleRankings('{{ gpu_type|lower|replace(' ', '-') }}', {{ ranking|length }})">
