@@ -1,28 +1,31 @@
 // Toggles the visibility of the reference implementation code block.
 document.addEventListener('DOMContentLoaded', function() {
-    const codeBlock = document.getElementById('codeBlock');
+    const referenceImpl = document.getElementById('referenceImpl');
     const toggleBtn = document.getElementById('toggleCodeBtn');
-    const gradientOverlay = document.getElementById('gradientOverlay');
-    
+
     let isExpanded = false;
     
-    if (toggleBtn && codeBlock) {
+    if (toggleBtn && referenceImpl) {
+        const codeBlockFade = document.createElement('div');
+        codeBlockFade.className = 'code-block-fade';
+        referenceImpl.appendChild(codeBlockFade);
+
         toggleBtn.addEventListener('click', function() {
             if (isExpanded) {
-                codeBlock.classList.remove('code-block-hidden');
-                codeBlock.classList.add('max-h-[300px]');
-                codeBlock.classList.remove('overflow-y-auto');
-                codeBlock.classList.add('overflow-y-hidden');
+                referenceImpl.classList.remove('max-h-none');
+                referenceImpl.classList.add('max-h-[300px]');
+                referenceImpl.classList.remove('overflow-y-auto');
+                referenceImpl.classList.add('overflow-y-hidden');
                 toggleBtn.textContent = 'Show';
-                gradientOverlay.classList.remove('hidden');
+                codeBlockFade.style.display = 'block';
                 isExpanded = false;
             } else {
-                codeBlock.classList.remove('max-h-[300px]');
-                codeBlock.classList.add('max-h-none');
-                codeBlock.classList.remove('overflow-y-hidden');
-                codeBlock.classList.add('overflow-y-auto');
+                referenceImpl.classList.remove('max-h-[300px]');
+                referenceImpl.classList.add('max-h-none');
+                referenceImpl.classList.remove('overflow-y-hidden');
+                referenceImpl.classList.add('overflow-y-auto');
                 toggleBtn.textContent = 'Hide';
-                gradientOverlay.classList.add('hidden');
+                codeBlockFade.style.display = 'none';
                 isExpanded = true;
             }
         });
@@ -34,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
  * clipboard.
  */
 function copyCode() {
-    const codeElement = document.querySelector('.code-block code');
+    const codeElement = document.querySelector('#codeBlock');
     const textArea = document.createElement('textarea');
     textArea.value = codeElement.textContent;
     document.body.appendChild(textArea);

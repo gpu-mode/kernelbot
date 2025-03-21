@@ -140,12 +140,6 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .chip-span {
     @apply inline-block px-2 py-0.5 text-sm bg-gray-100 text-gray-700 rounded-full;
   }
-  .code-block {
-    @apply p-4 bg-gray-50 border-gray-200 rounded-lg shadow-sm border border-gray-200 overflow-x-auto mt-4 mb-8 transition-all duration-300;
-  }
-  .relative .code-block-btn-container {
-    @apply absolute top-2 right-2 flex space-x-2;
-  }
   .leaderboard-grid {
     @apply grid grid-cols-1 md:grid-cols-3 gap-6 mb-8;
   }
@@ -161,8 +155,10 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
   .code-block-btn {
     @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm;
   }
-  .code-block-gradient {
-    @apply absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none rounded-b-md border-b border-l border-r border-gray-200;
+  .code-block-fade {
+    @apply absolute bottom-0 left-0 w-full pointer-events-none z-10;
+    height: 75%;
+    background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%);
   }
   .ranking-table {
     @apply min-w-full divide-y divide-gray-200;

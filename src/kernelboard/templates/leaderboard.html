@@ -42,18 +42,13 @@
         </div>
     </div>
 
-    <div>
-        <div class="relative">
-            <div class="code-block-btn-container">
-                <button id="toggleCodeBtn" class="code-block-btn">Show</button>
-                <button onclick="copyCode()" class="code-block-btn">Copy</button>
-            </div>
-            {% set comment = '# ' if lang == 'Python' else '// ' %}
-            <pre id="codeBlock" class="code-block max-h-[300px] overflow-y-hidden"><code>{{ comment }}REFERENCE IMPLEMENTATION
-
-{{ reference }}</code></pre>
-            <div id="gradientOverlay" class="code-block-gradient"></div>
+    <div id="referenceImpl" class="leaderboard-card relative max-h-[300px] overflow-y-hidden">
+        <div class="absolute top-2 right-2 flex space-x-2">
+            <button id="toggleCodeBtn" class="code-block-btn">Show</button>
+            <button onclick="copyCode()" class="code-block-btn">Copy</button>
         </div>
+        <h2>Reference Implementation</h2>
+        <pre><code id="codeBlock">{{ reference }}</code></pre>
     </div>
 
     {# If there are rankings, show rankings tables. #}

@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./templates/**/*.html"],
+  safelist: [ 'code-block-fade' ],
   theme: {
     extend: {
       colors: {
