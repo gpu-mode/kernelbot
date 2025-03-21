@@ -141,7 +141,7 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
     @apply inline-block px-2 py-0.5 text-sm bg-gray-100 text-gray-700 rounded-full;
   }
   .code-block {
-    @apply p-4 rounded-md overflow-x-auto mt-4 mb-8 bg-gray-50 border-gray-200  transition-all duration-300;
+    @apply p-4 bg-gray-50 border-gray-200 rounded-lg shadow-sm border border-gray-200 overflow-x-auto mt-4 mb-8 transition-all duration-300;
   }
   .code-block-btn {
     @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm;

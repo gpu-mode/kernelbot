@@ -36,20 +36,22 @@
     </div>
     
     <div>
-        <h2 class="text-2xl font-bold mb-3">Description</h2>
-        <div class="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-            <p class="whitespace-pre-wrap text-gray-800 leading-relaxed">{{ description }}</p>
+        <div class="p-4 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
+            <h2 class="font-bold mt-0 mb-2">Description</h2>
+            <p class="whitespace-pre-wrap leading-relaxed">{{ description }}</p>
         </div>
     </div>
 
     <div>
-        <h2 class="flex">Reference Implementation</h2>
         <div class="relative">
             <div class="absolute top-2 right-2 flex space-x-2">
                 <button id="toggleCodeBtn" class="code-block-btn">Show</button>
                 <button onclick="copyCode()" class="code-block-btn">Copy</button>
             </div>
-            <pre id="codeBlock" class="code-block max-h-[200px] overflow-y-hidden"><code>{{ reference }}</code></pre>
+            {% set comment = '# ' if lang == 'Python' else '// ' %}
+            <pre id="codeBlock" class="code-block max-h-[300px] overflow-y-hidden"><code>{{ comment }}REFERENCE IMPLEMENTATION
+
+{{ reference }}</code></pre>
             <div id="gradientOverlay" class="code-block-gradient"></div>
         </div>
     </div>

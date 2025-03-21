@@ -10,14 +10,14 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleBtn.addEventListener('click', function() {
             if (isExpanded) {
                 codeBlock.classList.remove('code-block-hidden');
-                codeBlock.classList.add('max-h-[200px]');
+                codeBlock.classList.add('max-h-[300px]');
                 codeBlock.classList.remove('overflow-y-auto');
                 codeBlock.classList.add('overflow-y-hidden');
                 toggleBtn.textContent = 'Show';
                 gradientOverlay.classList.remove('hidden');
                 isExpanded = false;
             } else {
-                codeBlock.classList.remove('max-h-[200px]');
+                codeBlock.classList.remove('max-h-[300px]');
                 codeBlock.classList.add('max-h-none');
                 codeBlock.classList.remove('overflow-y-hidden');
                 codeBlock.classList.add('overflow-y-auto');
