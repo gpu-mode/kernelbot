@@ -3,6 +3,8 @@
 {% block title %}{{ name }} - Kernel Leaderboards{% endblock %}
 
 {% block content %}
+<script src="{{ url_for('static', filename='js/leaderboard.js') }}"></script>
+
 <div class="content-stack">
     <h1 class="font-mono text-3xl font-bold flex items-center gap-3 mb-6">
         {% set color = name|to_color %}
@@ -41,65 +43,16 @@
     </div>
 
     <div>
-        <h2 class="flex items-center gap-2">
-            Reference Implementation
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-            </svg>
-        </h2>
+        <h2 class="flex">Reference Implementation</h2>
         <div class="relative">
             <div class="absolute top-2 right-2 flex space-x-2">
-                <button id="toggleCodeBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded text-sm">Expand</button>
-                <button onclick="copyCode()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded text-sm">Copy</button>
+                <button id="toggleCodeBtn" class="code-block-btn">Show</button>
+                <button onclick="copyCode()" class="code-block-btn">Copy</button>
             </div>
-            <pre id="codeBlock" class="code-block" style="background-color: #f5f5f5; padding: 1rem; border-radius: 0.375rem; overflow-x: auto; max-height: 200px; overflow-y: hidden;"><code>{{ reference }}</code></pre>
+            <pre id="codeBlock" class="code-block max-h-[200px] overflow-y-hidden"><code>{{ reference }}</code></pre>
+            <div id="gradientOverlay" class="code-block-gradient"></div>
         </div>
     </div>
-
-    <script>
-    // Simple implementation with no dependencies on CSS classes
-    document.addEventListener('DOMContentLoaded', function() {
-        const codeBlock = document.getElementById('codeBlock');
-        const toggleBtn = document.getElementById('toggleCodeBtn');
-        
-        let isExpanded = false;
-        
-        if (toggleBtn && codeBlock) {
-            toggleBtn.addEventListener('click', function() {
-                if (isExpanded) {
-                    // Collapse
-                    codeBlock.style.maxHeight = '200px';
-                    codeBlock.style.overflowY = 'hidden';
-                    toggleBtn.textContent = 'Expand';
-                    isExpanded = false;
-                } else {
-                    // Expand
-                    codeBlock.style.maxHeight = 'none';
-                    codeBlock.style.overflowY = 'auto';
-                    toggleBtn.textContent = 'Hide';
-                    isExpanded = true;
-                }
-            });
-        }
-    });
-
-    function copyCode() {
-        const codeElement = document.querySelector('.code-block code');
-        const textArea = document.createElement('textarea');
-        textArea.value = codeElement.textContent;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        
-        const button = document.querySelector('button[onclick="copyCode()"]');
-        const originalText = button.textContent;
-        button.textContent = 'Copied!';
-        setTimeout(() => {
-            button.textContent = originalText;
-        }, 2000);
-    }
-    </script>
 
     {# If there are rankings, show rankings tables. #}
     {% set has_rankings = rankings is defined and rankings|map('length')|list|sum > 0 %}
@@ -150,8 +103,6 @@
                 {% endif %}
             {% endfor %}
         </div>
-
-        <script src="{{ url_for('static', filename='js/leaderboard.js') }}"></script>
     {% else %}
         <h2>No submissions yet</h2>
         <p>Be the first to submit a solution for this challenge!</p>

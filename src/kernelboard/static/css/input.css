@@ -141,7 +141,13 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
     @apply inline-block px-2 py-0.5 text-sm bg-gray-100 text-gray-700 rounded-full;
   }
   .code-block {
-    @apply bg-gray-100 p-4 rounded-md overflow-x-auto mt-4 mb-8;
+    @apply p-4 rounded-md overflow-x-auto mt-4 mb-8 bg-gray-50 border-gray-200  transition-all duration-300;
+  }
+  .code-block-btn {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm;
+  }
+  .code-block-gradient {
+    @apply absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none rounded-b-md border-b border-l border-r border-gray-200;
   }
   .ranking-table {
     @apply min-w-full divide-y divide-gray-200;
