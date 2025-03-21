@@ -1044,7 +1044,7 @@ h3 {
   margin-bottom: 2rem;
 }
 
-.toggle-rankings-btn {
+.rankings-btn {
   border-radius: 0.25rem;
   --tw-bg-opacity: 1;
   background-color: rgb(243 244 246 / var(--tw-bg-opacity, 1));
@@ -1058,7 +1058,7 @@ h3 {
   color: rgb(75 85 99 / var(--tw-text-opacity, 1));
 }
 
-.toggle-rankings-btn:hover {
+.rankings-btn:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(229 231 235 / var(--tw-bg-opacity, 1));
 }
