@@ -85,6 +85,7 @@
                                     {% set score = row[1] %}
                                     {% set file_name = row[2] %}
                                     {% set rank = row[3] %}
+                                    {% set prev_score = row[4] %}
                                     <tr class="rank-row {% if rank > 3 %}hidden-row{% endif %}" data-rank="{{ rank }}">
                                         <td>
                                             {% if rank == 1 %}
@@ -97,7 +98,13 @@
                                                 {{ user }}
                                             {% endif %}
                                         </td>
-                                        <td class="font-mono">{{ score|format_score }}</td>
+                                        <td class="font-mono">
+                                            {{ score|format_score }}
+                                            {% if prev_score != None %}
+                                                &nbsp;
+                                                <span class="text-gray-500">+{{ prev_score|format_score }}</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="font-mono">{{ file_name }}</td>
                                     </tr>
                                 {% endfor %}

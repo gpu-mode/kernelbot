@@ -189,50 +189,6 @@ def index():
                          leaderboards=leaderboards,
                          now=datetime.now(timezone.utc))
 
-def get_rankings(id: int, gpu_type: str, conn: psycopg2.connect):
-    """
-    For the given leaderboard id and GPU type, get the submissions ordered by
-    score.
-
-    Returns:
-        Tuple of (file_name, user_name, submission_time, score, rank)
-    """
-
-    query = """
-        WITH best_submissions AS (
-            SELECT DISTINCT ON (u.user_name) s.file_name, u.user_name,
-                s.submission_time, r.score
-            FROM leaderboard.runs r
-            JOIN leaderboard.submission s ON r.submission_id = s.id
-            JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
-            LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
-            WHERE l.id = %s AND r.runner = %s AND NOT r.secret
-                    AND r.score IS NOT NULL AND r.passed
-            ORDER BY u.user_name, r.score ASC
-        )
-        SELECT file_name, user_name, submission_time, score,
-            RANK() OVER (ORDER BY score ASC) AS rank
-        FROM best_submissions
-        ORDER BY score ASC;
-    """
-
-    result = []
-
-    with conn.cursor() as cur:
-        cur.execute(query, (id, gpu_type))
-        rankings = cur.fetchall()
-
-        for ranking in rankings:
-            file_name = ranking[0]
-            user_name = ranking[1]
-            submission_time = ranking[2]
-            score = ranking[3]
-            rank = ranking[4]
-
-            result.append((file_name, user_name, submission_time, score, rank))
-                
-    return result
-
 @app.route('/leaderboard/<int:id>')
 def leaderboard(id: int):
     # TODO Replace multiple %s parameters with a single named parameter.
@@ -258,8 +214,8 @@ def leaderboard(id: int):
             WHERE leaderboard_id = %s
         ),
         
-        -- All the runs on this leaderboard. For each user and GPU type, the that user's
-        -- runs on that GPU type are ranked by score.
+        -- All the runs on this leaderboard. For each user and GPU type, the
+        -- user's runs on that GPU type are ranked by score.
         ranked_runs AS (
             SELECT r.runner AS runner,
                 u.user_name AS user_name,
@@ -337,15 +293,18 @@ def leaderboard(id: int):
     for gpu_type, ranking_ in data['rankings'].items():
         # Format each entry with rank information
         ranking = []
-        for i, entry in enumerate(ranking_):
+        prev_score = None
+        for i, entry_ in enumerate(ranking_):
             rank = i + 1  # Assign rank based on order (entries are already sorted by score)
             entry = (
-                entry['user_name'],
-                entry['score'],
-                entry['file_name'],
-                rank
+                entry_['user_name'],
+                entry_['score'],
+                entry_['file_name'],
+                rank,
+                entry_['score'] - prev_score if prev_score is not None else None,
             )
             ranking.append(entry)
+            prev_score = entry_['score']
         if len(ranking) > 0:
             rankings[gpu_type] = ranking
     
