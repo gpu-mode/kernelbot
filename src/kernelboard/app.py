@@ -288,23 +288,23 @@ def leaderboard(id: int):
     gpu_types = leaderboard_data['gpu_types']
     gpu_types.sort()
 
-    # Extract and format rankings
     rankings = {}
     for gpu_type, ranking_ in data['rankings'].items():
-        # Format each entry with rank information
         ranking = []
         prev_score = None
-        for i, entry_ in enumerate(ranking_):
-            rank = i + 1  # Assign rank based on order (entries are already sorted by score)
-            entry = (
-                entry_['user_name'],
-                entry_['score'],
-                entry_['file_name'],
-                rank,
-                entry_['score'] - prev_score if prev_score is not None else None,
-            )
+
+        for i, entry in enumerate(ranking_):
+            entry['rank'] = i + 1 
+
+            if prev_score is not None:
+                entry['prev_score'] = entry['score'] - prev_score
+            else:
+                entry['prev_score'] = None
+
             ranking.append(entry)
-            prev_score = entry_['score']
+
+            prev_score = entry['score']
+
         if len(ranking) > 0:
             rankings[gpu_type] = ranking
     

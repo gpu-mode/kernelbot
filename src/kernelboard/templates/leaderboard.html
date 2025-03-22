@@ -80,12 +80,12 @@
 
                         <table class="ranking-table">
                             <tbody class="ranking-table-row">
-                                {% for row in ranking %}
-                                    {% set user = row[0] %}
-                                    {% set score = row[1] %}
-                                    {% set file_name = row[2] %}
-                                    {% set rank = row[3] %}
-                                    {% set prev_score = row[4] %}
+                                {% for entry in ranking %}
+                                    {% set user = entry['user_name'] %}
+                                    {% set score = entry['score'] %}
+                                    {% set file_name = entry['file_name'] %}
+                                    {% set rank = entry['rank'] %}
+                                    {% set prev_score = entry['prev_score'] %}
                                     <tr class="rank-row {% if rank > 3 %}hidden-row{% endif %}" data-rank="{{ rank }}">
                                         <td>
                                             {% if rank == 1 %}
