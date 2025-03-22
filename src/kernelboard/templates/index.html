@@ -37,6 +37,10 @@
                         {{ leaderboard['deadline']|to_time_left }} remaining
                     </div>
 
+                    <div class="leaderboard-content font-mono text-sm">
+                        {{ leaderboard['gpu_types']|join(', ') }}
+                    </div>
+
                     {% set gpu_type, top_users = leaderboard.top_users_by_gpu | select_highest_priority_gpu %}
                     {% if top_users %}
                         <div class="leaderboard-content mt-4">

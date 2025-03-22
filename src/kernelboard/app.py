@@ -7,15 +7,9 @@ from datetime import datetime, timezone
 
 app = Flask(__name__)
 
-# Add hash filter to Jinja environment
-@app.template_filter('hash')
-def hash_filter(s):
-    """Convert string to a number using Python's built-in hash"""
-    return abs(mmh3.hash(str(s)))
-
 @app.template_filter('to_color')
 def to_color(name: str) -> str:
-    """Convert name to a color using a murmur3 hash"""
+    """Convert name to a color using the murmur3 hash"""
     colors = [
         '#FF6B6B',
         '#4ECDC4',
@@ -119,68 +113,87 @@ def index():
     # Get a list of JSON objects like the following to build the active
     # leaderboard tiles:
     # {
-    # "id": 339,
-    # "name": "conv2d",
-    # "deadline": "2025-04-29T17:00:00-07:00",
-    # "top_users_by_gpu": {
-    #     "L4": [
-    #         {
-    #             "rank": 1,
-    #             "score": 0.123
-    #             "user_name": "alice"
-    #         }
-    #         ],
-    #         "T4": ...
-    # This query has unfortunately gotten too complex, and should be refactored.
+    #     "id": 339,
+    #     "name": "conv2d",
+    #     "deadline": "2025-04-29T17:00:00-07:00",
+    #     "gpu_types": ["L4", "T4"],
+    #     "top_users_by_gpu": {
+    #         "L4": [
+    #             {
+    #                 "rank": 1,
+    #                 "score": 0.123
+    #                 "user_name": "alice"
+    #             }, ...
+    #         ], ...
+
     query = """
+        WITH
+
+        -- Get basic information about active leaderboards.
+        active_leaderboards AS (
+            SELECT id, name, deadline FROM leaderboard.leaderboard
+            WHERE deadline > NOW()
+        ),
+
+        -- Get all the GPU types for each leaderboard.
+        gpu_types AS (
+            SELECT DISTINCT leaderboard_id, gpu_type FROM leaderboard.gpu_type
+            WHERE leaderboard_id IN (SELECT id FROM active_leaderboards)
+        ),
+
+        -- Get each user's best run for each GPU type (runner) on the active
+        --leaderboards.
+        personal_best_candidates AS (
+            SELECT r.runner AS runner,
+                s.leaderboard_id AS leaderboard_id,
+                u.user_name AS user_name,
+                r.score AS score,
+                RANK() OVER (PARTITION BY s.leaderboard_id, r.runner, u.id
+                ORDER BY r.score ASC) AS personal_submission_rank
+            FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                JOIN active_leaderboards a ON s.leaderboard_id = a.id
+                LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
+            WHERE NOT r.secret AND r.score IS NOT NULL AND r.passed
+        ),
+
+        -- Select only the best run for each user and GPU type.
+        personal_best_runs AS (
+            SELECT * FROM personal_best_candidates WHERE personal_submission_rank = 1
+        ),
+
+        -- Order the personal best runs by score for each leaderboard and GPU type.
+        competitive_rankings AS (
+            SELECT leaderboard_id, runner, user_name, score,
+            RANK() OVER (PARTITION BY leaderboard_id, runner ORDER BY score ASC) AS user_rank
+            FROM personal_best_runs)
+
+        -- Build the JSON response.
         SELECT jsonb_build_object(
             'id', l.id,
             'name', l.name,
             'deadline', l.deadline,
-            'top_users_by_gpu', (
-                SELECT jsonb_object_agg(runner, user_data)
-                FROM (
-                    SELECT r.runner,
-                        (SELECT jsonb_agg(top.user_data)
-                         FROM (
-                             WITH best_submissions AS (
-                                 SELECT DISTINCT ON (u.user_name) 
-                                     jsonb_build_object(
-                                         'user_name', u.user_name,
-                                         'score', r2.score,
-                                         'rank', RANK() OVER (ORDER BY r2.score ASC)
-                                     ) as user_data
-                                 FROM leaderboard.runs r2
-                                 JOIN leaderboard.submission s ON r2.submission_id = s.id
-                                 LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
-                                 WHERE s.leaderboard_id = l.id 
-                                     AND NOT r2.secret
-                                     AND r2.score IS NOT NULL 
-                                     AND r2.passed
-                                     AND r2.runner = r.runner
-                                 ORDER BY u.user_name, r2.score ASC
-                             )
-                             SELECT user_data
-                             FROM best_submissions
-                             WHERE (user_data->>'rank')::int <= 3
-                             ORDER BY (user_data->>'score')::float ASC
-                             LIMIT 3
-                         ) top
-                        ) as user_data
-                    FROM (SELECT DISTINCT runner 
-                          FROM leaderboard.runs 
-                          WHERE submission_id IN (
-                              SELECT id FROM leaderboard.submission 
-                              WHERE leaderboard_id = l.id
-                          )
-                    ) r
-                ) gpu_data
-            )
+            'gpu_types', (SELECT jsonb_agg(gpu_type) FROM gpu_types g WHERE g.leaderboard_id = l.id),
+            'top_users_by_gpu',
+
+                -- For each GPU type, get the top 3 users by rank.
+                (SELECT jsonb_object_agg(g.gpu_type, (
+                    SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'rank', r.user_rank,
+                            'score', r.score,
+                            'user_name', r.user_name
+                        )
+                    )
+                    FROM competitive_rankings r
+                    WHERE r.leaderboard_id = l.id
+                    AND r.runner = g.gpu_type
+                    AND r.user_rank <= 3
+                )) FROM gpu_types g)
         )
-        FROM leaderboard.leaderboard l
-        WHERE l.deadline > NOW()
-        ORDER BY l.deadline ASC;
-    """
+        FROM active_leaderboards l;
+        """
+
     with get_db_connection().cursor() as cur:
         cur.execute(query)
         leaderboards = [row[0] for row in cur.fetchall()]
