@@ -50,10 +50,19 @@
                                         {{ gpu_type }}
                                     </span>
                                 </div>
-                                {% for name, score in top_users|add_medals %}
+                                {% for user_info in top_users %}
                                     <div class="score-row">
-                                        <span>{{ name or "&nbsp;"|safe }}</span>
-                                        <span class="score">{{ score or "&nbsp;"|safe }}</span>
+                                        <span>{{ user_info['user_name'] or "&nbsp;"|safe }}
+                                            {% if user_info['rank'] == 1 %}
+                                                🥇
+                                            {% elif user_info['rank'] == 2 %}
+                                                🥈
+                                            {% elif user_info['rank'] == 3 %}
+                                                🥉
+                                            {% endif %}
+                                        </span>
+
+                                        <span class="score">{{ user_info['score']|format_score or "&nbsp;"|safe }}</span>
                                     </div>
                                 {% endfor %}
                             </div>

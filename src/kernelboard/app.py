@@ -67,27 +67,7 @@ def format_score(score: float) -> str:
     """Format score as a string with 3 decimal places."""
     return f"{score * 1_000_000:.3f}μs"
 
-# TODO: This is confusing. It's used in index.html. It's not clear what is in
-#       the map parameter. It mixes display login into app.py.
-@app.template_filter('add_medals')
-def add_medals(users: list[dict[str, str | float]]) -> list[tuple[str, str]]:
-    """Add medal emojis to first 3 users, returning tuples of (medal+name, formatted_score)."""
-    medals = ["🥇", "🥈", "🥉"]
-
-    results = [
-        (
-            f"{medals[i]}{user['user_name']}",
-            format_score(user['score'])
-        )
-        for i, user in enumerate(users[:3])]
-
-    # Pad with empty rows until we have 3 total.
-    while len(results) < 3:
-        results.append(("", ""))
-
-    return results
-
-# TODO: Another confusing function. It's used in index.html.
+# TODO: This is a confusing function. It's used in index.html.
 @app.template_filter('select_highest_priority_gpu')
 def select_highest_priority_gpu(top_users_by_gpu: dict) -> tuple[str, list]:
     """
