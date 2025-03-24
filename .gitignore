@@ -9,3 +9,4 @@ node_modules/
 .ruff_cache/
 reference-kernels/
 yoyo.ini
+.coverage

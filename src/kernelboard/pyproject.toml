@@ -1,0 +1,20 @@
+[project]
+name = "kernelboard"
+version = "0.1.0"
+description = "Webapp for the Discord cluster manager"
+dependencies = [
+    "flask",
+    "psycopg2-binary",
+    "mmh3",
+]
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["kernelboard"]
