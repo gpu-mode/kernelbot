@@ -1,6 +1,7 @@
 flask
 dotenv
 psycopg2-binary
+yoyo-migrations
 mmh3
 pytest
 coverage

@@ -42,6 +42,3 @@ def create_app(test_config=None) -> Flask:
     app.errorhandler(500)(error.server_error)
 
     return app
-
-
-app = create_app()
