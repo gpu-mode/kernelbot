@@ -22,5 +22,6 @@ def test_to_time_left():
 
 
 def test_format_datetime():
-    assert format_datetime(datetime(2025, 3, 24, 12, 0, 0)) == "2025-03-24 12:00 UTC"
+    assert format_datetime(datetime(2025, 3, 24, 12, 0, 0)) == \
+        "2025-03-24 12:00 UTC"
     assert format_datetime("2025-03-24T12:00:00Z") == "2025-03-24 12:00 UTC"
