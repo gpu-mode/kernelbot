@@ -1,0 +1,6 @@
+flask
+dotenv
+psycopg2-binary
+mmh3
+pytest
+

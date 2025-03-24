@@ -1,6 +1,6 @@
 /*
 Generate main.css with:
-npx tailwindcss -i ./static/css/input.css -o ./static/css/main.css --verbose
+npx tailwindcss -i ./app/static/css/input.css -o ./app/static/css/main.css --verbose
 */
 
 @tailwind base;
