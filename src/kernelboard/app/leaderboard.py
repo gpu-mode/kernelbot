@@ -6,9 +6,8 @@ from .time import to_time_left
 blueprint = Blueprint('leaderboard', __name__, url_prefix='/leaderboard')
 
 
-@blueprint.route('/<int:id>')
-def leaderboard(id: int):
-    # TODO Replace multiple %s parameters with a single named parameter.
+@blueprint.route('/<int:leaderboard_id>')
+def leaderboard(leaderboard_id: int):
     query = """
         WITH
         
@@ -21,14 +20,14 @@ def leaderboard(id: int):
                 task->>'description' AS description,
                 task->'files'->>'reference.py' AS reference
             FROM leaderboard.leaderboard
-            WHERE id = %s
+            WHERE id = %(leaderboard_id)s
         ),
         
         -- All the different GPU types for this leaderboard.
         gpu_types AS (
             SELECT DISTINCT gpu_type
             FROM leaderboard.gpu_type
-            WHERE leaderboard_id = %s
+            WHERE leaderboard_id = %(leaderboard_id)s
         ),
         
         -- All the runs on this leaderboard. For each user and GPU type, the
@@ -43,7 +42,7 @@ def leaderboard(id: int):
             FROM leaderboard.runs r
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
-            WHERE NOT r.secret AND r.score IS NOT NULL AND r.passed AND s.leaderboard_id = %s
+            WHERE NOT r.secret AND r.score IS NOT NULL AND r.passed AND s.leaderboard_id = %(leaderboard_id)s
         ),
         
         -- From ranked_runs, keep only the top run per user.
@@ -75,8 +74,7 @@ def leaderboard(id: int):
     conn = get_db_connection()
 
     with conn.cursor() as cur:
-        # TODO Pass the leaderboard ID three times as required by the query
-        cur.execute(query, (id, id, id))
+        cur.execute(query, {'leaderboard_id': leaderboard_id})
         result = cur.fetchone()
     
     if result is None or not result[0]:
