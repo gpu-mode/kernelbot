@@ -867,6 +867,20 @@ class LeaderboardDB:
             logger.exception("Could not reset user %s from CLI.", user_id, exc_info=e)
             raise KernelBotError("Database error while resetting user from CLI") from e
 
+    def cleanup_temp_users(self):
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.user_info WHERE cli_valid = FALSE and created_at <
+                NOW() - INTERVAL '10 minutes'
+                """
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not cleanup temp users", exc_info=e)
+            raise KernelBotError("Database error while cleaning up temp users") from e
+
 
 if __name__ == "__main__":
     print(
