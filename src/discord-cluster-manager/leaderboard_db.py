@@ -775,7 +775,8 @@ class LeaderboardDB:
 
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.user_info (id, user_name, cli_id, auth_provider, valid)
+                INSERT INTO leaderboard.user_info (id, user_name,
+                cli_id, cli_auth_provider, cli_valid)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
                 (f"temp_{cli_id}", f"temp_user_{cli_id}", cli_id, auth_provider, False),
@@ -805,8 +806,8 @@ class LeaderboardDB:
 
             self.cursor.execute(
                 """
-                SELECT valid FROM leaderboard.user_info
-                WHERE cli_id = %s AND valid = TRUE AND auth_provider = %s
+                SELECT cli_valid FROM leaderboard.user_info
+                WHERE cli_id = %s AND cli_valid = TRUE AND cli_auth_provider = %s
                 """,
                 (cli_id, auth_provider),
             )
@@ -817,8 +818,8 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 UPDATE leaderboard.user_info
-                SET id = %s, user_name = %s, valid = TRUE
-                WHERE cli_id = %s AND valid = FALSE AND auth_provider = %s
+                SET id = %s, user_name = %s, cli_valid = TRUE, cli_auth_provider = %s
+                WHERE cli_id = %s AND cli_valid = FALSE AND cli_auth_provider = %s
                 """,
                 (user_id, user_name, cli_id, auth_provider),
             )
@@ -831,6 +832,32 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Could not create/update user %s from CLI.", user_id, exc_info=e)
             raise KernelBotError("Database error while creating user from CLI") from e
+
+    def reset_user_from_cli(self, user_id: str, cli_id: str, auth_provider: str):
+        try:
+            self.cursor.execute(
+                """
+                SELECT 1 FROM leaderboard.user_info WHERE id = %s
+                """,
+                (user_id,),
+            )
+            if not self.cursor.fetchone():
+                raise Exception("User not found")
+
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.user_info
+                SET cli_id = %s, cli_auth_provider = %s
+                WHERE id = %s
+                """,
+                (cli_id, auth_provider, user_id),
+            )
+
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not reset user %s from CLI.", user_id, exc_info=e)
+            raise KernelBotError("Database error while resetting user from CLI") from e
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import os
 import time
 from dataclasses import asdict
@@ -85,7 +86,7 @@ async def auth_init(provider: str) -> dict:
 
 
 @app.get("/auth/cli/{auth_provider}")
-async def cli_auth(auth_provider: str, code: str, state: str = None):
+async def cli_auth(auth_provider: str, code: str, state: str):  # noqa: C901
     """
     Handle Discord OAuth redirect. This endpoint receives the authorization code
     and state parameter from Discord's OAuth flow.
@@ -103,10 +104,19 @@ async def cli_auth(auth_provider: str, code: str, state: str = None):
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state")
 
+    try:
+        state_padded = state + "=" * (4 - len(state) % 4) if len(state) % 4 else state
+        state_json = base64.urlsafe_b64decode(state_padded).decode("utf-8")
+        state = json.loads(state_json)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid state parameter: {str(e)}") from None
+
     client_id = CLI_DISCORD_CLIENT_ID
     client_secret = CLI_DISCORD_CLIENT_SECRET
     redirect_uri = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv("POPCORN_API_URL")
     token_url = CLI_TOKEN_URL
+
+    is_reset = state.get("is_reset", False)
 
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Discord client ID or secret not configured.")
@@ -150,17 +160,26 @@ async def cli_auth(auth_provider: str, code: str, state: str = None):
     user_name = user_json.get("username")
 
     try:
-        cli_id = base64.b64decode(state).decode("utf-8")
+        cli_id = state["cli_id"]
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid state parameter") from None
 
     with bot_instance.leaderboard_db as db:
         try:
-            db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
+            if is_reset:
+                db.reset_user_from_cli(user_id, cli_id, auth_provider)
+            else:
+                db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from None
 
-    return {"status": "success", "user_id": user_id, "cli_id": cli_id, "user_name": user_name}
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "cli_id": cli_id,
+        "user_name": user_name,
+        "is_reset": is_reset,
+    }
 
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
