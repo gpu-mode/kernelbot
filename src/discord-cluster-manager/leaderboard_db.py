@@ -437,6 +437,7 @@ class LeaderboardDB:
                 creator_id=res[4],
                 forum_id=res[5],
                 secret_seed=res[6],
+                gpu_types=self.get_leaderboard_gpu_types(res[1]),
             )
         else:
             return None

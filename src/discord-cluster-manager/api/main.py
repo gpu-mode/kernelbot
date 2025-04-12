@@ -10,7 +10,7 @@ from consts import _GPU_LOOKUP, SubmissionMode, get_gpu_by_name
 from discord import app_commands
 from env import CLI_DISCORD_CLIENT_ID, CLI_DISCORD_CLIENT_SECRET, CLI_TOKEN_URL
 from fastapi import FastAPI, HTTPException, UploadFile
-from utils import LeaderboardItem, build_task_config
+from utils import LeaderboardItem, LeaderboardRankedEntry, build_task_config
 
 app = FastAPI()
 
@@ -175,7 +175,14 @@ async def run_submission(
     cog_name = {"github": "GitHubCog", "modal": "ModalCog"}[runner_name]
 
     with bot_instance.leaderboard_db as db:
-        leaderboard_item: LeaderboardItem = db.get_leaderboard(leaderboard_name)
+        if not (leaderboard_item := db.get_leaderboard(leaderboard_name)):
+            raise HTTPException(status_code=400, detail="Invalid leaderboard name")
+
+        gpus = leaderboard_item["gpu_types"]
+        if gpu_name not in gpus:
+            raise HTTPException(
+                status_code=400, detail="This GPU is not supported for this leaderboard"
+            )
         task = leaderboard_item["task"]
 
     runner_cog: SubmitCog = bot_instance.get_cog(cog_name)
@@ -218,7 +225,12 @@ async def get_gpus(leaderboard_name: str) -> list[str]:
         list[str]: A list of GPU types that are available for the given leaderboard and runner.
     """
     await simple_rate_limit()
+
     with bot_instance.leaderboard_db as db:
+        leaderboard_names = [x["name"] for x in db.get_leaderboards()]
+        if leaderboard_name not in leaderboard_names:
+            raise HTTPException(status_code=400, detail="Invalid leaderboard name")
+
         gpu_types = db.get_leaderboard_gpu_types(leaderboard_name)
 
     runner_gpu_names = [gpu.name.lower() for gpu in _GPU_LOOKUP.values()]
@@ -229,7 +241,7 @@ async def get_gpus(leaderboard_name: str) -> list[str]:
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
 async def get_submissions(
     leaderboard_name: str, gpu_name: str, limit: int = None, offset: int = 0
-) -> list[dict]:
+) -> list[LeaderboardRankedEntry]:
     await simple_rate_limit()
     with bot_instance.leaderboard_db as db:
         return db.get_leaderboard_submissions(
