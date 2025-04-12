@@ -881,6 +881,33 @@ class LeaderboardDB:
             logger.exception("Could not cleanup temp users", exc_info=e)
             raise KernelBotError("Database error while cleaning up temp users") from e
 
+    def validate_cli_id(self, cli_id: str) -> Optional[str]:
+        """
+        Validates a CLI ID and returns the associated user ID if valid.
+
+        Args:
+            cli_id (str): The CLI ID to validate.
+
+        Returns:
+            Optional[str]: The user ID if the CLI ID is valid, otherwise None.
+        """
+        try:
+            self.cursor.execute(
+                """
+                SELECT id FROM leaderboard.user_info
+                WHERE cli_id = %s AND cli_valid = TRUE
+                """,
+                (cli_id,),
+            )
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
+            # Re-raise as a generic error or return None depending on desired behavior
+            # Returning None might be safer for API calls
+            return None
+
 
 if __name__ == "__main__":
     print(

@@ -4,17 +4,19 @@ import json
 import os
 import time
 from dataclasses import asdict
+from typing import Optional
 
 from cogs.submit_cog import SubmitCog
 from consts import _GPU_LOOKUP, SubmissionMode, get_gpu_by_name
 from discord import app_commands
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from utils import LeaderboardRankedEntry, build_task_config
 
 # Import the new helper functions
-from .utils import _handle_discord_oauth, _handle_github_oauth
+from .utils import MockProgressReporter, _handle_discord_oauth, _handle_github_oauth
 
 app = FastAPI()
+
 
 bot_instance = None
 
@@ -46,17 +48,39 @@ def init_api(_bot_instance):
     bot_instance = _bot_instance
 
 
-class MockProgressReporter:
-    """Class that pretends to be a progress reporter,
-    is used to avoid errors when running submission,
-    because runners report progress via discord interactions
+async def validate_cli_header(
+    x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
+) -> str:
     """
+    FastAPI dependency to validate the X-Popcorn-Cli-Id header.
 
-    async def push(self, message: str):
-        pass
+    Raises:
+        HTTPException: If the header is missing or invalid.
 
-    async def update(self, message: str):
-        pass
+    Returns:
+        str: The validated user ID associated with the CLI ID.
+    """
+    if not x_popcorn_cli_id:
+        raise HTTPException(status_code=400, detail="Missing X-Popcorn-Cli-Id header")
+
+    if not bot_instance or not hasattr(bot_instance, "leaderboard_db"):
+        raise HTTPException(
+            status_code=500, detail="Bot instance or database not initialized for validation"
+        )
+
+    user_id = None
+    try:
+        with bot_instance.leaderboard_db as db:
+            if db is None:
+                raise HTTPException(status_code=500, detail="Database connection failed")
+            user_id = db.validate_cli_id(x_popcorn_cli_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error during validation: {e}") from e
+
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
+
+    return user_id
 
 
 @app.get("/auth/init")
@@ -194,17 +218,25 @@ async def cli_auth(auth_provider: str, code: str, state: str):  # noqa: C901
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
-    leaderboard_name: str, gpu_type: str, submission_mode: str, file: UploadFile
+    leaderboard_name: str,
+    gpu_type: str,
+    submission_mode: str,
+    file: UploadFile,
+    user_id: str = Depends(validate_cli_header),  # Apply dependency
 ) -> dict:
     """An endpoint that runs a submission on a given leaderboard, runner, and GPU type.
+
+    Requires a valid X-Popcorn-Cli-Id header.
 
     Args:
         leaderboard_name (str): The name of the leaderboard to run the submission on.
         gpu_type (str): The type of GPU to run the submission on.
+        submission_mode (str): The mode for the submission (test, benchmark, etc.).
         file (UploadFile): The file to run the submission on.
+        user_id (str): The validated user ID obtained from the X-Popcorn-Cli-Id header.
 
     Raises:
-        HTTPException: If the bot is not initialized.
+        HTTPException: If the bot is not initialized, or header/input is invalid.
 
     Returns:
         dict: A dictionary containing the status of the submission and the result.
@@ -220,7 +252,7 @@ async def run_submission(  # noqa: C901
         SubmissionMode.TEST,
         SubmissionMode.BENCHMARK,
         SubmissionMode.SCRIPT,
-        SubmissionMode.LEADERBOARD,  # Added leaderboard here as it seems valid
+        SubmissionMode.LEADERBOARD,
     ]:
         raise HTTPException(status_code=400, detail="Invalid submission mode")
 
@@ -241,6 +273,12 @@ async def run_submission(  # noqa: C901
         )
 
     cog_name = {"github": "GitHubCog", "modal": "ModalCog"}[runner_name]
+
+    # --- Use the validated user_id ---
+    # We don't currently pass the user_id explicitly to the submission logic itself,
+    # but it's now available here if needed for logging, authorization checks, etc.
+    # For example: print(f"Submission requested by user: {user_id}")
+    # ---------------------------------
 
     try:
         with bot_instance.leaderboard_db as db:
@@ -276,6 +314,8 @@ async def run_submission(  # noqa: C901
             submission_content=submission_content.decode("utf-8"),  # Decode after reading bytes
             arch=arch,
             mode=submission_mode_enum,
+            # Optionally pass user_id to config if needed downstream
+            # user_id=user_id
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error building task config: {e}") from e
@@ -283,6 +323,7 @@ async def run_submission(  # noqa: C901
     # limit the amount of concurrent submission by the API
     try:
         async with _submit_limiter:
+            # The runner cog doesn't currently take user_id, but could be modified
             result = await runner_cog._run_submission(config, gpu, MockProgressReporter())
     except Exception as e:
         raise HTTPException(

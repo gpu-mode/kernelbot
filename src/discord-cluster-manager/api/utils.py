@@ -9,6 +9,19 @@ from env import (
 from fastapi import HTTPException
 
 
+class MockProgressReporter:
+    """Class that pretends to be a progress reporter,
+    is used to avoid errors when running submission,
+    because runners report progress via discord interactions
+    """
+
+    async def push(self, message: str):
+        pass
+
+    async def update(self, message: str):
+        pass
+
+
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     """Handles the Discord OAuth code exchange and user info retrieval."""
     client_id = CLI_DISCORD_CLIENT_ID
