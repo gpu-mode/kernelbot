@@ -10,7 +10,7 @@ from consts import _GPU_LOOKUP, SubmissionMode, get_gpu_by_name
 from discord import app_commands
 from env import CLI_DISCORD_CLIENT_ID, CLI_DISCORD_CLIENT_SECRET, CLI_TOKEN_URL
 from fastapi import FastAPI, HTTPException, UploadFile
-from utils import LeaderboardItem, LeaderboardRankedEntry, build_task_config
+from utils import LeaderboardRankedEntry, build_task_config
 
 app = FastAPI()
 
@@ -57,8 +57,35 @@ class MockProgressReporter:
         pass
 
 
-@app.get("/auth/cli")
-async def cli_auth(code: str, state: str = None):
+@app.get("/auth/init")
+async def auth_init(provider: str) -> dict:
+    if provider not in ["discord", "github"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid provider, must be 'discord' or 'github'"
+        )
+
+    """
+    Initialize authentication flow for the specified provider.
+    Returns a random UUID to be used as state parameter in the OAuth flow.
+
+    Args:
+        provider (str): The authentication provider ('discord' or 'github')
+
+    Returns:
+        dict: A dictionary containing the state UUID
+    """
+    import uuid
+
+    state_uuid = str(uuid.uuid4())
+
+    with bot_instance.leaderboard_db as db:
+        db.init_user_from_cli(state_uuid, provider)
+
+    return {"state": state_uuid}
+
+
+@app.get("/auth/cli/{auth_provider}")
+async def cli_auth(auth_provider: str, code: str, state: str = None):
     """
     Handle Discord OAuth redirect. This endpoint receives the authorization code
     and state parameter from Discord's OAuth flow.
@@ -67,6 +94,11 @@ async def cli_auth(code: str, state: str = None):
         code (str): Authorization code from Discord OAuth
         state (str): Base64 encoded client ID from CLI
     """
+
+    if auth_provider not in ["discord", "github"]:
+        raise HTTPException(
+            status_code=400, detail="Invalid provider, must be 'discord' or 'github'"
+        )
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state")
@@ -94,7 +126,7 @@ async def cli_auth(code: str, state: str = None):
         "client_secret": client_secret,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": redirect_uri + "/auth/cli",
+        "redirect_uri": redirect_uri + "/auth/cli/discord",
     }
 
     token_response = requests.post(token_url, data=token_data)
@@ -124,9 +156,9 @@ async def cli_auth(code: str, state: str = None):
 
     with bot_instance.leaderboard_db as db:
         try:
-            db.create_user_from_cli(user_id, user_name, cli_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Failed to create user") from None
+            db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) from None
 
     return {"status": "success", "user_id": user_id, "cli_id": cli_id, "user_name": user_name}
 
@@ -200,7 +232,7 @@ async def run_submission(
 
 
 @app.get("/leaderboards")
-async def get_leaderboards() -> list[LeaderboardItem]:
+async def get_leaderboards():
     """An endpoint that returns all leaderboards.
 
     Returns:
