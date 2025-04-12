@@ -802,7 +802,10 @@ class LeaderboardDB:
                 (user_id,),
             )
             if self.cursor.fetchone():
-                raise Exception("User already has a valid account with this ID")
+                raise Exception(
+                    "User already has a valid account with this User ID."
+                    "Please use the re-register command to re-authenticate."
+                )
 
             self.cursor.execute(
                 """
@@ -813,25 +816,28 @@ class LeaderboardDB:
             )
 
             if self.cursor.fetchone():
-                raise Exception("User already has a valid account with this CLI ID")
+                raise Exception(
+                    "User already has a valid account with this CLI ID."
+                    "Please use the re-register command to re-authenticate."
+                )
 
             self.cursor.execute(
                 """
                 UPDATE leaderboard.user_info
                 SET id = %s, user_name = %s, cli_valid = TRUE, cli_auth_provider = %s
-                WHERE cli_id = %s AND cli_valid = FALSE AND cli_auth_provider = %s
+                WHERE cli_id = %s AND cli_valid = FALSE
                 """,
-                (user_id, user_name, cli_id, auth_provider),
+                (user_id, user_name, auth_provider, cli_id),
             )
 
             if self.cursor.rowcount == 0:
-                raise Exception("No temporary user found with this CLI ID")
+                raise Exception("No temporary user found with this CLI ID. No effect.")
 
             self.connection.commit()
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Could not create/update user %s from CLI.", user_id, exc_info=e)
-            raise KernelBotError("Database error while creating user from CLI") from e
+            raise KernelBotError("Database error while creating/updating user from CLI") from e
 
     def reset_user_from_cli(self, user_id: str, cli_id: str, auth_provider: str):
         try:
@@ -842,7 +848,9 @@ class LeaderboardDB:
                 (user_id,),
             )
             if not self.cursor.fetchone():
-                raise Exception("User not found")
+                raise Exception(
+                    "User not found. Please use the register command to create an account."
+                )
 
             self.cursor.execute(
                 """
