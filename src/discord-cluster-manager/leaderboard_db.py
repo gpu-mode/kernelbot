@@ -872,7 +872,7 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 DELETE FROM leaderboard.user_info WHERE cli_valid = FALSE and created_at <
-                NOW() - INTERVAL '10 minutes'
+                NOW() - INTERVAL '10 minutes' AND id LIKE 'temp_%' AND user_name LIKE 'temp_%'
                 """
             )
             self.connection.commit()
@@ -881,7 +881,7 @@ class LeaderboardDB:
             logger.exception("Could not cleanup temp users", exc_info=e)
             raise KernelBotError("Database error while cleaning up temp users") from e
 
-    def validate_cli_id(self, cli_id: str) -> Optional[str]:
+    def validate_cli_id(self, cli_id: str) -> Optional[dict[str, str]]:
         """
         Validates a CLI ID and returns the associated user ID if valid.
 
@@ -894,19 +894,17 @@ class LeaderboardDB:
         try:
             self.cursor.execute(
                 """
-                SELECT id FROM leaderboard.user_info
+                SELECT id, user_name FROM leaderboard.user_info
                 WHERE cli_id = %s AND cli_valid = TRUE
                 """,
                 (cli_id,),
             )
             result = self.cursor.fetchone()
-            return result[0] if result else None
+            return {"user_id": result[0], "user_name": result[1]} if result else None
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
-            # Re-raise as a generic error or return None depending on desired behavior
-            # Returning None might be safer for API calls
-            return None
+            raise KernelBotError("Error validating CLI ID") from e
 
 
 if __name__ == "__main__":

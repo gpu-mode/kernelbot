@@ -1,5 +1,5 @@
 import copy
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from launchers import Launcher
 
@@ -138,10 +138,10 @@ class SubmitCog(commands.Cog):
 
     async def _handle_submission(
         self,
-        interaction: discord.Interaction,
+        interaction: Optional[discord.Interaction],
         gpu_type: GPU,
         reporter: RunProgressReporter,
-        script: discord.Attachment,
+        script: Union[discord.Attachment, str],
         task: Optional[LeaderboardTask],
         mode: SubmissionMode,
     ) -> Optional[FullResult]:
@@ -156,14 +156,18 @@ class SubmitCog(commands.Cog):
         Returns:
             if successful, returns the result of the run.
         """
-        script_content = await self._validate_input_file(interaction, script)
+        if interaction is not None:
+            script_content = await self._validate_input_file(interaction, script)
+        else:
+            script_content = script
+
         if script_content is None:
             return None
 
         launcher = self.launcher_map[gpu_type.value]
 
         # TODO figure out the correct way to handle messaging here
-        if mode != SubmissionMode.PRIVATE:
+        if mode != SubmissionMode.PRIVATE and interaction is not None:
             thread = await interaction.channel.create_thread(
                 name=f"{script.filename} on {gpu_type.name} ({launcher.name})",
                 type=discord.ChannelType.private_thread,
@@ -190,7 +194,7 @@ class SubmitCog(commands.Cog):
                 result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
             )
         )
-        if mode != SubmissionMode.PRIVATE:
+        if mode != SubmissionMode.PRIVATE and interaction is not None:
             try:
                 await generate_report(thread, result.runs)
                 await reporter.push(f"See results at {thread.jump_url}")

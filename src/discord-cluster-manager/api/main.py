@@ -4,16 +4,14 @@ import json
 import os
 import time
 from dataclasses import asdict
-from typing import Optional
+from typing import Annotated, Optional
 
-from cogs.submit_cog import SubmitCog
-from consts import _GPU_LOOKUP, SubmissionMode, get_gpu_by_name
-from discord import app_commands
+from consts import _GPU_LOOKUP, SubmissionMode
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
-from utils import LeaderboardRankedEntry, build_task_config
+from submission import SubmissionRequest
+from utils import LeaderboardRankedEntry
 
-# Import the new helper functions
-from .utils import MockProgressReporter, _handle_discord_oauth, _handle_github_oauth
+from .utils import _handle_discord_oauth, _handle_github_oauth, _run_submission
 
 app = FastAPI()
 
@@ -68,19 +66,18 @@ async def validate_cli_header(
             status_code=500, detail="Bot instance or database not initialized for validation"
         )
 
-    user_id = None
     try:
         with bot_instance.leaderboard_db as db:
             if db is None:
                 raise HTTPException(status_code=500, detail="Database connection failed")
-            user_id = db.validate_cli_id(x_popcorn_cli_id)
+            user_info = db.validate_cli_id(x_popcorn_cli_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error during validation: {e}") from e
 
-    if user_id is None:
+    if user_info is None:
         raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
 
-    return user_id
+    return user_info
 
 
 @app.get("/auth/init")
@@ -222,7 +219,7 @@ async def run_submission(  # noqa: C901
     gpu_type: str,
     submission_mode: str,
     file: UploadFile,
-    user_id: str = Depends(validate_cli_header),  # Apply dependency
+    user_info: Annotated[dict, Depends(validate_cli_header)],  # Apply dependency
 ) -> dict:
     """An endpoint that runs a submission on a given leaderboard, runner, and GPU type.
 
@@ -243,6 +240,8 @@ async def run_submission(  # noqa: C901
         See class `FullResult` for more details.
     """
     await simple_rate_limit()
+    user_name = user_info["user_name"]
+    user_id = user_info["user_id"]
 
     submission_mode_enum: SubmissionMode = SubmissionMode(submission_mode.lower())
     if submission_mode_enum in [SubmissionMode.PROFILE]:
@@ -259,27 +258,6 @@ async def run_submission(  # noqa: C901
     if not bot_instance:
         raise HTTPException(status_code=500, detail="Bot not initialized")
 
-    gpu_name = gpu_type.lower()
-    gpu = get_gpu_by_name(gpu_name)
-    if gpu is None:
-        raise HTTPException(status_code=400, detail="Invalid GPU type")
-
-    runner_name = gpu.runner.lower()
-
-    # Ensure runner_name is valid before using it as dict key
-    if runner_name not in ["github", "modal"]:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid runner name derived from GPU: {runner_name}"
-        )
-
-    cog_name = {"github": "GitHubCog", "modal": "ModalCog"}[runner_name]
-
-    # --- Use the validated user_id ---
-    # We don't currently pass the user_id explicitly to the submission logic itself,
-    # but it's now available here if needed for logging, authorization checks, etc.
-    # For example: print(f"Submission requested by user: {user_id}")
-    # ---------------------------------
-
     try:
         with bot_instance.leaderboard_db as db:
             if db is None:
@@ -288,49 +266,34 @@ async def run_submission(  # noqa: C901
                 raise HTTPException(status_code=400, detail="Invalid leaderboard name")
 
             gpus = leaderboard_item["gpu_types"]
-            if gpu_name not in gpus:
+            if gpu_type not in gpus:
                 raise HTTPException(
                     status_code=400, detail="This GPU is not supported for this leaderboard"
                 )
-            task = leaderboard_item["task"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching leaderboard data: {e}") from e
 
-    runner_cog: SubmitCog = bot_instance.get_cog(cog_name)
-    if not runner_cog:
-        raise HTTPException(status_code=500, detail=f"Could not find cog: {cog_name}")
-
-    try:
-        # Ensure _get_arch expects app_commands.Choice
-        arch_choice = app_commands.Choice(name=gpu_name, value=gpu_name)
-        arch = runner_cog._get_arch(arch_choice)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error determining architecture: {e}") from e
-
     try:
         submission_content = await file.read()
-        config = build_task_config(
-            task=task,
-            submission_content=submission_content.decode("utf-8"),  # Decode after reading bytes
-            arch=arch,
-            mode=submission_mode_enum,
-            # Optionally pass user_id to config if needed downstream
-            # user_id=user_id
-        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error building task config: {e}") from e
 
-    # limit the amount of concurrent submission by the API
-    try:
-        async with _submit_limiter:
-            # The runner cog doesn't currently take user_id, but could be modified
-            result = await runner_cog._run_submission(config, gpu, MockProgressReporter())
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error during submission execution: {e}"
-        ) from e
+    submission_request = SubmissionRequest(
+        code=submission_content.decode("utf-8"),
+        file_name=file.filename,
+        user_id=user_id,
+        gpus=[gpu_type],
+        leaderboard=leaderboard_name,
+    )
 
-    return {"status": "success", "result": asdict(result)}
+    result = await _run_submission(
+        submission_request,
+        {"user_id": user_id, "user_name": user_name},
+        submission_mode_enum,
+        bot_instance,
+    )
+
+    return {"status": "success", "results": [asdict(r) for r in result]}
 
 
 @app.get("/leaderboards")

@@ -1,4 +1,8 @@
+import asyncio
+from datetime import datetime
+
 import requests
+from consts import SubmissionMode, get_gpu_by_name
 from env import (
     CLI_DISCORD_CLIENT_ID,
     CLI_DISCORD_CLIENT_SECRET,
@@ -7,6 +11,8 @@ from env import (
     CLI_TOKEN_URL,
 )
 from fastapi import HTTPException
+from report import MultiProgressReporter
+from submission import SubmissionRequest, prepare_submission
 
 
 class MockProgressReporter:
@@ -141,3 +147,68 @@ async def _handle_github_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
         )
 
     return user_id, user_name
+
+
+async def _run_submission(
+    submission: SubmissionRequest, user_info: dict, mode: SubmissionMode, bot
+):
+    req = prepare_submission(submission, bot.leaderboard_db)
+
+    selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+
+    command = bot.get_cog("SubmitCog").submit_leaderboard
+
+    user_name = user_info["user_name"]
+    user_id = user_info["user_id"]
+
+    with bot.leaderboard_db as db:
+        sub_id = db.create_submission(
+            leaderboard=req.leaderboard,
+            file_name=submission.file_name,
+            code=submission.code,
+            user_id=user_id,
+            time=datetime.now(),
+            user_name=user_name,
+        )
+    run_msg = f"Submission **{sub_id}**: `{submission.file_name}` for `{req.leaderboard}`"
+    reporter = MultiProgressReporter(run_msg)
+    selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+    if len(selected_gpus) > 1 or selected_gpus[0] is None:
+        raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+    gpu = selected_gpus[0]
+
+    try:
+        tasks = [
+            command(
+                None,
+                sub_id,
+                submission.code,
+                gpu,
+                reporter.add_run(f"{gpu.name} on {gpu.runner}"),
+                req.task,
+                mode,
+                None,
+            )
+        ]
+
+        if mode == SubmissionMode.LEADERBOARD:
+            tasks += [
+                command(
+                    None,
+                    sub_id,
+                    submission.code,
+                    gpu,
+                    reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
+                    req.task,
+                    SubmissionMode.PRIVATE,
+                    req.secret_seed,
+                )
+            ]
+
+        results = await asyncio.gather(*tasks)
+    finally:
+        with bot.leaderboard_db as db:
+            db.mark_submission_done(sub_id)
+
+    return results
