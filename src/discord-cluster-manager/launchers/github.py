@@ -1,22 +1,114 @@
 import asyncio
+import datetime
+import json
 import pprint
 import tempfile
 import zipfile
-from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional
 
 import requests
-from env import GITHUB_REPO, GITHUB_TOKEN
+from consts import AMD_REQUIREMENTS, GPU, NVIDIA_REQUIREMENTS, GitHubGPU, GPUType
 from github import Github, UnknownObjectException, WorkflowRun
+from report import RunProgressReporter
+from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
 from utils import get_github_branch_name, setup_logging
+
+from .launcher import Launcher
 
 logger = setup_logging()
 
 
+class GitHubLauncher(Launcher):
+    def __init__(self, repo: str, token: str):
+        super().__init__(name="GitHub", gpus=GitHubGPU)
+        self.repo = repo
+        self.token = token
+
+    async def run_submission(
+        self, config: dict, gpu_type: GPU, status: RunProgressReporter
+    ) -> FullResult:
+        selected_gpu = GPUType.AMD if gpu_type.value == "amd" else GPUType.NVIDIA
+
+        lang = config["lang"]
+        if lang == "cu" and selected_gpu == GPUType.AMD:
+            # TODO implement HIP
+            raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")
+
+        lang_name = {"py": "Python", "cu": "CUDA"}[lang]
+
+        if selected_gpu == GPUType.AMD:
+            gpu_name = config.get("gpu", "mi300")
+            runner_name = {"mi250": "amdgpu-mi250-x86-64", "mi300": "amdgpu-mi300-x86-64"}[gpu_name]
+
+        logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_gpu.name}")
+        if selected_gpu == GPUType.AMD:
+            logger.info(f"Running on {gpu_name} amd gpu")
+
+        workflow_file = selected_gpu.value
+        run = GitHubRun(self.repo, self.token, workflow_file)
+
+        payload = json.dumps(config)
+
+        inputs = {"payload": payload}
+        if lang == "py":
+            if selected_gpu == GPUType.NVIDIA:
+                inputs["requirements"] = NVIDIA_REQUIREMENTS
+            else:
+                inputs["requirements"] = AMD_REQUIREMENTS
+                inputs["runner"] = runner_name
+        if not await run.trigger(inputs):
+            raise RuntimeError("Failed to trigger GitHub Action. Please check the configuration.")
+
+        await status.push("⏳ Waiting for workflow to start...")
+        await run.wait_for_completion(lambda x: self.wait_callback(x, status))
+        await status.update(f"Workflow [{run.run_id}]({run.html_url}) completed")
+        await status.push("Downloading artifacts...")
+
+        artifacts = await run.download_artifacts()
+        if "run-result" not in artifacts:
+            logger.error("Could not find `run-result` among artifacts: %s", artifacts.keys())
+            await status.push("Downloading artifacts...  failed")
+            return FullResult(
+                success=False, error="Could not download artifacts", runs={}, system=SystemInfo()
+            )
+
+        logs = artifacts["run-result"]["result.json"].decode("utf-8")
+
+        await status.update("Downloading artifacts... done")
+
+        data = json.loads(logs)
+        runs = {}
+        # convert json back to EvalResult structures, which requires
+        # special handling for datetime and our dataclasses.
+        for k, v in data["runs"].items():
+            if "compilation" in v and v["compilation"] is not None:
+                comp = CompileResult(**v["compilation"])
+            else:
+                comp = None
+            run = RunResult(**v["run"])
+            res = EvalResult(
+                start=datetime.datetime.fromisoformat(v["start"]),
+                end=datetime.datetime.fromisoformat(v["end"]),
+                compilation=comp,
+                run=run,
+            )
+            runs[k] = res
+
+        system = SystemInfo(**data.get("system", {}))
+        return FullResult(success=True, error="", runs=runs, system=system)
+
+    async def wait_callback(self, run: "GitHubRun", status: RunProgressReporter):
+        await status.update(
+            f"⏳ Workflow [{run.run_id}]({run.html_url}): {run.status} "
+            f"({run.elapsed_time.total_seconds():.1f}s)"
+        )
+
+
 class GitHubRun:
-    def __init__(self, workflow_file: str):
-        gh = Github(GITHUB_TOKEN)
-        self.repo = gh.get_repo(GITHUB_REPO)
+    def __init__(self, repo: str, token: str, workflow_file: str):
+        gh = Github(token)
+        self.repo = gh.get_repo(repo)
+        self.token = token
         self.workflow_file = workflow_file
         self.run: Optional[WorkflowRun.WorkflowRun] = None
         self.start_time = None
@@ -43,7 +135,7 @@ class GitHubRun:
     def elapsed_time(self):
         if self.start_time is None:
             return None
-        return datetime.now(timezone.utc) - self.start_time
+        return datetime.datetime.now(datetime.timezone.utc) - self.start_time
 
     async def trigger(self, inputs: dict) -> bool:
         """
@@ -52,7 +144,7 @@ class GitHubRun:
 
         Returns: Whether the run was successfully triggered,
         """
-        trigger_time = datetime.now(timezone.utc)
+        trigger_time = datetime.datetime.now(datetime.timezone.utc)
         try:
             workflow = self.repo.get_workflow(self.workflow_file)
         except UnknownObjectException as e:
@@ -71,7 +163,7 @@ class GitHubRun:
             runs = list(workflow.get_runs())
 
             for run in runs:
-                if run.created_at.replace(tzinfo=timezone.utc) > trigger_time:
+                if run.created_at.replace(tzinfo=datetime.timezone.utc) > trigger_time:
                     self.run = run
                     return True
         return False
@@ -82,8 +174,8 @@ class GitHubRun:
         if self.run is None:
             raise ValueError("Run needs to be triggered before a status check!")
 
-        self.start_time = datetime.now(timezone.utc)
-        timeout = timedelta(minutes=timeout_minutes)
+        self.start_time = datetime.datetime.now(datetime.timezone.utc)
+        timeout = datetime.timedelta(minutes=timeout_minutes)
 
         while True:
             try:
@@ -131,7 +223,7 @@ class GitHubRun:
 
         for artifact in artifacts:
             url = artifact.archive_download_url
-            headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+            headers = {"Authorization": f"token {self.token}"}
             response = requests.get(url, headers=headers)
 
             if response.status_code == 200:

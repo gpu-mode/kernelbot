@@ -1,12 +1,13 @@
-from enum import Enum
-from typing import TYPE_CHECKING, Optional, Type
+import copy
+from typing import TYPE_CHECKING, Optional
+
+from launchers import Launcher
 
 if TYPE_CHECKING:
     from bot import ClusterBot
 
 import discord
-from better_profanity import profanity
-from consts import SubmissionMode
+from consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name
 from discord import app_commands
 from discord.ext import commands
 from report import MultiProgressReporter, RunProgressReporter, generate_report, make_short_report
@@ -19,26 +20,17 @@ logger = setup_logging()
 
 class SubmitCog(commands.Cog):
     """
-    Base class for code submission / run schedular cogs.
+    Code submission / run schedular cogs.
 
-    Derived classes need to implement a `_get_arch(self, gpu_type: app_commands.Choice[str])`
-    method to translate the selected GPU to an architecture argument for Cuda,
-    and a
-    ```
-    run_submission(self, config: dict, gpu_type: GPUType,
-        status: ProgressReporter) -> FullResult
-    ```
-    coroutine, which handles the actual submission.
-
-    This base class will register a `run` subcommand with the runner's name, which can be used
-    to run a single (non-leaderboard) script.
+    Actual submission logic is handled by the launcher object.
     """
 
-    def __init__(self, bot, name: str, gpus: Type[Enum]):
+    def __init__(self, bot):
         self.bot: ClusterBot = bot
-        self.name = name
+        self.launcher_map = {}
 
-        choices = [app_commands.Choice(name=c.name, value=c.value) for c in gpus]
+    def register_launcher(self, launcher: Launcher):
+        choices = [app_commands.Choice(name=c.name, value=c.value) for c in launcher.gpus]
 
         run_fn = self.run_script
 
@@ -54,27 +46,39 @@ class SubmitCog(commands.Cog):
         run = app_commands.choices(gpu_type=choices)(run)
         run = app_commands.describe(
             script="The Python/CUDA script file to run",
-            gpu_type=f"Choose the GPU type for {name}",
+            gpu_type=f"Choose the GPU type for {launcher.name}",
         )(run)
 
         # For now, direct (non-leaderboard) submissions are debug-only.
         if self.bot.debug_mode:
-            self.run_script = bot.run_group.command(
-                name=self.name.lower(), description=f"Run a script using {self.name}"
+            self.bot.run_group.command(
+                name=launcher.name.lower(), description=f"Run a script using {launcher.name}"
             )(run)
+
+        for gpu in launcher.gpus:
+            self.launcher_map[gpu.value] = launcher
 
     async def submit_leaderboard(
         self,
         interaction: discord.Interaction,
+        submission_id: int,
         script: discord.Attachment,
-        gpu_type: app_commands.Choice[str],
+        gpu_type: GPU,
         reporter: RunProgressReporter,
         task: LeaderboardTask,
         mode: SubmissionMode,
+        seed: Optional[int],
     ) -> Optional[FullResult]:
         """
         Function invoked by `leaderboard_cog` to handle a leaderboard run.
         """
+        if seed is not None:
+            # careful, we've got a reference here
+            # that is shared with the other run
+            # invocations.
+            task = copy.copy(task)
+            task.seed = seed
+
         result = await self._handle_submission(
             interaction,
             gpu_type,
@@ -83,6 +87,34 @@ class SubmitCog(commands.Cog):
             task=task,
             mode=mode,
         )
+
+        if result.success:
+            score = None
+            if "leaderboard" in result.runs and result.runs["leaderboard"].run.success:
+                score = 0.0
+                num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
+                for i in range(num_benchmarks):
+                    score += (
+                        float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"]) / 1e9
+                    )
+                score /= num_benchmarks
+
+            # verifyruns uses a fake submission id of -1
+            if submission_id != -1:
+                with self.bot.leaderboard_db as db:
+                    for key, value in result.runs.items():
+                        db.create_submission_run(
+                            submission_id,
+                            value.start,
+                            value.end,
+                            mode=key,
+                            runner=gpu_type.name,
+                            score=None if key != "leaderboard" else score,
+                            secret=mode == SubmissionMode.PRIVATE,
+                            compilation=value.compilation,
+                            result=value.run,
+                            system=result.system,
+                        )
 
         return result
 
@@ -99,6 +131,7 @@ class SubmitCog(commands.Cog):
         reporter = MultiProgressReporter("Script run")
         rep = reporter.add_run(f"{gpu_type.name}")
         await reporter.show(interaction)
+        gpu_type = get_gpu_by_name(gpu_type.name)
         await self._handle_submission(
             interaction, gpu_type, rep, script=script, task=None, mode=SubmissionMode.SCRIPT
         )
@@ -106,7 +139,7 @@ class SubmitCog(commands.Cog):
     async def _handle_submission(
         self,
         interaction: discord.Interaction,
-        gpu_type: app_commands.Choice[str],
+        gpu_type: GPU,
         reporter: RunProgressReporter,
         script: discord.Attachment,
         task: Optional[LeaderboardTask],
@@ -127,10 +160,12 @@ class SubmitCog(commands.Cog):
         if script_content is None:
             return None
 
+        launcher = self.launcher_map[gpu_type.value]
+
         # TODO figure out the correct way to handle messaging here
         if mode != SubmissionMode.PRIVATE:
             thread = await interaction.channel.create_thread(
-                name=f"{script.filename} on {gpu_type.name} ({self.name})",
+                name=f"{script.filename} on {gpu_type.name} ({launcher.name})",
                 type=discord.ChannelType.private_thread,
                 auto_archive_duration=1440,
             )
@@ -139,9 +174,9 @@ class SubmitCog(commands.Cog):
             task=task, submission_content=script_content, arch=self._get_arch(gpu_type), mode=mode
         )
 
-        logger.info("submitting task to runner %s", self.name)
+        logger.info("submitting task to runner %s", launcher.name)
 
-        result = await self._run_submission(config, gpu_type, reporter)
+        result = await launcher.run_submission(config, gpu_type, reporter)
 
         if not result.success:
             await reporter.update_title(reporter.title + " ❌ failure")
@@ -150,9 +185,10 @@ class SubmitCog(commands.Cog):
         else:
             await reporter.update_title(reporter.title + " ✅ success")
 
-        await reporter.push(make_short_report(
-            result.runs,
-            full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD])
+        await reporter.push(
+            make_short_report(
+                result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
+            )
         )
         if mode != SubmissionMode.PRIVATE:
             try:
@@ -169,24 +205,7 @@ class SubmitCog(commands.Cog):
         interaction: discord.Interaction,
         script: discord.Attachment,
     ) -> Optional[str]:
-        # check file extension
-        if not script.filename.endswith((".py", ".cu", ".cuh", ".cpp")):
-            await send_discord_message(
-                interaction,
-                "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
-                ephemeral=True,
-            )
-            return None
-
-        if profanity.contains_profanity(script.filename):
-            await send_discord_message(
-                interaction,
-                "Please provide a non rude filename",
-                ephemeral=True,
-            )
-            return None
-
-        #  load and decode
+        # load and decode
         try:
             return (await script.read()).decode("utf-8")
         except UnicodeError:
@@ -197,21 +216,5 @@ class SubmitCog(commands.Cog):
             )
             return None
 
-    async def _run_submission(
-        self, config: dict, gpu_type: app_commands.Choice[str], status: RunProgressReporter
-    ) -> FullResult:
-        """
-        Run a submission specified by `config`.
-        To be implemented in derived classes.
-        Args:
-            config: the config object containing all necessary runner information.
-            gpu_type: Which GPU to run for.
-            status: callback object that allows updating the status message in discord
-
-        Returns:
-            Result of running `config`.
-        """
-        raise NotImplementedError()
-
-    def _get_arch(self, gpu_type: app_commands.Choice[str]):
-        raise NotImplementedError()
+    def _get_arch(self, gpu_type: GPU):
+        return GPU_TO_SM[gpu_type.name]

@@ -2,14 +2,15 @@ import argparse
 import asyncio
 import os
 
+import consts
 import discord
+import env
 import uvicorn
 from api.main import app, init_api
 from cogs.admin_cog import AdminCog
-from cogs.github_cog import GitHubCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
-from cogs.modal_cog import ModalCog
+from cogs.submit_cog import SubmitCog
 from cogs.verify_run_cog import VerifyRunCog
 from discord import app_commands
 from discord.ext import commands
@@ -25,6 +26,7 @@ from env import (
     POSTGRES_USER,
     init_environment,
 )
+from launchers import GitHubLauncher, ModalLauncher
 from leaderboard_db import LeaderboardDB
 from utils import setup_logging
 
@@ -75,8 +77,10 @@ class ClusterBot(commands.Bot):
         logger.info(f"Syncing commands for staging guild {DISCORD_CLUSTER_STAGING_ID}")
         try:
             # Load cogs
-            await self.add_cog(ModalCog(self))
-            await self.add_cog(GitHubCog(self))
+            submit_cog = SubmitCog(self)
+            submit_cog.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
+            submit_cog.register_launcher(GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN))
+            await self.add_cog(submit_cog)
             await self.add_cog(BotManagerCog(self))
             await self.add_cog(LeaderboardCog(self))
             await self.add_cog(VerifyRunCog(self))
