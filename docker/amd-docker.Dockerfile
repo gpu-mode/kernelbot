@@ -34,7 +34,7 @@ RUN sudo apt update -y \
     && sudo apt update -y \
     && sudo apt install -y rocm-dev
 
-RUN pip install torch --index-url https://download.pytorch.org/whl/rocm6.2.4
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2.4
 
 RUN pip install \
     ninja \
