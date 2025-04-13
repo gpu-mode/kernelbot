@@ -11,7 +11,7 @@ from env import (
     CLI_TOKEN_URL,
 )
 from fastapi import HTTPException
-from report import MultiProgressReporter
+from report import RunProgressReporterAPI
 from submission import SubmissionRequest, prepare_submission
 
 
@@ -170,8 +170,6 @@ async def _run_submission(
             time=datetime.now(),
             user_name=user_name,
         )
-    run_msg = f"Submission **{sub_id}**: `{submission.file_name}` for `{req.leaderboard}`"
-    reporter = MultiProgressReporter(run_msg)
     selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
     if len(selected_gpus) > 1 or selected_gpus[0] is None:
         raise HTTPException(status_code=400, detail="Invalid GPU type")
@@ -181,11 +179,11 @@ async def _run_submission(
     try:
         tasks = [
             command(
-                None,
                 sub_id,
                 submission.code,
+                submission.file_name,
                 gpu,
-                reporter.add_run(f"{gpu.name} on {gpu.runner}"),
+                RunProgressReporterAPI(),
                 req.task,
                 mode,
                 None,
@@ -195,11 +193,11 @@ async def _run_submission(
         if mode == SubmissionMode.LEADERBOARD:
             tasks += [
                 command(
-                    None,
                     sub_id,
                     submission.code,
+                    submission.file_name,
                     gpu,
-                    reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
+                    RunProgressReporterAPI(),
                     req.task,
                     SubmissionMode.PRIVATE,
                     req.secret_seed,

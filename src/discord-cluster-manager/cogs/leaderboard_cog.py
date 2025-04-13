@@ -88,7 +88,15 @@ class LeaderboardSubmitCog(app_commands.Group):
             gpus=cmd_gpus,
             leaderboard=leaderboard_name,
         )
-        req = prepare_submission(req, self.bot.leaderboard_db)
+        try:
+            req = prepare_submission(req, self.bot.leaderboard_db)
+        except Exception as e:
+            await send_discord_message(
+                interaction,
+                f"An error occurred when preparing your submission: {e}",
+                ephemeral=True,
+            )
+            return -1
 
         # if there is more than one candidate GPU, display UI to let user select,
         # otherwise just run on that GPU
@@ -458,7 +466,7 @@ class LeaderboardCog(commands.Cog):
             processed_submissions = [
                 {
                     "Rank": submission["rank"],
-                    "User": await get_user_from_id(submission["user_id"], interaction, self.bot),
+                    "User": await get_user_from_id(self.bot, submission["user_id"]),
                     "Score": f"{format_time(float(submission['submission_score']) * 1e9)}",
                     "Submission Name": submission["submission_name"],
                 }
@@ -498,7 +506,7 @@ class LeaderboardCog(commands.Cog):
 
         title = f'Leaderboard Submissions for "{leaderboard_name}" on {gpu}'
         if user_id:
-            title += f" for user {await get_user_from_id(user_id, interaction, self.bot)}"
+            title += f" for user {await get_user_from_id(self.bot, user_id)}"
 
         embed, view = create_table(
             title,

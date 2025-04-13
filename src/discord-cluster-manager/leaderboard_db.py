@@ -468,7 +468,7 @@ class LeaderboardDB:
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 JOIN leaderboard.user_info ui ON s.user_id = ui.id
                 WHERE l.name = %s
-                    AND r.runner = %s
+                    AND LOWER(r.runner) = LOWER(%s)
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
@@ -492,7 +492,7 @@ class LeaderboardDB:
                     JOIN leaderboard.submission s ON r.submission_id = s.id
                     JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
-                    WHERE l.name = %s AND r.runner = %s AND NOT r.secret
+                    WHERE l.name = %s AND LOWER(r.runner) = LOWER(%s) AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
                     ORDER BY s.user_id, r.score ASC
                 )
@@ -630,6 +630,18 @@ class LeaderboardDB:
 
         return result
 
+    def get_user_from_id(self, id: str) -> Optional[str]:
+        try:
+            self.cursor.execute(
+                """
+                SELECT user_name FROM leaderboard.user_info WHERE id = %s
+                """,
+                (id,),
+            )
+            return self.cursor.fetchone()[0]
+        except Exception:
+            return None
+
     def delete_submission(self, submission_id: int):
         try:
             # first, the runs
@@ -721,7 +733,7 @@ class LeaderboardDB:
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 WHERE l.name = %s
-                    AND r.runner = %s
+                    AND LOWER(r.runner) = LOWER(%s)
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
@@ -735,7 +747,7 @@ class LeaderboardDB:
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 WHERE l.name = %s
-                    AND r.runner = %s
+                    AND LOWER(r.runner) = LOWER(%s)
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
