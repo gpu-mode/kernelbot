@@ -403,7 +403,6 @@ class RunProgressReporterDiscord(RunProgressReporter):
         await generate_report(thread, runs)
         await self.push(f"See results at {thread.jump_url}")
 
-
 class RunProgressReporterAPI(RunProgressReporter):
     def __init__(self):
         pass
@@ -419,3 +418,4 @@ class RunProgressReporterAPI(RunProgressReporter):
 
     async def generate_report(self, title: str, runs: dict[str, EvalResult]):
         pass
+
