@@ -35,7 +35,9 @@ RUN sudo apt update -y \
     && sudo apt update -y \
     && sudo apt install -y rocm-dev
 
-RUN pip install torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
+RUN pip install --upgrade pip
+
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
 
 RUN pip install \
     ninja \
