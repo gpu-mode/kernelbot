@@ -1,45 +1,20 @@
-FROM ghcr.io/actions/actions-runner:latest
+FROM rocm/pytorch:latest
 
-RUN sudo apt-get update -y \
-    && sudo apt-get install -y software-properties-common \
-    && sudo add-apt-repository -y ppa:git-core/ppa \
-    && sudo apt-get update -y \
-    && sudo apt-get install -y --no-install-recommends \
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
     curl \
-    ca-certificates \
-    git \
-    jq \
+    tar \
     sudo \
-    unzip \
-    zip \
-    cmake \
-    ninja-build \
-    clang \
-    lld \
-    wget \
-    psmisc \
-    python3.10-venv \
-    && sudo rm -rf /var/lib/apt/lists/*
+    python3-pip \
+    git \
+    build-essential \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && \
-    sudo apt-get install git-lfs
 
-RUN sudo groupadd -g 109 render
+RUN pip3 install --upgrade pip && \
+    pip3 install ninja tinygrad
 
-RUN sudo apt update -y \
-    && sudo apt install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" \
-    && sudo usermod -a -G render,video runner \
-    && wget https://repo.radeon.com/amdgpu-install/6.2.2/ubuntu/jammy/amdgpu-install_6.2.60202-1_all.deb \
-    && sudo apt install -y ./amdgpu-install_6.2.60202-1_all.deb \
-    && sudo apt update -y \
-    && sudo apt install -y rocm-dev
-
-RUN pip install torch --index-url https://download.pytorch.org/whl/rocm6.2.4
-
-RUN pip install \
-    ninja \
-    numpy \
-    packaging \
-    wheel \
-    triton \
-    tinygrad
+WORKDIR /actions-runner
+RUN curl -O -L https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-linux-x64-2.323.0.tar.gz && \
+    tar xzf ./actions-runner-linux-x64-2.323.0.tar.gz
