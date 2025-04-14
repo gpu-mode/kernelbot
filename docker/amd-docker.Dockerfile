@@ -1,4 +1,7 @@
-FROM ghcr.io/actions/actions-runner:latest
+FROM rocm/pytorch:latest
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN sudo apt-get update -y \
     && sudo apt-get install -y software-properties-common \
@@ -6,6 +9,11 @@ RUN sudo apt-get update -y \
     && sudo apt-get update -y \
     && sudo apt-get install -y --no-install-recommends \
     curl \
+    tar \
+    sudo \
+    python3-pip \
+    git \
+    build-essential \
     ca-certificates \
     git \
     jq \
@@ -21,20 +29,18 @@ RUN sudo apt-get update -y \
     python3.10-venv \
     && sudo rm -rf /var/lib/apt/lists/*
 
+RUN pip3 install --upgrade pip && \
+    pip3 install ninja tinygrad
+
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && \
     sudo apt-get install git-lfs
 
 RUN sudo groupadd -g 109 render
 
-RUN sudo apt update -y \
-    && sudo apt install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" \
-    && sudo usermod -a -G render,video runner \
-    && wget https://repo.radeon.com/amdgpu-install/6.2.2/ubuntu/jammy/amdgpu-install_6.2.60202-1_all.deb \
-    && sudo apt install -y ./amdgpu-install_6.2.60202-1_all.deb \
-    && sudo apt update -y \
-    && sudo apt install -y rocm-dev
-
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2.4
+# Setup GitHub Actions runner
+WORKDIR /actions-runner
+RUN curl -O -L https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-linux-x64-2.323.0.tar.gz && \
+    tar xzf ./actions-runner-linux-x64-2.323.0.tar.gz
 
 RUN pip install \
     ninja \
@@ -43,3 +49,5 @@ RUN pip install \
     wheel \
     triton \
     tinygrad
+
+CMD ["/bin/bash"]
