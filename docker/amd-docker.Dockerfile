@@ -37,12 +37,11 @@ RUN sudo apt update -y \
 
 RUN pip install --upgrade pip
 
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
+RUN pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
 
 RUN pip install \
     ninja \
     numpy \
     packaging \
     wheel \
-    triton \
     tinygrad
