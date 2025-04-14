@@ -6,7 +6,7 @@ import time
 from dataclasses import asdict
 from typing import Annotated, Optional
 
-from consts import _GPU_LOOKUP, SubmissionMode
+from consts import SubmissionMode
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from submission import SubmissionRequest
 from utils import LeaderboardRankedEntry
@@ -350,8 +350,7 @@ async def get_gpus(leaderboard_name: str) -> list[str]:
         raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
 
     # Filter based on known runners
-    runner_gpu_names = [gpu.name.lower() for gpu in _GPU_LOOKUP.values()]
-    return [x for x in gpu_types if x.lower() in runner_gpu_names]
+    return gpu_types
 
 
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
