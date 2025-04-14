@@ -56,11 +56,6 @@ jobs:
         EOL
         pip install -r "requirements.txt"
         fi
-      
-    - name: Extra requirements
-      shell: bash
-      run: |
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2.4
 
     - name: Run script
       shell: bash
