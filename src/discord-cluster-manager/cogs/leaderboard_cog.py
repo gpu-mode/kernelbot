@@ -16,6 +16,7 @@ from submission import SubmissionRequest, prepare_submission
 from ui.misc import GPUSelectionView
 from ui.table import create_table
 from utils import (
+    KernelBotError,
     LeaderboardItem,
     LeaderboardRankedEntry,
     RunItem,
@@ -88,15 +89,7 @@ class LeaderboardSubmitCog(app_commands.Group):
             gpus=cmd_gpus,
             leaderboard=leaderboard_name,
         )
-        try:
-            req = prepare_submission(req, self.bot.leaderboard_db)
-        except Exception as e:
-            await send_discord_message(
-                interaction,
-                f"An error occurred when preparing your submission: {e}",
-                ephemeral=True,
-            )
-            return -1
+        req = prepare_submission(req, self.bot.leaderboard_db)
 
         # if there is more than one candidate GPU, display UI to let user select,
         # otherwise just run on that GPU
@@ -248,6 +241,13 @@ class LeaderboardSubmitCog(app_commands.Group):
             gpu = [gpu.strip() for gpu in gpu.split(",")]
         try:
             return await self.on_submit_hook(interaction, leaderboard_name, script, mode, gpu)
+        except KernelBotError as e:
+            await send_discord_message(
+                interaction,
+                str(e),
+                ephemeral=True,
+            )
+            return -1
         except Exception as e:
             logger.error("Error handling leaderboard submission", exc_info=e)
             # don't leak any information, but at least acknowledge that the command failed.

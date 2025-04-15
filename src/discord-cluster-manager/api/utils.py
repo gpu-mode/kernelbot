@@ -152,9 +152,16 @@ async def _handle_github_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
 async def _run_submission(
     submission: SubmissionRequest, user_info: dict, mode: SubmissionMode, bot
 ):
-    req = prepare_submission(submission, bot.leaderboard_db)
+    try:
+        req = prepare_submission(submission, bot.leaderboard_db)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+
+    selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+    if len(selected_gpus) > 1 or selected_gpus[0] is None:
+        raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     command = bot.get_cog("SubmitCog").submit_leaderboard
 
@@ -170,9 +177,6 @@ async def _run_submission(
             time=datetime.now(),
             user_name=user_name,
         )
-    selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
-    if len(selected_gpus) > 1 or selected_gpus[0] is None:
-        raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     gpu = selected_gpus[0]
 

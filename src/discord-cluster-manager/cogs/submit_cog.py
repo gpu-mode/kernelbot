@@ -175,13 +175,12 @@ class SubmitCog(commands.Cog):
 
         result = await launcher.run_submission(config, gpu_type, reporter)
 
-        reporter_title = getattr(reporter, "title", "")
         if not result.success:
-            await reporter.update_title(reporter_title + " ❌ failure")
+            await reporter.update_title(reporter.title + " ❌ failure")
             await reporter.push(result.error)
             return result
         else:
-            await reporter.update_title(reporter_title + " ✅ success")
+            await reporter.update_title(reporter.title + " ✅ success")
 
         await reporter.push(
             make_short_report(
