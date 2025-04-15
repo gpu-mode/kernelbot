@@ -904,7 +904,6 @@ class LeaderboardDB:
             Optional[str]: The user ID if the CLI ID is valid, otherwise None.
         """
         try:
-            cli_id = "temp_" + cli_id
             self.cursor.execute(
                 """
                 SELECT id, user_name FROM leaderboard.user_info
