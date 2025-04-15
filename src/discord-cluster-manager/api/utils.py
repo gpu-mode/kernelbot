@@ -158,8 +158,6 @@ async def _run_submission(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
-
-    selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
     if len(selected_gpus) > 1 or selected_gpus[0] is None:
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
