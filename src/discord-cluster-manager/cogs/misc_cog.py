@@ -61,6 +61,6 @@ class BotManagerCog(commands.Cog):
         else:
             await send_discord_message(
                 interaction,
-                f"API URL: `https://{os.environ['HEROKU_APP_DEFAULT_DOMAIN_NAME']}`",
+                f"API URL: `https://{os.environ['HEROKU_APP_DEFAULT_DOMAIN_NAME'].rstrip('/')}`",
                 ephemeral=True,
             )
