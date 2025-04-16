@@ -1,5 +1,7 @@
 FROM ghcr.io/actions/actions-runner:latest
 
+ENV CXX=clang++
+
 RUN sudo apt-get update -y \
     && sudo apt-get install -y software-properties-common \
     && sudo add-apt-repository -y ppa:git-core/ppa \
