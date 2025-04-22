@@ -190,7 +190,7 @@ class GitHubRun:
             runs_checked = 0
             try:
                 run_iterator = recent_runs_paginated.__iter__()
-                while runs_checked < 10:
+                while runs_checked < 50:
                     try:
                         run = next(run_iterator)
                         runs_checked += 1
