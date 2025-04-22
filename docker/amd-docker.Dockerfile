@@ -48,6 +48,7 @@ RUN sudo apt update -y \
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
+    && pip install -r requirements.txt \
     && python3 setup.py develop
 
 RUN pip install --upgrade pip
