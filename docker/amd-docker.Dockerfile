@@ -46,14 +46,14 @@ RUN sudo apt update -y \
     && sudo apt update -y \
     && sudo apt install -y rocm
 
+RUN pip install --upgrade pip
+
+RUN pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
+
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
     && pip install -r requirements.txt \
     && python3 setup.py develop
-
-RUN pip install --upgrade pip
-
-RUN pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
 
 RUN pip install \
     ninja \
