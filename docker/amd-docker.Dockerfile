@@ -1,7 +1,6 @@
 FROM ghcr.io/actions/actions-runner:latest
 
 ENV CXX=clang++
-USER root
 
 RUN sudo apt-get update -y \
     && sudo apt-get install -y software-properties-common \
