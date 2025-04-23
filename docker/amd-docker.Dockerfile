@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://dow
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
     && pip install -r requirements.txt \
-    && sudo python3 setup.py develop
+    && python3 setup.py develop
 
 RUN pip install \
     ninja \
