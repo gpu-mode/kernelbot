@@ -9,7 +9,7 @@ on:
       runner:
         description: 'AMD runner to run workflow on'
         required: true
-        default: "amdgpu-mi300-x86-64"
+        default: "amdgpu-mi300-x86-64-test"
         type: string
       requirements:
         description: 'Contents for a requirements.txt file'
