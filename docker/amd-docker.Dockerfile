@@ -23,7 +23,7 @@ RUN sudo apt-get update -y \
     python3.10-venv \
     && sudo rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y python3 python3-pip python-is-python3
+RUN sudo apt-get update && sudo apt-get install -y python3.10 python3-pip python-is-python3 python3-setuptools python3-wheel libpython3.10
 
 RUN python --version && python3 --version
 
@@ -34,7 +34,6 @@ RUN sudo groupadd -g 109 render
 
 RUN sudo apt update -y \
     && sudo apt install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" \
-    && sudo apt install python3-setuptools python3-wheel libpython3.10 \
     && sudo usermod -a -G render,video runner \
     && wget https://repo.radeon.com/amdgpu-install/6.3.1/ubuntu/jammy/amdgpu-install_6.3.60301-1_all.deb \
     && sudo apt install -y ./amdgpu-install_6.3.60301-1_all.deb \
