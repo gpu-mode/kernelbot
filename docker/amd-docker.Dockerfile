@@ -25,8 +25,6 @@ RUN sudo apt-get update -y \
 
 RUN sudo apt-get update && sudo apt-get install -y python3.10 python3-pip python-is-python3 python3-setuptools python3-wheel libpython3.10
 
-RUN python --version && python3 --version
-
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && \
     sudo apt-get install git-lfs
 
