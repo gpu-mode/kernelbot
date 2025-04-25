@@ -44,6 +44,7 @@ RUN sudo pip install --no-cache-dir pytorch-triton-rocm torch --index-url https:
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
+    && git checkout 1d88633958236e942cba3c283864282f7af3ebc5 \
     && sudo pip install -r requirements.txt \
     && sudo python3 setup.py develop
 
