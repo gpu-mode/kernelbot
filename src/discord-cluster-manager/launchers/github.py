@@ -52,7 +52,6 @@ class GitHubLauncher(Launcher):
 
         logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_workflow}")
         run = GitHubRun(self.repo, self.token, selected_workflow)
-        logger.info(f"Successfully created GitHub run: {run.run_id}")
 
         payload = json.dumps(config)
 
@@ -67,6 +66,7 @@ class GitHubLauncher(Launcher):
                 raise RuntimeError(
                     "Failed to trigger GitHub Action. Please check the configuration."
                 )
+        logger.info(f"Successfully created GitHub run: {run.run_id}")
 
         await status.push("⏳ Waiting for workflow to start...")
         logger.info("Waiting for workflow to start...")
@@ -165,10 +165,14 @@ class GitHubRun:
             raise ValueError(f"Could not find workflow {self.workflow_file}") from e
 
         branch_name = get_github_branch_name()
-        logger.debug(
-            "Dispatching workflow %s on branch %s with inputs %s",
+        logger.info(
+            "Dispatching workflow %s on branch %s",
             self.workflow_file,
-            branch_name,
+            branch_name
+        )
+        logger.debug(
+            "Dispatching workflow %s with inputs %s",
+            self.workflow_file,
             pprint.pformat(inputs),
         )
         success = await asyncio.to_thread(workflow.create_dispatch, branch_name, inputs=inputs)

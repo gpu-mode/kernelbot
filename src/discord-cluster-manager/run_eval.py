@@ -300,6 +300,7 @@ def run_single_evaluation(
     A single runner run, either in the context of test files, or in the
     context of benchmark files.
     """
+    print(f"RUNNING MODE {mode}")
     if mode == "test":
         with tempfile.NamedTemporaryFile("w") as tests_file:
             tests_file.write(tests)
