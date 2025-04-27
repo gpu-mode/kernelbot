@@ -54,3 +54,9 @@ RUN sudo pip install \
     packaging \
     wheel \
     tinygrad
+
+# rocprof-compute
+RUN sudo apt install -y rocprofiler-compute locales
+RUN sudo pip install -r /opt/rocm/libexec/rocprofiler-compute/requirements.txt
+# rocprof-compute crashes with C.UTF-8 locale ?!
+RUN sudo locale-gen en_US.UTF-8
