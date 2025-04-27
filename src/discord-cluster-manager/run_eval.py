@@ -305,7 +305,7 @@ def run_single_evaluation(
             tests_file.write(tests)
             tests_file.flush()
             return run_program(call + [mode, tests_file.name], seed=seed, timeout=test_timeout)
-    elif mode in ["benchmark", "profile", "leaderboard"]:
+    elif mode in ["benchmark", "leaderboard"]:
         timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
         with tempfile.NamedTemporaryFile("w") as bench_file:
             if ranking_by == "last":
