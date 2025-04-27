@@ -324,6 +324,16 @@ def main():
                         break
 
                 logger.log("check", "pass" if passed else "fail")
+
+            if mode == "profile":
+                from submission import custom_kernel
+                for i in range(len(tests)):
+                    logger.log(f"benchmark.{i}.spec", tests[i].spec)
+                    # no point doing any benchmarking here,
+                    # profiling will mess with timings anyway
+                    data = generate_input(**tests[i].args)
+                    custom_kernel(data)
+                    logger.log(f"benchmark.{i}.status", "done")
             else:
                 # TODO: Implement script and profile mode
                 return 2
