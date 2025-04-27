@@ -11,7 +11,7 @@ from consts import AMD_REQUIREMENTS, GPU, NVIDIA_REQUIREMENTS, GitHubGPU
 from github import Github, UnknownObjectException, WorkflowRun
 from report import RunProgressReporter
 from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
-from utils import get_github_branch_name, setup_logging
+from utils import setup_logging
 
 from .launcher import Launcher
 
@@ -19,10 +19,11 @@ logger = setup_logging()
 
 
 class GitHubLauncher(Launcher):
-    def __init__(self, repo: str, token: str):
+    def __init__(self, repo: str, token: str, branch: str):
         super().__init__(name="GitHub", gpus=GitHubGPU)
         self.repo = repo
         self.token = token
+        self.branch = branch
         self.trigger_limit = asyncio.Semaphore(1)
 
     async def run_submission(
@@ -51,7 +52,7 @@ class GitHubLauncher(Launcher):
         lang_name = {"py": "Python", "cu": "CUDA"}[lang]
 
         logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_workflow}")
-        run = GitHubRun(self.repo, self.token, selected_workflow)
+        run = GitHubRun(self.repo, self.token, self.branch, selected_workflow)
 
         payload = json.dumps(config)
 
@@ -118,10 +119,11 @@ class GitHubLauncher(Launcher):
 
 
 class GitHubRun:
-    def __init__(self, repo: str, token: str, workflow_file: str):
+    def __init__(self, repo: str, token: str, branch: str, workflow_file: str):
         gh = Github(token)
         self.repo = gh.get_repo(repo)
         self.token = token
+        self.branch = branch
         self.workflow_file = workflow_file
         self.run: Optional[WorkflowRun.WorkflowRun] = None
         self.start_time = None
@@ -164,18 +166,17 @@ class GitHubRun:
             logger.error(f"Could not find workflow {self.workflow_file}", exc_info=e)
             raise ValueError(f"Could not find workflow {self.workflow_file}") from e
 
-        branch_name = get_github_branch_name()
         logger.info(
             "Dispatching workflow %s on branch %s",
             self.workflow_file,
-            branch_name
+            self.branch
         )
         logger.debug(
             "Dispatching workflow %s with inputs %s",
             self.workflow_file,
             pprint.pformat(inputs),
         )
-        success = await asyncio.to_thread(workflow.create_dispatch, branch_name, inputs=inputs)
+        success = await asyncio.to_thread(workflow.create_dispatch, self.branch, inputs=inputs)
 
         if success:
             wait_seconds = 5
@@ -225,7 +226,7 @@ class GitHubRun:
                 return False
         else:
             logger.error(
-                f"Failed to dispatch workflow {self.workflow_file} on branch {branch_name}."
+                f"Failed to dispatch workflow {self.workflow_file} on branch {self.branch}."
             )
             return False
 

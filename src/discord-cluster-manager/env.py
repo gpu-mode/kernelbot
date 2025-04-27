@@ -13,6 +13,20 @@ def init_environment():
             raise ValueError(f"{var} not found")
 
 
+def _get_github_branch_name():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip().split("/", 1)[1]
+    except subprocess.CalledProcessError:
+        return "main"
+
+
 init_environment()
 
 # Discord-specific constants
@@ -33,6 +47,7 @@ CLI_GITHUB_CLIENT_SECRET = os.getenv("CLI_GITHUB_CLIENT_SECRET", "")
 # GitHub-specific constants
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO")
+GITHUB_WORKFLOW_BRANCH = os.getenv("GITHUB_WORKFLOW_BRANCH", _get_github_branch_name())
 PROBLEMS_REPO = os.getenv("PROBLEMS_REPO")
 
 # Directory that will be used for local problem development.

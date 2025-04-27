@@ -64,19 +64,6 @@ class KernelBotError(Exception):
         super().__init__(message)
 
 
-def get_github_branch_name():
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip().split("/", 1)[1]
-    except subprocess.CalledProcessError:
-        return "main"
-
-
 async def get_user_from_id(bot, id) -> str:
     with bot.leaderboard_db as db:
         return db.get_user_from_id(id) or id
