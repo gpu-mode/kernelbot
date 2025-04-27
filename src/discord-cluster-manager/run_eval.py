@@ -294,7 +294,7 @@ def run_single_evaluation(
         ranked_timeout: int = Timeout.RANKED,
         ranking_by: str = "last",
         seed: Optional[int] = None,
-        kernel: Optional[str] = None,  # only relevant for profiling command
+        kernel: Optional[str] = "custom_kernel",  # only relevant for profiling command
 ) -> RunResult:
     """
     A single runner run, either in the context of test files, or in the
