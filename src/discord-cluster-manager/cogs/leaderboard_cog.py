@@ -440,36 +440,7 @@ class LeaderboardCog(commands.Cog):
 
         # Start updating leaderboard
         self.leaderboard_update.start()
-
-    # --------------------------------------------------------------------------
-    # |                           LOOPING FUNCTIONS                            |
-    # --------------------------------------------------------------------------
-    @tasks.loop(minutes=1)
-    async def leaderboard_update(self):
-        """Task that updates the leaderboard every minute."""
-        for guild in self.bot.guilds:
-            channel = await self.ensure_channel_exists(guild, "active-leaderboards")
-
-            # Get the pinned message or create a new one
-            pinned_messages = await channel.pins()
-            if pinned_messages:
-                message = pinned_messages[0]
-            else:
-                message = await channel.send("Loading leaderboard...")
-                await message.pin()
-
-            # Update the leaderboard message
-            embed, view = await self._get_leaderboard_helper()
-
-            if embed:
-                await message.edit(content="", embed=embed, view=view)
-            else:
-                await message.edit(content="No active leaderboards.")
-
-    @leaderboard_update.before_loop
-    async def before_leaderboard_update(self):
-        """Wait for the bot to be ready before starting the task."""
-        await self.bot.wait_until_ready()
+    
 
     # --------------------------------------------------------------------------
     # |                           HELPER FUNCTIONS                              |
@@ -619,7 +590,7 @@ class LeaderboardCog(commands.Cog):
                 await send_discord_message(
                     interaction, "An unknown error occurred.", ephemeral=True
                 )
-
+    
     async def _get_leaderboard_helper(self):
         """
         Helper for grabbing the leaderboard DB and forming the
@@ -653,6 +624,7 @@ class LeaderboardCog(commands.Cog):
         )
 
         return embed, view
+    
 
     # --------------------------------------------------------------------------
     # |                           COMMANDS                                      |
