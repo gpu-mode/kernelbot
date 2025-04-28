@@ -40,6 +40,12 @@ RUN sudo apt update -y \
 
 RUN sudo pip install --upgrade pip
 
+# rocprofiler install
+RUN sudo apt install -y rocprofiler-compute locales \
+    && sudo apt remove -y python3-blinker \
+    && sudo pip install -r /opt/rocm/libexec/rocprofiler-compute/requirements.txt \
+    && sudo locale-gen en_US.UTF-8
+
 RUN sudo pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
@@ -54,9 +60,3 @@ RUN sudo pip install \
     packaging \
     wheel \
     tinygrad
-
-# rocprof-compute
-RUN sudo apt install -y rocprofiler-compute locales
-RUN sudo pip install -r /opt/rocm/libexec/rocprofiler-compute/requirements.txt
-# rocprof-compute crashes with C.UTF-8 locale ?!
-RUN sudo locale-gen en_US.UTF-8
