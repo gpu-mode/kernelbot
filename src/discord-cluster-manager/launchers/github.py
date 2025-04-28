@@ -157,7 +157,6 @@ class GitHubRun:
 
         Returns: Whether the run was successfully triggered,
         """
-        trigger_time = datetime.datetime.now(datetime.timezone.utc)
         try:
             workflow = await asyncio.to_thread(self.repo.get_workflow, self.workflow_file)
         except UnknownObjectException as e:
@@ -172,6 +171,7 @@ class GitHubRun:
             pprint.pformat(inputs),
         )
         success = await asyncio.to_thread(workflow.create_dispatch, branch_name, inputs=inputs)
+        trigger_time = datetime.datetime.now(datetime.timezone.utc)
 
         if success:
             wait_seconds = 5
