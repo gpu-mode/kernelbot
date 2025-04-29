@@ -750,9 +750,12 @@ class AdminCog(commands.Cog):
                                 entry["name"], new_lb["deadline"], task.description
                             )
                         )
-                except discord.errors.NotFound:
+                except (discord.errors.NotFound, discord.HTTPException) as e:
                     logger.warning(
-                        "Could not find forum thread %s for lb %s", forum_id, entry["name"]
+                        "Could not find forum thread %s for lb %s",
+                        forum_id,
+                        entry["name"],
+                        exc_info=e,
                     )
                     pass
 
