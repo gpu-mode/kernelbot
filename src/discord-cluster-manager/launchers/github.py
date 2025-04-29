@@ -62,7 +62,7 @@ class GitHubLauncher(Launcher):
             if gpu_vendor == "AMD":
                 inputs["runner"] = runner_name
 
-        async with self.trigger_limit:
+        async with self.trigger_limit:  # DO NOT REMOVE, PREVENTS A RACE CONDITION
             if not await run.trigger(inputs):
                 raise RuntimeError(
                     "Failed to trigger GitHub Action. Please check the configuration."
@@ -166,11 +166,7 @@ class GitHubRun:
             logger.error(f"Could not find workflow {self.workflow_file}", exc_info=e)
             raise ValueError(f"Could not find workflow {self.workflow_file}") from e
 
-        logger.info(
-            "Dispatching workflow %s on branch %s",
-            self.workflow_file,
-            self.branch
-        )
+        logger.info("Dispatching workflow %s on branch %s", self.workflow_file, self.branch)
         logger.debug(
             "Dispatching workflow %s with inputs %s",
             self.workflow_file,
@@ -202,7 +198,9 @@ class GitHubRun:
                         logger.debug(
                             f"Checking run {run.id} created at {run.created_at.isoformat()}"
                         )
-                        if run.created_at.replace(tzinfo=datetime.timezone.utc) > trigger_time:
+                        if run.created_at.replace(
+                            tzinfo=datetime.timezone.utc
+                        ) > trigger_time - datetime.timedelta(seconds=2):
                             found_run = run
                             logger.info(f"Found matching workflow run: ID {found_run.id}")
                             break
