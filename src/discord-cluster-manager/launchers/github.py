@@ -1,5 +1,7 @@
 import asyncio
+import base64
 import datetime
+import io
 import json
 import pprint
 import tempfile
@@ -54,9 +56,16 @@ class GitHubLauncher(Launcher):
         run = GitHubRun(self.repo, self.token, selected_workflow)
         logger.info(f"Successfully created GitHub run: {run.run_id}")
 
-        payload = json.dumps(config)
+        # Create a zip archive in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr("payload.json", json.dumps(config))
+        zip_buffer.seek(0)
 
-        inputs = {"payload": payload}
+        # Encode the zip file content to base64
+        payload_base64 = base64.b64encode(zip_buffer.read()).decode("utf-8")
+
+        inputs = {"payload_base64": payload_base64}
         if lang == "py":
             inputs["requirements"] = requirements
             if gpu_vendor == "AMD":

@@ -2,8 +2,8 @@ name: AMD PyTorch Job
 on:
   workflow_dispatch:
     inputs:
-      payload:
-        description: 'Content of the user submission, as json string'
+      payload_base64:
+        description: 'Base64 encoded zipped content of the user submission'
         required: true
         type: string
       runner:
@@ -24,13 +24,24 @@ jobs:
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
+    - name: Decode and Unzip Payload
+      shell: bash
+      run: |
+        echo "${{ github.event.inputs.payload_base64 }}" | base64 --decode > payload.zip
+        unzip payload.zip -d .
+        # Verify payload.json exists after unzipping
+        if [[ ! -f "payload.json" ]]; then
+          echo "Error: payload.json not found after unzipping."
+          exit 1
+        fi
+        cat payload.json # Optional: verify content for debugging
+
     - name: Create input files
       shell: bash
       run: |
-        cat > "payload.json" <<'EOL'
-        ${{ github.event.inputs.payload }}
-        EOL
-    
+        # payload.json is now created in the previous step
+        echo "payload.json already exists from unzip step."
+
     - name: Set venv directory based on runner
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
