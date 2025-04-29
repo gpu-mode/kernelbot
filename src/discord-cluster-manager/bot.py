@@ -137,7 +137,6 @@ class ClusterBot(commands.Bot):
                 name="general", reason="Created for leaderboard general"
             )
 
-
         if not submission_channel:
             submission_channel = await category.create_text_channel(
                 name="submissions", reason="Created for leaderboard submissions"

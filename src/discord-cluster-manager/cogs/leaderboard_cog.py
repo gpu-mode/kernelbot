@@ -9,7 +9,7 @@ from consts import (
     get_gpu_by_name,
 )
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 from leaderboard_db import leaderboard_name_autocomplete
 from report import MultiProgressReporter
 from submission import SubmissionRequest, prepare_submission
@@ -376,10 +376,6 @@ class LeaderboardCog(commands.Cog):
         self.get_submission_by_id = bot.leaderboard_group.command(
             name="get-submission", description="Retrieve one of your past submissions"
         )(self.get_submission_by_id)
-
-        # Start updating leaderboard
-        self.leaderboard_update.start()
-
 
     # --------------------------------------------------------------------------
     # |                           HELPER FUNCTIONS                              |
