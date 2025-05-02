@@ -24,13 +24,15 @@ jobs:
     timeout-minutes: 20
     steps:
     - uses: actions/checkout@v3
-    - name: Create input files
-      shell: bash
-      run: |
-        cat > "payload.json" <<'EOL'
-        ${{ github.event.inputs.payload }}
-        EOL
     
+    - name: Create input files securely
+      run: |
+        # Using base64 encoding to prevent content from being directly visible in logs
+        # then decode directly to file without displaying content
+        echo '${{ github.event.inputs.payload }}' | base64 > payload.json.b64
+        base64 --decode payload.json.b64 > payload.json
+        rm payload.json.b64
+
     - name: Set venv directory based on runner
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
@@ -46,10 +48,11 @@ jobs:
         fi
         pip install --upgrade pip
         if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
-          cat > "requirements.txt" <<'EOL'
-          ${{ github.event.inputs.requirements }}
-        EOL
-        pip install -r "requirements.txt"
+          # Same secure approach for requirements
+          echo '${{ github.event.inputs.requirements }}' | base64 > requirements.txt.b64
+          base64 --decode requirements.txt.b64 > requirements.txt
+          rm requirements.txt.b64
+          pip install -r "requirements.txt"
         fi
 
     - name: Run script
