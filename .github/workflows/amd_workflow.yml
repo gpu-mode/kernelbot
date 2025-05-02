@@ -25,12 +25,13 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Create input files
-      with:
+      env:
         PAYLOAD_CONTENT: ${{ github.event.inputs.payload }}
       shell: bash
       run: |
+        echo "::add-mask::$PAYLOAD_CONTENT"
         printf "%s" "$PAYLOAD_CONTENT" > "payload.json"
-    
+
     - name: Set venv directory based on runner
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
