@@ -24,16 +24,18 @@ jobs:
     timeout-minutes: 20
     steps:
     - uses: actions/checkout@v3
-    
-    - name: Create input files securely
+    - name: Create input files
+      shell: bash
       env:
-        # This makes GitHub mask the value in logs
-        PAYLOAD: ${{ github.event.inputs.payload }}
+        PAYLOAD_CONTENT: '${{ github.event.inputs.payload }}'
       run: |
-        # Write directly to file, bypassing command display
-        # Using Node.js which is pre-installed on GitHub runners
-        node -e 'require("fs").writeFileSync("payload.json", process.env.PAYLOAD)'
-
+        # Use bash to write directly to file without printing
+        # ::echo:: commands are masked in GitHub Actions logs
+        {
+          echo "::add-mask::$PAYLOAD_CONTENT"
+          echo "$PAYLOAD_CONTENT" > payload.json
+        } &>/dev/null
+    
     - name: Set venv directory based on runner
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
@@ -42,19 +44,17 @@ jobs:
 
     - name: Setup Virtual Environment and Install Dependencies
       shell: bash
-      env:
-        # This makes GitHub mask the value in logs
-        REQUIREMENTS: ${{ github.event.inputs.requirements }}
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
           python -m venv ${VENV_DIR}
           source ${VENV_DIR}/bin/activate
         fi
         pip install --upgrade pip
-        if [[ -n "$REQUIREMENTS" ]]; then
-          # Using the same node.js approach for requirements
-          node -e 'require("fs").writeFileSync("requirements.txt", process.env.REQUIREMENTS)'
-          pip install -r "requirements.txt"
+        if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
+          cat > "requirements.txt" <<'EOL'
+          ${{ github.event.inputs.requirements }}
+        EOL
+        pip install -r "requirements.txt"
         fi
 
     - name: Run script
