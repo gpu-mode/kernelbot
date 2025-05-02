@@ -25,9 +25,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Create input files
+      env:
+        PAYLOAD_CONTENT: ${{ github.event.inputs.payload }}
       shell: bash
       run: |
-        printf "%s" "${{ github.event.inputs.payload }}" > "payload.json"
+        printf "%s" "$PAYLOAD_CONTENT" > "payload.json"
     
     - name: Set venv directory based on runner
       run: |
