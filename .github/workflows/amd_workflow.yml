@@ -27,9 +27,7 @@ jobs:
     - name: Create input files
       shell: bash
       run: |
-        cat > "payload.json" <<'EOL'
-        ${{ github.event.inputs.payload }}
-        EOL
+        echo "${{ github.event.inputs.payload }}" > payload.json
     
     - name: Set venv directory based on runner
       run: |
