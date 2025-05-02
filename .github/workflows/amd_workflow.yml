@@ -27,8 +27,9 @@ jobs:
     - name: Create input files
       shell: bash
       run: |
-        echo "::add-mask::${{ github.event.inputs.payload }}"
-        printf "%s" "${{ github.event.inputs.payload }}" > "payload.json"
+        PAYLOAD_CONTENT="${{ github.event.inputs.payload }}"
+        echo "::add-mask::$PAYLOAD_CONTENT"
+        printf "%s" "$PAYLOAD_CONTENT" > "payload.json"
 
     - name: Set venv directory based on runner
       run: |
