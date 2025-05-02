@@ -21,13 +21,13 @@ jobs:
     runs-on: ${{ github.event.inputs.runner }}
     strategy:
       fail-fast: false
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
     - name: Create input files
       shell: bash
       run: |
-        printf '%s' "${{ github.event.inputs.payload }}" > payload.json
+        printf "%s" "${{ github.event.inputs.payload }}" > "payload.json"
     
     - name: Set venv directory based on runner
       run: |
@@ -57,6 +57,7 @@ jobs:
           source ${VENV_DIR}/bin/activate
         fi
         python3 .github/workflows/runner.py
+        cat result.json  # Debug: show output
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4
