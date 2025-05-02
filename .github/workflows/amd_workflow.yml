@@ -25,18 +25,17 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set and Mask Payload Output
-      id: set_payload_and_mask
+    - name: Set and Mask Payload Env Var
       shell: bash
       run: |
         PAYLOAD_CONTENT="${{ github.event.inputs.payload }}"
         echo "::add-mask::$PAYLOAD_CONTENT"
-        echo "::set-output name=payload_masked::$PAYLOAD_CONTENT"
+        echo "PAYLOAD_FOR_FILE=$PAYLOAD_CONTENT" >> $GITHUB_ENV
 
-    - name: Write Payload to File
+    - name: Write Payload to File from Env
       shell: bash
       run: |
-        printf "%s" "${{ steps.set_payload_and_mask.outputs.payload_masked }}" > "payload.json"
+        printf "%s" "$PAYLOAD_FOR_FILE" > "payload.json"
 
     - name: Set venv directory based on runner
       run: |
