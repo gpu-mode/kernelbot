@@ -26,15 +26,15 @@ jobs:
     - uses: actions/checkout@v3
     - name: Create input files
       shell: bash
-      env:
-        PAYLOAD_CONTENT: '${{ github.event.inputs.payload }}'
       run: |
-        # Use bash to write directly to file without printing
-        # ::echo:: commands are masked in GitHub Actions logs
-        {
-          echo "::add-mask::$PAYLOAD_CONTENT"
-          echo "$PAYLOAD_CONTENT" > payload.json
-        } &>/dev/null
+        # Extract the payload content without printing it
+        PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
+        
+        # Apply mask to the extracted content
+        echo "::add-mask::$PAYLOAD"
+        
+        # Now write to file (won't be logged since it's masked)
+        echo "$PAYLOAD" > payload.json
     
     - name: Set venv directory based on runner
       run: |
