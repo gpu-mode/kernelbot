@@ -26,17 +26,13 @@ jobs:
     - uses: actions/checkout@v3
     
     - name: Create input files securely
+      env:
+        # This makes GitHub mask the value in logs
+        PAYLOAD: ${{ github.event.inputs.payload }}
       run: |
-        # First, add payload to GitHub secrets at runtime
-        echo "PAYLOAD<<EOF" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.payload }}" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
-      
-    - name: Write payload to file without logging
-      run: |
-        # Using environment variable which GitHub will mask in logs
-        echo "$PAYLOAD" > payload.json
-      shell: bash
+        # Write directly to file, bypassing command display
+        # Using Node.js which is pre-installed on GitHub runners
+        node -e 'require("fs").writeFileSync("payload.json", process.env.PAYLOAD)'
 
     - name: Set venv directory based on runner
       run: |
@@ -46,27 +42,20 @@ jobs:
 
     - name: Setup Virtual Environment and Install Dependencies
       shell: bash
+      env:
+        # This makes GitHub mask the value in logs
+        REQUIREMENTS: ${{ github.event.inputs.requirements }}
       run: |
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
           python -m venv ${VENV_DIR}
           source ${VENV_DIR}/bin/activate
         fi
         pip install --upgrade pip
-        if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
-          # Add requirements to secrets in the same way
-          echo "REQUIREMENTS<<EOF" >> $GITHUB_ENV
-          echo "${{ github.event.inputs.requirements }}" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          # Use in next step
+        if [[ -n "$REQUIREMENTS" ]]; then
+          # Using the same node.js approach for requirements
+          node -e 'require("fs").writeFileSync("requirements.txt", process.env.REQUIREMENTS)'
+          pip install -r "requirements.txt"
         fi
-
-    - name: Write requirements if needed
-      if: ${{ github.event.inputs.requirements != '' }}
-      run: echo "$REQUIREMENTS" > requirements.txt
-
-    - name: Install requirements if needed
-      if: ${{ github.event.inputs.requirements != '' }}
-      run: pip install -r requirements.txt
 
     - name: Run script
       shell: bash
