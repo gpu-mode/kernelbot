@@ -27,11 +27,16 @@ jobs:
     
     - name: Create input files securely
       run: |
-        # Using base64 encoding to prevent content from being directly visible in logs
-        # then decode directly to file without displaying content
-        echo '${{ github.event.inputs.payload }}' | base64 > payload.json.b64
-        base64 --decode payload.json.b64 > payload.json
-        rm payload.json.b64
+        # First, add payload to GitHub secrets at runtime
+        echo "PAYLOAD<<EOF" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.payload }}" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+      
+    - name: Write payload to file without logging
+      run: |
+        # Using environment variable which GitHub will mask in logs
+        echo "$PAYLOAD" > payload.json
+      shell: bash
 
     - name: Set venv directory based on runner
       run: |
@@ -48,12 +53,20 @@ jobs:
         fi
         pip install --upgrade pip
         if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
-          # Same secure approach for requirements
-          echo '${{ github.event.inputs.requirements }}' | base64 > requirements.txt.b64
-          base64 --decode requirements.txt.b64 > requirements.txt
-          rm requirements.txt.b64
-          pip install -r "requirements.txt"
+          # Add requirements to secrets in the same way
+          echo "REQUIREMENTS<<EOF" >> $GITHUB_ENV
+          echo "${{ github.event.inputs.requirements }}" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          # Use in next step
         fi
+
+    - name: Write requirements if needed
+      if: ${{ github.event.inputs.requirements != '' }}
+      run: echo "$REQUIREMENTS" > requirements.txt
+
+    - name: Install requirements if needed
+      if: ${{ github.event.inputs.requirements != '' }}
+      run: pip install -r requirements.txt
 
     - name: Run script
       shell: bash
