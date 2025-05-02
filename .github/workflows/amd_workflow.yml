@@ -25,11 +25,21 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Create input files
-      shell: bash
+      env:
+        PAYLOAD_CONTENT: ${{ github.event.inputs.payload }}
+      shell: python
       run: |
-        PAYLOAD_CONTENT="${{ github.event.inputs.payload }}"
-        echo "::add-mask::$PAYLOAD_CONTENT"
-        printf "%s" "$PAYLOAD_CONTENT" > "payload.json"
+        import os, sys
+        payload = os.environ['PAYLOAD_CONTENT']
+        # Add mask for subsequent log appearances (though env might still be logged initially)
+        print(f'::add-mask::{payload}') 
+        try:
+          with open('payload.json', 'w') as f:
+            f.write(payload)
+          print('Successfully wrote payload to payload.json')
+        except Exception as e:
+          print(f'Error writing payload: {e}', file=sys.stderr)
+          sys.exit(1)
 
     - name: Set venv directory based on runner
       run: |
