@@ -1,13 +1,14 @@
 import asyncio
 import datetime
 import json
+import math
 import pprint
 import tempfile
 import zipfile
 from typing import Awaitable, Callable, Optional
 
 import requests
-from consts import AMD_REQUIREMENTS, GPU, NVIDIA_REQUIREMENTS, GitHubGPU
+from consts import AMD_REQUIREMENTS, GPU, NVIDIA_REQUIREMENTS, GitHubGPU, SubmissionMode
 from github import Github, UnknownObjectException, WorkflowRun
 from report import RunProgressReporter
 from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
@@ -70,7 +71,20 @@ class GitHubLauncher(Launcher):
 
         await status.push("⏳ Waiting for workflow to start...")
         logger.info("Waiting for workflow to start...")
-        await run.wait_for_completion(lambda x: self.wait_callback(x, status))
+        # Determine timeout based on submission mode
+        mode = config.get("mode")
+        default_minutes = 10
+        if mode == SubmissionMode.TEST.value:
+            seconds = config.get("test_timeout", default_minutes * 60)
+        elif mode == SubmissionMode.BENCHMARK.value:
+            seconds = config.get("benchmark_timeout", default_minutes * 60)
+        elif mode in (SubmissionMode.LEADERBOARD.value, SubmissionMode.PRIVATE.value):
+            seconds = config.get("ranked_timeout", default_minutes * 60)
+        else:
+            seconds = default_minutes * 60
+        timeout_minutes = math.ceil(seconds / 60)
+        logger.info(f"Using timeout of {timeout_minutes} minutes for mode '{mode}'")
+        await run.wait_for_completion(lambda x: self.wait_callback(x, status), timeout_minutes=timeout_minutes)
         await status.update(f"Workflow [{run.run_id}]({run.html_url}) completed")
         logger.info(f"Workflow [{run.run_id}]({run.html_url}) completed")
         await status.push("Downloading artifacts...")
@@ -230,6 +244,7 @@ class GitHubRun:
     async def wait_for_completion(
         self, callback: Callable[["GitHubRun"], Awaitable[None]], timeout_minutes: int = 10
     ):
+        logger.info(f"the timeout is {timeout_minutes}")
         if self.run is None:
             raise ValueError("Run needs to be triggered before a status check!")
 
