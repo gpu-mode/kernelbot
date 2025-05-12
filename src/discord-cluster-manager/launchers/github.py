@@ -8,7 +8,14 @@ import zipfile
 from typing import Awaitable, Callable, Optional
 
 import requests
-from consts import AMD_REQUIREMENTS, GPU, NVIDIA_REQUIREMENTS, GitHubGPU, SubmissionMode, DEFAULT_GITHUB_TIMEOUT_MINUTES
+from consts import (
+    AMD_REQUIREMENTS,
+    DEFAULT_GITHUB_TIMEOUT_MINUTES,
+    GPU,
+    NVIDIA_REQUIREMENTS,
+    GitHubGPU,
+    SubmissionMode,
+)
 from github import Github, UnknownObjectException, WorkflowRun
 from report import RunProgressReporter
 from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
@@ -17,118 +24,6 @@ from utils import get_github_branch_name, setup_logging
 from .launcher import Launcher
 
 logger = setup_logging()
-
-
-class GitHubLauncher(Launcher):
-    def __init__(self, repo: str, token: str):
-        super().__init__(name="GitHub", gpus=GitHubGPU)
-        self.repo = repo
-        self.token = token
-        self.trigger_limit = asyncio.Semaphore(1)
-
-    async def run_submission(
-        self, config: dict, gpu_type: GPU, status: RunProgressReporter
-    ) -> FullResult:
-        gpu_vendor = None
-        if gpu_type.value in ["MI300", "MI250"]:
-            selected_workflow = "amd_workflow.yml"
-            runner_name = {"MI300": "amdgpu-mi300-x86-64", "MI250": "amdgpu-mi250-x86-64"}[
-                gpu_type.value
-            ]
-            gpu_vendor = "AMD"
-            requirements = AMD_REQUIREMENTS
-        elif gpu_type.value == "NVIDIA":
-            selected_workflow = "nvidia_workflow.yml"
-            gpu_vendor = "NVIDIA"
-            requirements = NVIDIA_REQUIREMENTS
-        else:
-            raise ValueError(f"Invalid GPU type: {gpu_type.value}")
-
-        lang = config["lang"]
-        if lang == "cu" and gpu_vendor == "AMD":
-            # TODO implement HIP
-            raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")
-
-        lang_name = {"py": "Python", "cu": "CUDA"}[lang]
-
-        logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_workflow}")
-        run = GitHubRun(self.repo, self.token, selected_workflow)
-        logger.info(f"Successfully created GitHub run: {run.run_id}")
-
-        payload = json.dumps(config)
-
-        inputs = {"payload": payload}
-        if lang == "py":
-            inputs["requirements"] = requirements
-            if gpu_vendor == "AMD":
-                inputs["runner"] = runner_name
-
-        async with self.trigger_limit:  # DO NOT REMOVE, PREVENTS A RACE CONDITION
-            if not await run.trigger(inputs):
-                raise RuntimeError(
-                    "Failed to trigger GitHub Action. Please check the configuration."
-                )
-
-        await status.push("⏳ Waiting for workflow to start...")
-        logger.info("Waiting for workflow to start...")
-        # Determine timeout based on submission mode
-        mode = config.get("mode")
-        default_minutes = DEFAULT_GITHUB_TIMEOUT_MINUTES
-        if mode == SubmissionMode.TEST.value:
-            seconds = config.get("test_timeout", default_minutes * 60)
-        elif mode == SubmissionMode.BENCHMARK.value:
-            seconds = config.get("benchmark_timeout", default_minutes * 60)
-        elif mode in (SubmissionMode.LEADERBOARD.value, SubmissionMode.PRIVATE.value):
-            seconds = config.get("ranked_timeout", default_minutes * 60)
-        else:
-            seconds = default_minutes * 60
-        timeout_minutes = math.ceil(seconds / 60)
-        logger.info(f"Using timeout of {timeout_minutes} minutes for mode '{mode}' minutes")
-        await run.wait_for_completion(lambda x: self.wait_callback(x, status), timeout_minutes=timeout_minutes)
-        await status.update(f"Workflow [{run.run_id}]({run.html_url}) completed")
-        logger.info(f"Workflow [{run.run_id}]({run.html_url}) completed")
-        await status.push("Downloading artifacts...")
-        logger.info("Downloading artifacts...")
-
-        artifacts = await run.download_artifacts()
-        if "run-result" not in artifacts:
-            logger.error("Could not find `run-result` among artifacts: %s", artifacts.keys())
-            await status.push("Downloading artifacts...  failed")
-            return FullResult(
-                success=False, error="Could not download artifacts", runs={}, system=SystemInfo()
-            )
-
-        logs = artifacts["run-result"]["result.json"].decode("utf-8")
-
-        await status.update("Downloading artifacts... done")
-        logger.info("Downloading artifacts... done")
-
-        data = json.loads(logs)
-        runs = {}
-        # convert json back to EvalResult structures, which requires
-        # special handling for datetime and our dataclasses.
-        for k, v in data["runs"].items():
-            if "compilation" in v and v["compilation"] is not None:
-                comp = CompileResult(**v["compilation"])
-            else:
-                comp = None
-            run = RunResult(**v["run"])
-            res = EvalResult(
-                start=datetime.datetime.fromisoformat(v["start"]),
-                end=datetime.datetime.fromisoformat(v["end"]),
-                compilation=comp,
-                run=run,
-            )
-            runs[k] = res
-
-        system = SystemInfo(**data.get("system", {}))
-        return FullResult(success=True, error="", runs=runs, system=system)
-
-    async def wait_callback(self, run: "GitHubRun", status: RunProgressReporter):
-        await status.update(
-            f"⏳ Workflow [{run.run_id}]({run.html_url}): {run.status} "
-            f"({run.elapsed_time.total_seconds():.1f}s)"
-        )
 
 
 class GitHubRun:
@@ -242,7 +137,10 @@ class GitHubRun:
             return False
 
     async def wait_for_completion(
-        self, callback: Callable[["GitHubRun"], Awaitable[None]], timeout_minutes: int = DEFAULT_GITHUB_TIMEOUT_MINUTES
+        self,
+        callback: Callable[["GitHubRun"],
+        Awaitable[None]],
+        timeout_minutes: int = DEFAULT_GITHUB_TIMEOUT_MINUTES
     ):
         logger.info(f"the timeout is {timeout_minutes}")
         if self.run is None:
@@ -318,5 +216,125 @@ class GitHubRun:
                     f"Status code: {response.status_code}"
                 )
 
-        logger.info("Download artifacts for run %s: %s", self.run_id, list(extracted.keys()))
+        logger.info("Download artifacts for run %s: %s",
+        self.run_id,
+        list(extracted.keys()))
         return extracted
+
+class GitHubLauncher(Launcher):
+    def __init__(self, repo: str, token: str):
+        super().__init__(name="GitHub", gpus=GitHubGPU)
+        self.repo = repo
+        self.token = token
+        self.trigger_limit = asyncio.Semaphore(1)
+
+    async def run_submission(
+        self, config: dict, gpu_type: GPU, status: RunProgressReporter
+    ) -> FullResult:
+        selected_workflow, runner_name, requirements = self._select_workflow_params(gpu_type)
+        if gpu_type.value in ["MI300", "MI250"]:
+            gpu_vendor = "AMD"
+        elif gpu_type.value == "NVIDIA":
+            gpu_vendor = "NVIDIA"
+        else:
+            raise ValueError(f"Invalid GPU type: {gpu_type.value}")
+
+        lang = config["lang"]
+        if lang == "cu" and gpu_vendor == "AMD":
+            # TODO implement HIP
+            raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")
+
+        lang_name = {"py": "Python", "cu": "CUDA"}[lang]
+
+        logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_workflow}")
+        run = GitHubRun(self.repo, self.token, selected_workflow)
+        logger.info(f"Successfully created GitHub run: {run.run_id}")
+
+        payload = json.dumps(config)
+
+        inputs = {"payload": payload}
+        if lang == "py":
+            inputs["requirements"] = requirements
+            if gpu_vendor == "AMD":
+                inputs["runner"] = runner_name
+
+        async with self.trigger_limit:  # DO NOT REMOVE, PREVENTS A RACE CONDITION
+            if not await run.trigger(inputs):
+                raise RuntimeError(
+                    "Failed to trigger GitHub Action. Please check the configuration."
+                )
+
+        await status.push("⏳ Waiting for workflow to start...")
+        logger.info("Waiting for workflow to start...")
+
+        timeout_minutes = self._compute_timeout_minutes(config)
+        await run.wait_for_completion(
+            lambda x: self.wait_callback(x, status), timeout_minutes=timeout_minutes
+        )
+        await status.update(f"Workflow [{run.run_id}]({run.html_url}) completed")
+        logger.info(f"Workflow [{run.run_id}]({run.html_url}) completed")
+        await status.push("⏳ Downloading artifacts...")
+        return await self._handle_artifacts(run, status)
+
+    async def wait_callback(self, run: "GitHubRun", status: RunProgressReporter):
+        await status.update(
+            f"⏳ Workflow [{run.run_id}]({run.html_url}): {run.status} "
+            f"({run.elapsed_time.total_seconds():.1f}s)"
+        )
+
+    def _select_workflow_params(self, gpu_type: GPU) -> tuple[str, Optional[str], str]:
+        """
+        Returns workflow file, runner name (if any), and requirements for given GPU.
+        """
+        if gpu_type.value in ["MI300", "MI250"]:
+            runner = {
+                "MI300": "amdgpu-mi300-x86-64",
+                "MI250": "amdgpu-mi250-x86-64",
+            }[gpu_type.value]
+            return "amd_workflow.yml", runner, AMD_REQUIREMENTS
+        if gpu_type.value == "NVIDIA":
+            return "nvidia_workflow.yml", None, NVIDIA_REQUIREMENTS
+        raise ValueError(f"Invalid GPU type: {gpu_type.value}")
+
+    def _compute_timeout_minutes(self, config: dict) -> int:
+        """
+        Compute timeout in minutes based on submission mode and config timeouts.
+        """
+        mode = config.get("mode")
+        sec_map = {
+            SubmissionMode.TEST.value: config.get("test_timeout"),
+            SubmissionMode.BENCHMARK.value: config.get("benchmark_timeout"),
+            SubmissionMode.LEADERBOARD.value: config.get("ranked_timeout"),
+        }
+        seconds = sec_map.get(mode) or DEFAULT_GITHUB_TIMEOUT_MINUTES * 60
+        return math.ceil(seconds / 60)
+
+    async def _handle_artifacts(
+        self,
+        run: GitHubRun,
+        status: RunProgressReporter
+    ) -> FullResult:
+        logger.info("Downloading artifacts...")
+        artifacts = await run.download_artifacts()
+        if "run-result" not in artifacts:
+            logger.error("Could not find `run-result` among artifacts: %s", artifacts.keys())
+            await status.push("Downloading artifacts...  failed")
+            return FullResult(success=False,
+            error="Could not download artifacts", runs={},
+            system=SystemInfo())
+        logs = artifacts["run-result"]["result.json"].decode("utf-8")
+        await status.update("✅ Downloading artifacts... done")
+        logger.info("Downloading artifacts... done")
+        data = json.loads(logs)
+        runs: dict[str, EvalResult] = {}
+        for key, v in data.get("runs", {}).items():
+            comp = CompileResult(**v["compilation"]) if v.get("compilation") else None
+            res_run = RunResult(**v["run"])
+            runs[key] = EvalResult(
+                start=datetime.datetime.fromisoformat(v["start"]),
+                end=datetime.datetime.fromisoformat(v["end"]),
+                compilation=comp,
+                run=res_run,
+            )
+        system = SystemInfo(**data.get("system", {}))
+        return FullResult(success=True, error="", runs=runs, system=system)
