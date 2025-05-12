@@ -145,6 +145,8 @@ CUDA_FLAGS = [
 ]
 MODAL_CUDA_INCLUDE_DIRS = ["/ThunderKittens/include"]
 
+DEFAULT_GITHUB_TIMEOUT_MINUTES = 10  # Default timeout for GitHub launcher in minutes
+
 NVIDIA_REQUIREMENTS = """
 numpy
 torch
