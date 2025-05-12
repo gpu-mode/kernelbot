@@ -29,7 +29,7 @@ jobs:
       shell: bash
       run: |
         # Extract the payload content without printing it
-        sudo apt-get update && sudo apt-get install -y jq
+        apt-get update && apt-get install -y jq
         PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
         
         # Apply mask to the extracted content
