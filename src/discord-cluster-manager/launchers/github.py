@@ -238,7 +238,8 @@ class GitHubLauncher(Launcher):
             gpu_vendor = "NVIDIA"
         else:
             raise ValueError(f"Invalid GPU type: {gpu_type.value}")
-
+        logger.info(f"config keys are {config.keys()}")
+        logger.info(f"the config is {config}")
         lang = config["lang"]
         if lang == "cu" and gpu_vendor == "AMD":
             # TODO implement HIP

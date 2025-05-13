@@ -11,6 +11,8 @@ from types import NoneType
 from typing import Optional, Protocol, Union
 
 from consts import CUDA_FLAGS, ExitCode, Timeout
+import logging
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -390,6 +392,8 @@ def run_cuda_script(  # # noqa: C901
     """
     start = datetime.datetime.now()
     try:
+        for source in sources:
+            logger.info(f"Source file: {source}")
         # Write submission files to directory
         _create_files(sources)
         _create_files(headers)
@@ -448,7 +452,9 @@ def run_pytorch_script(  # noqa: C901
     start = datetime.datetime.now()
     try:
         assert main in sources.keys()
-
+        print("sources are ")
+        print(sources)
+        logging.info(f"sources are {sources}")
         # Write submission files to directory
         _create_files(sources)
 

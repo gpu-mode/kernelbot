@@ -52,17 +52,21 @@ class VerifyRunCog(commands.Cog):
             sub_code = create_mock_attachment(
                 "submission.py", Path("examples/identity_py/submission.py").read_text()
             )
+            logger.info(f"sub_code: {sub_code}")
+            logger.info(f"sub_code.text: {Path('examples/identity_py/submission.py').read_text()}")
             task = make_task("examples/identity_py")
-        else:
+        elif lang == "cu":
             sub_code = create_mock_attachment(
-                "test.cu", Path("examples/identity_cuda/submission.cu").read_text()
+                "submission.cu", Path("examples/identity_cuda/submission.cu").read_text()
             )
             task = make_task("examples/identity_cuda")
+        else:
+            raise ValueError(f"Invalid language: {lang}")
 
         return await submit_leaderboard(
             interaction,
             -1,
-            sub_code,
+            sub_code.read(),
             gpu,
             reporter=reporter,
             task=task,
@@ -77,6 +81,7 @@ class VerifyRunCog(commands.Cog):
         reporter,
         lang: str,
     ) -> bool:
+        logger.info(f"Verifying run for {gpu.name} {lang}")
         result = await self.trigger_run(interaction, gpu, reporter, lang)
         return result.success
         #
@@ -297,8 +302,8 @@ class VerifyRunCog(commands.Cog):
             amd = get_gpu_by_name("mi300")
             t4 = get_gpu_by_name("T4")
 
-            reporter = MultiProgressReporter("Verifying")
-            await reporter.show(interaction)
+            reporter = MultiProgressReporter(interaction, "Verifying")
+            await reporter.show()
 
             results = await asyncio.gather(
                 self.verify_github_run(interaction, nvidia, reporter.add_run("NVIDIA-PY"), "py"),
