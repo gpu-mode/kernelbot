@@ -763,7 +763,9 @@ class AdminCog(commands.Cog):
 
     @with_error_handling
     @discord.app_commands.describe(last_day_only="Only show stats for the last day")
-    async def show_bot_stats(self, interaction: discord.Interaction, last_day_only: bool):
+    @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    async def show_bot_stats(self, interaction: discord.Interaction, last_day_only: bool, leaderboard_name: Optional[str] = None):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
             await send_discord_message(
@@ -774,7 +776,7 @@ class AdminCog(commands.Cog):
             return
 
         with self.bot.leaderboard_db as db:
-            stats = db.generate_stats(last_day_only)
+            stats = db.generate_stats(last_day_only, leaderboard_name)
             msg = """```"""
             for k, v in stats.items():
                 msg += f"\n{k} = {v}"

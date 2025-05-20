@@ -530,32 +530,39 @@ class LeaderboardDB:
             for submission in self.cursor.fetchall()
         ]
 
-    def generate_stats(self, last_day: bool):
+    def generate_stats(self, last_day: bool, leaderboard_name: Optional[str] = None):
         try:
-            return self._generate_stats(last_day)
+            return self._generate_stats(last_day, leaderboard_name)
         except Exception as e:
             logging.exception("error generating stats", exc_info=e)
             raise
 
-    def _generate_runner_stats(self, last_day: bool = False):
+    def _generate_runner_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
         select_expr = "WHERE NOW() - s.submission_time <= interval '24 hours'" if last_day else ""
+        leaderboard_filter = ""
+        if leaderboard_name:
+            select_expr += f" AND s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = {leaderboard_name})"
+            leaderboard_filter = f"JOIN leaderboard.submission s ON r.submission_id = s.id\nWHERE s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = {leaderboard_name})"
+        else:
+            select_expr += " AND NOT s.secret"
         # per-runner stats
         self.cursor.execute(
-            f"""
-            SELECT
-                runner,
-                COUNT(*),
-                COUNT(*) FILTER (WHERE passed),
-                COUNT(score),
-                COUNT(*) FILTER (WHERE secret),
-                MAX(runs.start_time - s.submission_time),
-                AVG(runs.start_time - s.submission_time),
-                SUM(runs.end_time - runs.start_time)
-            FROM leaderboard.runs JOIN leaderboard.submission s ON submission_id = s.id
-            {select_expr}
-            GROUP BY runner;
-            """
-        )
+                f"""
+                SELECT
+                    runner,
+                    COUNT(*),
+                    COUNT(*) FILTER (WHERE passed),
+                    COUNT(score),
+                    COUNT(*) FILTER (WHERE secret),
+                    MAX(runs.start_time - s.submission_time),
+                    AVG(runs.start_time - s.submission_time),
+                    SUM(runs.end_time - runs.start_time)
+                FROM leaderboard.runs JOIN leaderboard.submission s ON submission_id = s.id
+                {leaderboard_filter}
+                {select_expr}
+                GROUP BY runner;
+                """
+            )
 
         result = {}
         for row in self.cursor.fetchall():
@@ -569,19 +576,25 @@ class LeaderboardDB:
 
         return result
 
-    def _generate_submission_stats(self, last_day: bool = False):
+    def _generate_submission_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
         select_expr = "WHERE NOW() - submission_time <= interval '24 hours'" if last_day else ""
-        self.cursor.execute(
-            f"""
-            SELECT
-                COUNT(*),
-                COUNT(*) FILTER (WHERE NOT done),
-                COUNT(DISTINCT user_id)
-            FROM leaderboard.submission
-            {select_expr}
-            ;
-            """
-        )
+        leaderboard_filter = ""
+        if leaderboard_name:
+            leaderboard_filter = "WHERE s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = %s)"
+        if not leaderboard_name:
+            self.cursor.execute(
+                f"""
+                SELECT
+                    COUNT(*),
+                    COUNT(*) FILTER (WHERE NOT done),
+                    COUNT(DISTINCT user_id)
+                FROM leaderboard.submission
+                {leaderboard_filter}
+                {select_expr}
+                ;
+                """,
+                (leaderboard_name,) if leaderboard_name else None,
+            )
         num_sub, num_sub_wait, num_users = self.cursor.fetchone()
         return {
             "num_submissions": num_sub,
@@ -589,9 +602,9 @@ class LeaderboardDB:
             "num_users": num_users,
         }
 
-    def _generate_stats(self, last_day: bool = False):
-        result = self._generate_submission_stats(last_day)
-        result.update(self._generate_runner_stats(last_day))
+    def _generate_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
+        result = self._generate_submission_stats(last_day, leaderboard_name)
+        result.update(self._generate_runner_stats(last_day, leaderboard_name))
 
         # code-level stats
         if not last_day:
