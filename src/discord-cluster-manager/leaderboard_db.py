@@ -539,12 +539,10 @@ class LeaderboardDB:
 
     def _generate_runner_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
         select_expr = "WHERE NOW() - s.submission_time <= interval '24 hours'" if last_day else ""
-        leaderboard_filter = ""
         if leaderboard_name:
-            select_expr += f" AND s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = {leaderboard_name})"
-            leaderboard_filter = f"JOIN leaderboard.submission s ON r.submission_id = s.id\nWHERE s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = {leaderboard_name})"
-        else:
-            select_expr += " AND NOT s.secret"
+            select_expr += f"AND s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = '{leaderboard_name}')"
+            if not last_day:
+                select_expr = select_expr.replace("AND", "WHERE")
         # per-runner stats
         self.cursor.execute(
                 f"""
@@ -558,7 +556,6 @@ class LeaderboardDB:
                     AVG(runs.start_time - s.submission_time),
                     SUM(runs.end_time - runs.start_time)
                 FROM leaderboard.runs JOIN leaderboard.submission s ON submission_id = s.id
-                {leaderboard_filter}
                 {select_expr}
                 GROUP BY runner;
                 """
@@ -577,23 +574,23 @@ class LeaderboardDB:
         return result
 
     def _generate_submission_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
-        select_expr = "WHERE NOW() - submission_time <= interval '24 hours'" if last_day else ""
+        select_expr = "WHERE NOW() - s.submission_time <= interval '24 hours'" if last_day else ""
         leaderboard_filter = ""
         if leaderboard_name:
-            leaderboard_filter = "WHERE s.leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = %s)"
-        if not leaderboard_name:
-            self.cursor.execute(
+            leaderboard_filter = f"WHERE leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = '{leaderboard_name}')"
+            if last_day:
+                leaderboard_filter = leaderboard_filter.replace("WHERE", "AND", 1)
+            select_expr += leaderboard_filter
+        self.cursor.execute(
                 f"""
                 SELECT
                     COUNT(*),
                     COUNT(*) FILTER (WHERE NOT done),
                     COUNT(DISTINCT user_id)
-                FROM leaderboard.submission
-                {leaderboard_filter}
+                FROM leaderboard.submission s
                 {select_expr}
                 ;
                 """,
-                (leaderboard_name,) if leaderboard_name else None,
             )
         num_sub, num_sub_wait, num_users = self.cursor.fetchone()
         return {
@@ -608,24 +605,39 @@ class LeaderboardDB:
 
         # code-level stats
         if not last_day:
-            self.cursor.execute(
+            leaderboard_filter = ""
+            if leaderboard_name:
+                leaderboard_filter = f"""
+                WHERE id IN (
+                    SELECT code_id FROM leaderboard.submission s
+                    JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                    WHERE l.name = '{leaderboard_name}'
+                )
                 """
-                SELECT COUNT(*) FROM leaderboard.code_files;
+            self.cursor.execute(
+                f"""
+                SELECT COUNT(*) FROM leaderboard.code_files
+                {leaderboard_filter};
                 """
             )
             result["num_unique_codes"] = self.cursor.fetchone()[0]
 
         else:
             # calculate heavy hitters
+            leaderboard_filter = ""
+            if leaderboard_name:
+                leaderboard_filter = f"AND l.name = '{leaderboard_name}'"
             self.cursor.execute(
-                """
+                f"""
                 WITH run_durations AS (
                     SELECT
                         s.user_id AS user_id,
                         r.end_time - r.start_time AS duration
                     FROM leaderboard.runs r
                     JOIN leaderboard.submission s ON r.submission_id = s.id
+                    JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                     WHERE NOW() - s.submission_time <= interval '24 hours'
+                    {leaderboard_filter}
                 )
                 SELECT
                     user_id,
