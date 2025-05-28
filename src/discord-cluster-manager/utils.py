@@ -5,7 +5,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any, List, NotRequired, Optional, TypedDict
 
 import discord
-from consts import Language, SubmissionMode
+from consts import Language, SubmissionMode, REFERENCE_TIMING_ARG
 
 if TYPE_CHECKING:
     from task import LeaderboardTask
@@ -247,7 +247,7 @@ def build_task_config(
             config["main"] = "eval.py"
         args = []
         if mode == SubmissionMode.REFERENCE:
-            args.append("--time-ref")
+            args.append(REFERENCE_TIMING_ARG)
         return {
             "args": args,
             **config,

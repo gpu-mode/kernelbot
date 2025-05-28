@@ -7,6 +7,7 @@ import time
 import torch
 from reference import check_implementation, generate_input, ref_kernel
 from submission import custom_kernel
+from consts import REFERENCE_TIMING_ARG
 
 
 class PopcornLogger:
@@ -90,7 +91,7 @@ def metric(logger: PopcornLogger, rng: torch.Generator, time_reference_impl: boo
 def main():
     parser = argparse.ArgumentParser(description='Evaluate kernel implementation.')
     parser.add_argument(
-        '--time-ref', action='store_true', help='Time ref kernel.'
+        REFERENCE_TIMING_ARG, action='store_true', help='Time ref kernel.'
     )
     args = parser.parse_args()
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from types import NoneType
 from typing import Optional, Protocol, Union
 
-from consts import CUDA_FLAGS, ExitCode, Timeout
+from consts import CUDA_FLAGS, ExitCode, REFERENCE_TIMING_ARG, Timeout
 
 
 @dataclasses.dataclass
@@ -446,11 +446,15 @@ def run_pytorch_script(  # noqa: C901
         RunResult
     """
     start = datetime.datetime.now()
+    args = kwargs.get("args", [])
+    # log everything that's going on
+    print("Running with args: %s", args)
+    print("Running with sources: %s", sources)
+    print("Running with main: %s", main)
     try:
-        assert main in sources.keys()
-
-        # Write submission files to directory
-        _create_files(sources)
+        if REFERENCE_TIMING_ARG not in args:
+            assert main in sources.keys()
+            _create_files(sources)
 
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
