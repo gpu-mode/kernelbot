@@ -287,6 +287,7 @@ def run_single_evaluation(
     ranked_timeout: int = Timeout.RANKED,
     ranking_by: str = "last",
     seed: Optional[int] = None,
+    args: Optional[list[str]] = [],
 ) -> RunResult:
     """
     A single runner run, either in the context of test files, or in the
@@ -296,8 +297,8 @@ def run_single_evaluation(
         with tempfile.NamedTemporaryFile("w") as tests_file:
             tests_file.write(tests)
             tests_file.flush()
-            return run_program(call + [mode, tests_file.name], seed=seed, timeout=test_timeout)
-    elif mode in ["benchmark", "profile", "leaderboard"]:
+            return run_program(call + [mode, tests_file.name] + args, seed=seed, timeout=test_timeout)
+    elif mode in ["benchmark", "profile", "leaderboard", "reference"]:
         timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
         with tempfile.NamedTemporaryFile("w") as bench_file:
             if ranking_by == "last":
@@ -305,10 +306,10 @@ def run_single_evaluation(
             else:
                 bench_file.write(benchmarks)
             bench_file.flush()
-            return run_program(call + [mode, bench_file.name], seed=seed, timeout=timeout)
+            return run_program(call + [mode, bench_file.name] + args, seed=seed, timeout=timeout)
     else:
         assert mode == "script"
-        return run_program(call, seed=seed, timeout=Timeout.SCRIPT)
+        return run_program(call + args, seed=seed, timeout=Timeout.SCRIPT)
 
 
 def make_system_info() -> SystemInfo:
