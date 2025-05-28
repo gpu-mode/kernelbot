@@ -369,14 +369,14 @@ class LeaderboardSubmitCog(app_commands.Group):
         gpu: Optional[str] = None,
     ):
         # Check if reference run already exists
-        with self.bot.leaderboard_db as db:
-            if db.has_reference_run(leaderboard_name):
-                await send_discord_message(
-                    interaction,
-                    f"A reference run for leaderboard '{leaderboard_name}' already exists.",
-                    ephemeral=True,
-                )
-                return
+        # with self.bot.leaderboard_db as db:
+        #     if db.has_reference_run(leaderboard_name):
+        #         await send_discord_message(
+        #             interaction,
+        #             f"A reference run for leaderboard '{leaderboard_name}' already exists.",
+        #             ephemeral=True,
+        #         )
+        #         return
         # Process as a special submission
         return await self.submit(
             interaction, leaderboard_name, None, mode=SubmissionMode.REFERENCE, gpu=gpu
