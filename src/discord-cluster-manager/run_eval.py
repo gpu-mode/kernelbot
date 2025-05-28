@@ -455,10 +455,11 @@ def run_pytorch_script(  # noqa: C901
     print("Running with sources: %s", sources)
     print("Running with main: %s", main)
     try:
-        if REFERENCE_TIMING_ARG not in args:
-            assert main in sources.keys()
+        if REFERENCE_TIMING_ARG in args:
             # pluck out submission.py from sources as it is not needed for the run and is None normally
             sources.pop("submission.py")
+        assert main in sources.keys()
+        _create_files(sources)
 
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
