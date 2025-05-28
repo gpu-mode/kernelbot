@@ -219,6 +219,7 @@ def compile_cuda_script(  # # noqa: C901
 
 def run_program(args: list[str], seed: Optional[int], timeout: int) -> RunResult:
     print("[Running]")
+    print("Running with args: %s", args)
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
     pipe_read, pipe_write = os.pipe()
@@ -460,7 +461,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"].extend(kwargs.get("args", [])), seed=1, timeout=Timeout.COMPILE)
+            compile_run = run_program(["python", "submission.py"] + args, seed=1, timeout=Timeout.COMPILE)
             if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                 comp = CompileResult(
                     nvcc_found=True,
