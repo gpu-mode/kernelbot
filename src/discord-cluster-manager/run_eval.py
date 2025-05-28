@@ -297,7 +297,7 @@ def run_single_evaluation(
         with tempfile.NamedTemporaryFile("w") as tests_file:
             tests_file.write(tests)
             tests_file.flush()
-            return run_program(call + [mode, tests_file.name] + args, seed=seed, timeout=test_timeout)
+            return run_program(call + [mode, tests_file.name], seed=seed, timeout=test_timeout)
     elif mode in ["benchmark", "profile", "leaderboard", "reference"]:
         timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
         with tempfile.NamedTemporaryFile("w") as bench_file:
@@ -450,24 +450,24 @@ def run_pytorch_script(  # noqa: C901
     start = datetime.datetime.now()
     args = kwargs.get("args", [])
     # log everything that's going on
-    print("Running with kwargs: %s", kwargs)
-    print("Running with args: %s", args)
-    print("Running with sources: %s", sources)
-    print("Running with main: %s", main)
+    print("Running with kwargs: %s" % kwargs)
+    print("Running with args: %s" % args)
+    print("Running with sources: %s" % sources)
+    print("Running with main: %s" % main)
     is_reference = False
     if REFERENCE_TIMING_ARG in args:
         # pluck out submission.py from sources as it is not needed for the run and is None normally
-        sources.pop("submission.py")
+        sources.pop("submission.py", None)
         is_reference = True
     try:
-        
         assert main in sources.keys()
         _create_files(sources)
 
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
-        try:
-            if not is_reference:
+        comp = None
+        if not is_reference:
+            try:
                 compile_run = run_program(["python", "submission.py"] + args, seed=1, timeout=Timeout.COMPILE)
                 if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                     comp = CompileResult(
@@ -479,8 +479,6 @@ def run_pytorch_script(  # noqa: C901
                         stderr=compile_run.stderr,
                         exit_code=compile_run.exit_code,
                     )
-                else:
-                    comp = None
             except subprocess.CalledProcessError as e:
                 # This step is purely optional, so we just go on
                 # if it fails
@@ -493,8 +491,6 @@ def run_pytorch_script(  # noqa: C901
                     stderr=e.stderr,
                     exit_code=e.returncode,
                 )
-        else:
-            comp = None
 
         run = run_single_evaluation(["python", main], **kwargs)
 
