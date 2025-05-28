@@ -6,7 +6,6 @@ import time
 
 import torch
 from reference import check_implementation, generate_input, ref_kernel
-from submission import custom_kernel
 from consts import REFERENCE_TIMING_ARG
 
 
@@ -19,6 +18,7 @@ class PopcornLogger:
 
 
 def correctness(rng: torch.Generator) -> bool:
+    from submission import custom_kernel
     for _ in range(10):  # check multiple times
         inputs = generate_input(torch.randint(0, int(2**31), (), generator=rng).item())
         custom_output = custom_kernel(inputs)
@@ -37,7 +37,9 @@ def metric(logger: PopcornLogger, rng: torch.Generator, time_reference_impl: boo
     if time_reference_impl:
         logger.log("Timing Reference Implementation")
     else:
+        # in the case of a reference run we don't have a submission
         logger.log("Timing Submitted Custom Implementation")
+        from submission import custom_kernel
 
     # Warmup Code
     print("warming up...")

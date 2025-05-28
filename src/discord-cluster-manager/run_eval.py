@@ -454,41 +454,47 @@ def run_pytorch_script(  # noqa: C901
     print("Running with args: %s", args)
     print("Running with sources: %s", sources)
     print("Running with main: %s", main)
+    is_reference = False
+    if REFERENCE_TIMING_ARG in args:
+        # pluck out submission.py from sources as it is not needed for the run and is None normally
+        sources.pop("submission.py")
+        is_reference = True
     try:
-        if REFERENCE_TIMING_ARG in args:
-            # pluck out submission.py from sources as it is not needed for the run and is None normally
-            sources.pop("submission.py")
+        
         assert main in sources.keys()
         _create_files(sources)
 
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"] + args, seed=1, timeout=Timeout.COMPILE)
-            if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
+            if not is_reference:
+                compile_run = run_program(["python", "submission.py"] + args, seed=1, timeout=Timeout.COMPILE)
+                if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
+                    comp = CompileResult(
+                        nvcc_found=True,
+                        nvcc_version="",
+                        success=True,
+                        command=compile_run.command,
+                        stdout=compile_run.stdout,
+                        stderr=compile_run.stderr,
+                        exit_code=compile_run.exit_code,
+                    )
+                else:
+                    comp = None
+            except subprocess.CalledProcessError as e:
+                # This step is purely optional, so we just go on
+                # if it fails
                 comp = CompileResult(
-                    nvcc_found=True,
+                    nvcc_found=False,
                     nvcc_version="",
-                    success=True,
-                    command=compile_run.command,
-                    stdout=compile_run.stdout,
-                    stderr=compile_run.stderr,
-                    exit_code=compile_run.exit_code,
+                    success=False,
+                    command="python submission.py",
+                    stdout=e.stdout,
+                    stderr=e.stderr,
+                    exit_code=e.returncode,
                 )
-            else:
-                comp = None
-        except subprocess.CalledProcessError as e:
-            # This step is purely optional, so we just go on
-            # if it fails
-            comp = CompileResult(
-                nvcc_found=False,
-                nvcc_version="",
-                success=False,
-                command="python submission.py",
-                stdout=e.stdout,
-                stderr=e.stderr,
-                exit_code=e.returncode,
-            )
+        else:
+            comp = None
 
         run = run_single_evaluation(["python", main], **kwargs)
 
