@@ -27,6 +27,8 @@ from utils import (
     setup_logging,
 )
 
+from consts import REFERENCE_USER_ID, REFERENCE_USER
+
 leaderboard_name_cache = LRUCache(max_size=512)
 
 logger = setup_logging(__name__)
@@ -213,6 +215,11 @@ class LeaderboardDB:
         time: datetime.datetime,
         user_name: str = None,
     ) -> Optional[int]:
+        if user_id == REFERENCE_USER_ID and user_name == REFERENCE_USER:
+            # todo: add reference code to the database
+            code = ""
+            file_name = "reference.py"
+
         try:
             # check if we already have the code
             self.cursor.execute(
@@ -286,6 +293,25 @@ class LeaderboardDB:
             )
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error during creation of submission") from e
+
+    def has_reference_run(self, leaderboard_name: str) -> bool:
+        try:
+            self.cursor.execute(
+                """
+                SELECT COUNT(*) FROM leaderboard.runs
+                WHERE leaderboard.runs.leaderboard_id = (
+                    SELECT leaderboard.leaderboard.id
+                    FROM leaderboard.leaderboard
+                    WHERE leaderboard.leaderboard.name = %s
+                )
+                AND leaderboard.runs.user_id = %s;
+                """,
+                (leaderboard_name, REFERENCE_USER_ID),
+            )
+            return self.cursor.fetchone()[0] > 0
+        except psycopg2.Error as e:
+            logger.error("Error checking for reference run", exc_info=e)
+            return False
 
     def mark_submission_done(
         self,

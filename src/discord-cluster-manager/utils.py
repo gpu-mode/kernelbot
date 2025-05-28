@@ -245,8 +245,11 @@ def build_task_config(
 
         if lang == "py":
             config["main"] = "eval.py"
-
+        args = []
+        if mode == SubmissionMode.REFERENCE:
+            args.append("--time-ref")
         return {
+            "args": args,
             **config,
             "sources": {
                 eval_name: submission_content,

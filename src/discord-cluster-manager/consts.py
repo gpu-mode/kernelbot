@@ -97,6 +97,7 @@ class SubmissionMode(Enum):
     LEADERBOARD = "leaderboard"
     PRIVATE = "private"
     SCRIPT = "script"
+    REFERENCE = "reference"
 
 
 class Language(Enum):
@@ -157,3 +158,6 @@ AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
 torch
 """
+
+REFERENCE_USER = "REFERENCE_USER"
+REFERENCE_USER_ID = -123

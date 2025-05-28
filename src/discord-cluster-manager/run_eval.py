@@ -455,7 +455,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
+            compile_run = run_program(["python", "submission.py"].extend(kwargs.get("args", [])), seed=1, timeout=Timeout.COMPILE)
             if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                 comp = CompileResult(
                     nvcc_found=True,
@@ -511,7 +511,7 @@ def run_evaluation(
     require multiple runner calls.
     """
     results: dict[str, EvalResult] = {}
-    if mode in ["test", "benchmark", "profile", "script"]:
+    if mode in ["test", "benchmark", "profile", "script", "reference"]:
         results[mode] = call(mode=mode)
     elif mode in ["private", "leaderboard"]:
         # first, run the tests
@@ -552,6 +552,7 @@ def run_config(config: dict):
         "ranked_timeout": config.get("ranked_timeout", Timeout.RANKED),
         "benchmark_timeout": config.get("benchmark_timeout", Timeout.BENCHMARK),
         "test_timeout": config.get("test_timeout", Timeout.TEST),
+        "args": config.get("args", []),
     }
     if config["lang"] == "py":
         runner = functools.partial(

@@ -27,18 +27,29 @@ class ProcessedSubmissionRequest(SubmissionRequest):
 
 
 def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB) -> ProcessedSubmissionRequest:
-    if profanity.contains_profanity(req.file_name):
-        raise KernelBotError("Please provide a non rude filename")
+    # Detect reference submissions (no file name & no code provided)
+    # A reference submission is identified by missing/empty code content (no user file)
+    is_reference_submission = not req.code
 
-    # check file extension
-    if not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
+    # Perform filename/content related checks only for *non* reference submissions
+    if not is_reference_submission:
+        if profanity.contains_profanity(req.file_name):
+            raise KernelBotError("Please provide a non rude filename")
+
+        # check file extension (if filename provided)
+        if req.file_name and not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
+            raise KernelBotError(
+                "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
+            )
+
+        # process file directives (GPU selection / leaderboard name)
+        req = handle_popcorn_directives(req)
+
+    # Ensure leaderboard name is present (might have come from the command directly)
+    if req.leaderboard is None:
         raise KernelBotError(
-            "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
+            "Missing leaderboard name. Either supply one as a command argument or via ``#!POPCORN leaderboard <name>`` directive.",
         )
-
-    # process file directives
-    req = handle_popcorn_directives(req)
-    assert req.leaderboard is not None
 
     leaderboard = lookup_leaderboard(req.leaderboard, lb_db)
     check_deadline(leaderboard)
@@ -116,14 +127,6 @@ def handle_popcorn_directives(req: SubmissionRequest) -> SubmissionRequest:
             # )
         else:
             req.leaderboard = info["leaderboard"]
-
-    if req.leaderboard is None:
-        raise KernelBotError(
-            "Missing leaderboard name. "
-            "Either supply one as an argument in the submit command, or "
-            "specify it in your submission script using the "
-            "`{#,//}!POPCORN leaderboard <leaderboard_name>` directive.",
-        )
 
     return req
 

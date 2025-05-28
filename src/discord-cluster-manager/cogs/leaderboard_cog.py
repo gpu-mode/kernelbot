@@ -27,6 +27,8 @@ from utils import (
     with_error_handling,
 )
 
+from consts import REFERENCE_USER_ID, REFERENCE_USER
+
 if TYPE_CHECKING:
     from ..bot import ClusterBot
 
@@ -63,28 +65,51 @@ class LeaderboardSubmitCog(app_commands.Group):
         self,
         interaction: discord.Interaction,
         leaderboard_name: Optional[str],
-        script: discord.Attachment,
+        script: Optional[discord.Attachment],
         mode: SubmissionMode,
         cmd_gpus: Optional[List[str]],
     ) -> int:
         """
         Called as the main body of a submission to route to the correct runner.
         """
-        # Read the template file
-        submission_content = await script.read()
 
-        try:
-            submission_content = submission_content.decode()
-        except UnicodeError:
-            await send_discord_message(
-                interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
-            )
-            return -1
+        if script is None:
+            if mode != SubmissionMode.REFERENCE:
+                await send_discord_message(
+                    interaction,
+                    "Script attachment is required for this unless submission mode is reference",
+                    ephemeral=True,
+                )
+                return -1
+            else:
+                submission_content = ""
+        else:
+            # Read the template file
+            submission_content = await script.read()
+
+            try:
+                submission_content = submission_content.decode()
+            except UnicodeError:
+                await send_discord_message(
+                    interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
+                )
+                return -1
+        if mode == SubmissionMode.REFERENCE:
+            # create fake reference submission
+            file_name = None
+            submission_content = None
+            user_id = REFERENCE_USER_ID
+            user_name = REFERENCE_USER
+        else:
+            file_name = script.filename
+            submission_content = submission_content
+            user_id = interaction.user.id
+            user_name = interaction.user.global_name or interaction.user.name
 
         req = SubmissionRequest(
             code=submission_content,
-            file_name=script.filename,
-            user_id=interaction.user.id,
+            file_name=file_name,
+            user_id=user_id,
             gpus=cmd_gpus,
             leaderboard=leaderboard_name,
         )
@@ -105,26 +130,28 @@ class LeaderboardSubmitCog(app_commands.Group):
 
         command = self.bot.get_cog("SubmitCog").submit_leaderboard
 
-        user_name = interaction.user.global_name or interaction.user.name
         # Create a submission entry in the database
         with self.bot.leaderboard_db as db:
             sub_id = db.create_submission(
                 leaderboard=req.leaderboard,
-                file_name=script.filename,
+                file_name=file_name,
                 code=submission_content,
-                user_id=interaction.user.id,
+                user_id=user_id,
                 time=datetime.now(),
                 user_name=user_name,
             )
+        if mode == SubmissionMode.REFERENCE:
+            run_msg = f"Submission **{sub_id}**: is a reference submission for `{req.leaderboard}`"
+        else:
+            run_msg = f"Submission **{sub_id}**: `{file_name}` for `{req.leaderboard}`"
 
-        run_msg = f"Submission **{sub_id}**: `{script.filename}` for `{req.leaderboard}`"
         reporter = MultiProgressReporter(interaction, run_msg)
         try:
             tasks = [
                 command(
                     sub_id,
                     submission_content,
-                    script.filename,
+                    file_name,
                     gpu,
                     reporter.add_run(f"{gpu.name} on {gpu.runner}"),
                     req.task,
@@ -140,7 +167,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                     command(
                         sub_id,
                         submission_content,
-                        script.filename,
+                        file_name,
                         gpu,
                         reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
                         req.task,
@@ -224,10 +251,19 @@ class LeaderboardSubmitCog(app_commands.Group):
         self,
         interaction: discord.Interaction,
         leaderboard_name: Optional[str],
-        script: discord.Attachment,
+        script: Optional[discord.Attachment],
         mode: SubmissionMode,
         gpu: Optional[str],
     ):
+
+        if not mode == SubmissionMode.REFERENCE and not script:
+            await send_discord_message(
+                interaction,
+                "Script attachment is required for this unless submission mode is reference",
+                ephemeral=True,
+            )
+            return
+
         if not self.bot.accepts_jobs:
             await send_discord_message(
                 interaction,
@@ -317,6 +353,33 @@ class LeaderboardSubmitCog(app_commands.Group):
     ):
         return await self.submit(
             interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD, gpu=gpu
+        )
+
+    @app_commands.command(name="reference_run", description="Create a reference run for a leaderboard")
+    @app_commands.describe(
+        leaderboard_name="Name of the leaderboard to create a reference run for",
+        gpu="Select GPU. Leave empty for interactive selection.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def submit_reference(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: Optional[str] = None,
+    ):
+        # Check if reference run already exists
+        with self.bot.leaderboard_db as db:
+            if db.has_reference_run(leaderboard_name):
+                await send_discord_message(
+                    interaction,
+                    f"A reference run for leaderboard '{leaderboard_name}' already exists.",
+                    ephemeral=True,
+                )
+                return
+        # Process as a special submission
+        return await self.submit(
+            interaction, leaderboard_name, None, mode=SubmissionMode.REFERENCE, gpu=gpu
         )
 
 
