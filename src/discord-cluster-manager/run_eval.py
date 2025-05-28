@@ -457,7 +457,7 @@ def run_pytorch_script(  # noqa: C901
     try:
         if REFERENCE_TIMING_ARG not in args:
             assert main in sources.keys()
-            # pluck out submission.py from sources as it is not needed for the run and is None
+            # pluck out submission.py from sources as it is not needed for the run and is None normally
             sources.pop("submission.py")
 
         # "compile" step: execute the script once. Will populate
