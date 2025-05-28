@@ -248,6 +248,7 @@ def build_task_config(
         args = []
         if mode == SubmissionMode.REFERENCE:
             args.append(REFERENCE_TIMING_ARG)
+            submission_content = ""
         config["args"] = args
         return {
             **config,
