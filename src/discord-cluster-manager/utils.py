@@ -263,7 +263,7 @@ def build_task_config(
                 all_files[n] = submission_content
             else:
                 all_files[n] = c
-
+        print(f"all_files: {all_files}")
         common = {
             "lang": task.lang.value,
             "arch": arch,
