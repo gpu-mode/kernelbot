@@ -248,8 +248,8 @@ def build_task_config(
         args = []
         if mode == SubmissionMode.REFERENCE:
             args.append(REFERENCE_TIMING_ARG)
+        config["args"] = args
         return {
-            "args": args,
             **config,
             "sources": {
                 eval_name: submission_content,
@@ -274,7 +274,10 @@ def build_task_config(
             "ranked_timeout": task.ranked_timeout,
             "ranking_by": task.ranking_by.value,
             "seed": task.seed,
+            "args": [],
         }
+        if mode == SubmissionMode.REFERENCE:
+            common["args"].append(REFERENCE_TIMING_ARG)
 
         if task.lang == Language.Python:
             return {

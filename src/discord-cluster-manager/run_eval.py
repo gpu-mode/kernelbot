@@ -448,6 +448,7 @@ def run_pytorch_script(  # noqa: C901
     start = datetime.datetime.now()
     args = kwargs.get("args", [])
     # log everything that's going on
+    print("Running with kwargs: %s", kwargs)
     print("Running with args: %s", args)
     print("Running with sources: %s", sources)
     print("Running with main: %s", main)
