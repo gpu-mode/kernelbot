@@ -24,13 +24,19 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
+    
+    - name: 'Setup jq'
+      uses: dcarbone/install-jq-action@v3
+      with:
+        version: '1.7.1'
+        force: true
+    
     - name: Create input files
       shell: bash
       run: |
         # install jq
-        apt update
-        apt-get install -y jq
+        # apt update
+        # apt install -y jq
         # apt install -y snapd
         # snap install jq
         # Extract the payload content without printing it
