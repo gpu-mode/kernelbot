@@ -26,21 +26,23 @@ jobs:
         python-version: '3.10'
     
     - name: Create input files
-      shell: bash
-      run: |
-        # install jq
-        apt update
-        apt install -y jq
-        # apt install -y snapd
-        # snap install jq
-        # Extract the payload content without printing it
-        PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
-        
-        # Apply mask to the extracted content
-        echo "::add-mask::$PAYLOAD"
-        
-        # Now write to file (won't be logged since it's masked)
-        echo "$PAYLOAD" > payload.json
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: 2
+        max_attempts: 5
+        shell: bash
+        command: |
+          # install jq
+          apt update
+          apt install -y jq
+          # Extract the payload content without printing it
+          PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
+          
+          # Apply mask to the extracted content
+          echo "::add-mask::$PAYLOAD"
+          
+          # Now write to file (won't be logged since it's masked)
+          echo "$PAYLOAD" > payload.json
 
     - name: Install uv
       uses: astral-sh/setup-uv@v3
