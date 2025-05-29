@@ -306,10 +306,10 @@ def run_single_evaluation(
             else:
                 bench_file.write(benchmarks)
             bench_file.flush()
-            return run_program(call + args + [mode, bench_file.name], seed=seed, timeout=timeout)
+            return run_program(call + [mode, bench_file.name], seed=seed, timeout=timeout)
     else:
         assert mode == "script"
-        return run_program(call + args, seed=seed, timeout=Timeout.SCRIPT)
+        return run_program(call, seed=seed, timeout=Timeout.SCRIPT)
 
 
 def make_system_info() -> SystemInfo:
@@ -468,7 +468,7 @@ def run_pytorch_script(  # noqa: C901
         comp = None
         if not is_reference:
             try:
-                compile_run = run_program(["python", "submission.py"] + args, seed=1, timeout=Timeout.COMPILE)
+                compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
                 if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                     comp = CompileResult(
                         nvcc_found=True,
