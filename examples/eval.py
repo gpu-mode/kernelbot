@@ -337,6 +337,7 @@ def main():
         return 2
 
     mode = sys.argv[1]
+    print(f"Running in mode {mode}")
     seed = os.getenv("POPCORN_SEED")
     os.unsetenv("POPCORN_SEED")
     seed = int(seed) if seed else None
@@ -379,6 +380,7 @@ def main():
                 run_profiling(logger, tests)
             else:
                 # TODO: Implement script mode
+                print(f"mode {mode} not implemented")
                 return 2
 
 
