@@ -104,12 +104,21 @@ class SubmitCog(commands.Cog):
         if result.success:
             score = None
             if (
-                "leaderboard" in result.runs
+                ("leaderboard" in result.runs
                 and result.runs["leaderboard"].run.success
-                and result.runs["leaderboard"].run.passed
+                and result.runs["leaderboard"].run.passed)
+                or ("reference" in result.runs
+                and result.runs["reference"].run.success
+                and result.runs["reference"].run.passed)
             ):
+                if "leaderboard" in result.runs:
+                    key = "leaderboard"
+                elif "reference" in result.runs:
+                    key = "reference"
+                else:
+                    raise KernelBotError("Leaderboard or reference run failed")
                 score = 0.0
-                num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
+                num_benchmarks = int(result.runs[key].run.result["benchmark-count"])
                 if task.ranking_by == RankCriterion.LAST:
                     if num_benchmarks != 1:
                         logger.error(
@@ -122,19 +131,18 @@ class SubmitCog(commands.Cog):
                             f"Expected submission to have exactly one benchmark,"
                             f"got {num_benchmarks}."
                         )
-                    score = float(result.runs["leaderboard"].run.result["benchmark.0.mean"]) / 1e9
+                    score = float(result.runs[key].run.result["benchmark.0.mean"]) / 1e9
                 else:
                     scores = []
                     for i in range(num_benchmarks):
                         scores.append(
-                            float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"])
-                            / 1e9
+                            float(result.runs[key].run.result[f"benchmark.{i}.mean"]) / 1e9
                         )
                     if task.ranking_by == RankCriterion.MEAN:
                         score = sum(scores) / len(scores)
                     elif task.ranking_by == RankCriterion.GEOM:
                         score = math.pow(math.prod(scores), 1.0 / num_benchmarks)
-
+            print(f"\nScore: {score}\n")
             # verifyruns uses a fake submission id of -1
             if submission_id != -1:
                 with self.bot.leaderboard_db as db:
@@ -145,7 +153,7 @@ class SubmitCog(commands.Cog):
                             value.end,
                             mode=key,
                             runner=gpu_type.name,
-                            score=None if key != "leaderboard" else score,
+                            score=None if (key != "leaderboard" and key != "reference") else score,
                             secret=mode == SubmissionMode.PRIVATE,
                             compilation=value.compilation,
                             result=value.run,

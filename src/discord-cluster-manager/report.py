@@ -228,8 +228,6 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
             result.append("❌ Reference run failed")
         else:
             result.append("✅ Reference run successful")
-    elif full:
-        result.append("❌ Reference missing")
 
     return result
 

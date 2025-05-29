@@ -345,6 +345,11 @@ class LeaderboardDB:
         result: RunResult,
         system: SystemInfo,
     ):
+        print(f"\n\nCreating run for submission {submission} with mode {mode} and runner {runner}\n\n")
+        print(f"Result: {result}\n")
+        print(f"System: {system}\n")
+        print(f"Compilation: {compilation}\n")
+        print(f"Score: {score}\n")
         try:
             if compilation is not None:
                 compilation = json.dumps(dataclasses.asdict(compilation))

@@ -221,16 +221,16 @@ class LeaderboardSubmitCog(app_commands.Group):
     async def post_submit_hook(self, interaction: discord.Interaction, sub_id: int):
         with self.bot.leaderboard_db as db:
             sub_data: SubmissionItem = db.get_submission_by_id(sub_id)
-
+        print(f"sub_data: {sub_data}")
         result_lines = []
         for run in sub_data["runs"]:
             if (
                 not run["secret"]
-                and run["mode"] == SubmissionMode.LEADERBOARD.value
+                and (run["mode"] == SubmissionMode.LEADERBOARD.value or run["mode"] == SubmissionMode.REFERENCE.value)
                 and run["passed"]
             ):
                 result_lines.append(self.generate_run_verdict(run, sub_data))
-
+        print(f"result_lines: {result_lines}")
         if len(result_lines) > 0:
             await send_discord_message(
                 interaction,
