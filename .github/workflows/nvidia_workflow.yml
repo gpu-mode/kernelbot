@@ -30,7 +30,7 @@ jobs:
       run: |
         # install jq
         apt update
-        apt install snapd
+        apt install -y snapd
         snap install jq
         # Extract the payload content without printing it
         PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
