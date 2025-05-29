@@ -182,7 +182,7 @@ class LeaderboardSubmitCog(app_commands.Group):
             with self.bot.leaderboard_db as db:
                 db.mark_submission_done(sub_id)
 
-        if mode == SubmissionMode.LEADERBOARD:
+        if mode == SubmissionMode.LEADERBOARD or mode == SubmissionMode.REFERENCE:
             await self.post_submit_hook(interaction, sub_id)
         return sub_id
 
@@ -493,7 +493,8 @@ class LeaderboardCog(commands.Cog):
             processed_submissions = [
                 {
                     "Rank": submission["rank"],
-                    "User": await get_user_from_id(self.bot, submission["user_id"]),
+                    # "User": await get_user_from_id(self.bot, submission["user_id"]),
+                    "User": submission["user_id"],
                     "Score": f"{format_time(float(submission['submission_score']) * 1e9)}",
                     "Submission Name": submission["submission_name"],
                 }

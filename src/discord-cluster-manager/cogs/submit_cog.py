@@ -221,7 +221,7 @@ class SubmitCog(commands.Cog):
             await reporter.update_title(reporter.title + " ✅ success")
 
         short_report = make_short_report(
-            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
+            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD, SubmissionMode.REFERENCE]
         )
         await reporter.push(short_report)
         if mode != SubmissionMode.PRIVATE:
