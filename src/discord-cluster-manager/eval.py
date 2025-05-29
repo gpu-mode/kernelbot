@@ -32,6 +32,7 @@ def correctness(rng: torch.Generator) -> bool:
 
 
 def metric(logger: PopcornLogger, rng: torch.Generator, time_reference_impl: bool = False):
+    print("timing kernel")
     warmup_runs = 10
     timed_runs = 100
     if time_reference_impl:
@@ -96,7 +97,7 @@ def main():
         REFERENCE_TIMING_ARG, action='store_true', help='Time ref kernel.'
     )
     args = parser.parse_args()
-
+    print(f"starting script")
     try:
         logger = PopcornLogger(int(os.environ["POPCORN_FD"]))
     except Exception as e:
@@ -106,12 +107,14 @@ def main():
     seed = int(os.environ.get("POPCORN_FD", 42))
     rng = torch.Generator()
     rng.manual_seed(seed)
-
+    print(f"seed: {seed}")
+    print(f"time ref: {args.time_ref}")
+    print(f"correctness: {not args.time_ref}")
     if not args.time_ref:
         if not correctness(rng):
             logger.log("check", "fail")
             exit(112)
-
+    
     metric(logger, rng, time_reference_impl=args.time_ref)
 
 

@@ -306,7 +306,7 @@ def run_single_evaluation(
             else:
                 bench_file.write(benchmarks)
             bench_file.flush()
-            return run_program(call + [mode, bench_file.name] + args, seed=seed, timeout=timeout)
+            return run_program(call + args + [mode, bench_file.name], seed=seed, timeout=timeout)
     else:
         assert mode == "script"
         return run_program(call + args, seed=seed, timeout=Timeout.SCRIPT)
