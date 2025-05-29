@@ -241,7 +241,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
         end = time.perf_counter_ns()
 
         if recheck:
-            good, message = check_implementation(check_copy, output)
+            good, message = wrap_check_implementation(check_copy, output)
             if not good:
                 return message
 
