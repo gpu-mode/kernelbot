@@ -334,7 +334,7 @@ def main():
         return 111
 
     if len(sys.argv) < 3:
-        return 2
+        return 222
 
     mode = sys.argv[1].strip()
     print(f"Running in mode {mode}")
@@ -381,8 +381,9 @@ def main():
                 run_profiling(logger, tests)
             else:
                 # TODO: Implement script mode
+                logger.log(mode, "not implemented")
                 print(f"mode {mode} not implemented")
-                return 2
+                return 333
 
 
 if __name__ == "__main__":
