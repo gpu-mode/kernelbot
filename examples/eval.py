@@ -17,9 +17,13 @@ try:
 except ImportError:
     TestSpec = dict
 
-from reference import check_implementation, generate_input
+from reference import check_implementation, generate_input, ref_kernel
 
 
+# -----------------------------------------------------------------------------
+# Determine which kernel to use (reference or submission)
+# -----------------------------------------------------------------------------
+MODE_REFERENCE_STRING = "reference"  # Define the string to check for mode
 class PopcornOutput:
     def __init__(self, fd: int):
         self.file = os.fdopen(fd, 'w')
@@ -156,7 +160,7 @@ def _run_single_test(test: TestCase):
     from submission import custom_kernel
     data = generate_input(**test.args)
     torch.cuda.synchronize()
-    submission_output = custom_kernel(_clone_data(data))
+    submission_output = active_kernel(_clone_data(data))
     torch.cuda.synchronize()
     return wrap_check_implementation(data, submission_output)
 
@@ -198,18 +202,21 @@ def run_testing(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[T
         return 112
 
 
-def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float) -> Stats | Any:
+def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_reference_run: bool) -> Stats | Any:
     """
     Runs one benchmark. Do not call directly.
     """
-    from submission import custom_kernel
+    if not is_reference_run:
+        # submission does not exist for a reference run
+        from submission import custom_kernel
 
     durations = []
     # generate input data once
     data = generate_input(**test.args)
     check_copy = _clone_data(data)
+    active_kernel = ref_kernel if is_reference_run else custom_kernel
     #  first, one obligatory correctness check
-    output = custom_kernel(data)
+    output = active_kernel(data)
     good, message = wrap_check_implementation(check_copy, output)
     if not good:
         return message
@@ -229,7 +236,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
             check_copy = _clone_data(data)
         torch.cuda.synchronize()
         start = time.perf_counter_ns()
-        output = custom_kernel(data)
+        output = active_kernel(data)
         torch.cuda.synchronize()
         end = time.perf_counter_ns()
 
@@ -249,7 +256,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     return calculate_stats(durations)
 
 
-def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float):
+def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_reference_run: bool = False):
     """
     For a particular test case, check correctness (if applicable) and grab runtime results.
 
@@ -260,7 +267,7 @@ def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bo
     @param max_time_ns: Timeout time in nanoseconds.
     @return: A Stats object for this particular benchmark case or an error if the test fails.
     """
-    return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns))
+    return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns, is_reference_run))
 
 
 def run_benchmarking(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[TestCase]):
@@ -300,13 +307,13 @@ def run_single_profile(test: TestCase) -> str:
     """
     Runs a single test case. Do not call directly
     """
-    from submission import custom_kernel
     from torch.profiler import profile, record_function, ProfilerActivity
+    from submission import custom_kernel
     data = generate_input(**test.args)
     torch.cuda.synchronize()
 
     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
-        submission_output = custom_kernel(_clone_data(data))
+        submission_output = active_kernel(_clone_data(data))
         torch.cuda.synchronize()
     return prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20)
 
@@ -345,13 +352,18 @@ def main():
             if mode == "benchmark":
                 return run_benchmarking(logger, pool, tests)
 
-            if mode == "leaderboard":
+            if mode == "leaderboard" or mode == "reference":
+                is_reference_run = mode == "reference"
                 # warmup
-                run_single_benchmark(pool, tests[0], False, 100, 1e7)
+                run_single_benchmark(pool, tests[0], False, 100, 1e7, is_reference_run)
+                if is_reference_run:
+                    logger.log("Running reference run")
+                else:
+                    logger.log("Running leaderboard run")
                 logger.log("benchmark-count", len(tests))
                 passed = True
                 for i in range(len(tests)):
-                    result = run_single_benchmark(pool, tests[i], True, 100, 30e9)
+                    result = run_single_benchmark(pool, tests[i], True, 100, 30e9, is_reference_run)
                     logger.log(f"benchmark.{i}.spec", tests[i].spec)
                     if isinstance(result, Stats):
                         for field in dataclasses.fields(Stats):
