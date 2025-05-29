@@ -345,7 +345,6 @@ def main():
     tests = get_test_cases(sys.argv[2], seed)
 
     with PopcornOutput(int(fd)) as logger:
-        logger.log("debug message", f"running in mode {mode}")
         import multiprocessing
         mp_context = multiprocessing.get_context('spawn')
         with mp_context.Pool(1) as pool:
@@ -358,10 +357,6 @@ def main():
                 is_reference_run = mode == "reference"
                 # warmup
                 run_single_benchmark(pool, tests[0], False, 100, 1e7, is_reference_run)
-                if is_reference_run:
-                    logger.log("debug message", "Running reference run")
-                else:
-                    logger.log("debug message", "Running leaderboard run")
                 logger.log("benchmark-count", len(tests))
                 passed = True
                 for i in range(len(tests)):

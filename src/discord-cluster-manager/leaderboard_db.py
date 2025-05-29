@@ -298,15 +298,12 @@ class LeaderboardDB:
         try:
             self.cursor.execute(
                 """
-                SELECT COUNT(*) FROM leaderboard.runs
-                WHERE leaderboard.runs.leaderboard_id = (
-                    SELECT leaderboard.leaderboard.id
-                    FROM leaderboard.leaderboard
-                    WHERE leaderboard.leaderboard.name = %s
-                )
-                AND leaderboard.runs.user_id = %s;
+                SELECT COUNT(*) FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s AND s.user_id = %s
                 """,
-                (leaderboard_name, REFERENCE_USER_ID),
+                (leaderboard_name, str(REFERENCE_USER_ID)),
             )
             return self.cursor.fetchone()[0] > 0
         except psycopg2.Error as e:
@@ -345,11 +342,6 @@ class LeaderboardDB:
         result: RunResult,
         system: SystemInfo,
     ):
-        print(f"\n\nCreating run for submission {submission} with mode {mode} and runner {runner}\n\n")
-        print(f"Result: {result}\n")
-        print(f"System: {system}\n")
-        print(f"Compilation: {compilation}\n")
-        print(f"Score: {score}\n")
         try:
             if compilation is not None:
                 compilation = json.dumps(dataclasses.asdict(compilation))

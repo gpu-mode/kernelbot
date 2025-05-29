@@ -142,7 +142,6 @@ class SubmitCog(commands.Cog):
                         score = sum(scores) / len(scores)
                     elif task.ranking_by == RankCriterion.GEOM:
                         score = math.pow(math.prod(scores), 1.0 / num_benchmarks)
-            print(f"\nScore: {score}\n")
             # verifyruns uses a fake submission id of -1
             if submission_id != -1:
                 with self.bot.leaderboard_db as db:

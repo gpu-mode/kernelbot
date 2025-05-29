@@ -1,6 +1,7 @@
 import json
 import subprocess
 import tempfile
+import yaml
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import StringIO
@@ -9,8 +10,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict
 
 import discord
 import env
-import yaml
-from consts import GitHubGPU, ModalGPU
+from consts import GitHubGPU, ModalGPU, SubmissionMode
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
@@ -24,6 +24,7 @@ from utils import (
     setup_logging,
     with_error_handling,
 )
+from cogs.leaderboard_cog import LeaderboardSubmitCog
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot
@@ -119,6 +120,10 @@ class AdminCog(commands.Cog):
         self.set_forum_ids = bot.admin_group.command(
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
+
+        self.reference_run = bot.admin_group.command(
+            name="reference-run", description="Create a reference run for a leaderboard"
+        )(self.reference_run)
 
         self._scheduled_cleanup_temp_users.start()
 
@@ -1025,3 +1030,58 @@ class AdminCog(commands.Cog):
             error_message = f"Error updating forum ids: {str(e)}"
             logger.error(error_message, exc_info=True)
             await send_discord_message(interaction, error_message, ephemeral=True)
+
+    # ----------------------------------------------------------------------
+    # Reference run submission (admin only)
+    # ----------------------------------------------------------------------
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the leaderboard to create a reference run for",
+        gpu="GPU(s) to use; leave empty for interactive selection",
+        force="Create another reference run even if one already exists.",
+    )
+    @discord.app_commands.autocomplete(
+        leaderboard_name=leaderboard_name_autocomplete,
+    )
+    @with_error_handling
+    async def reference_run(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: Optional[str] = None,
+        force: bool = False,
+    ):
+        """Admin command to create (or force-create) a reference run."""
+
+        # Ensure caller is admin
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need Admin permissions to run this command.",
+                ephemeral=True,
+            )
+            return
+
+        # Check for existing reference run unless forcing
+        if not force:
+            with self.bot.leaderboard_db as db:
+                if db.has_reference_run(leaderboard_name):
+                    await send_discord_message(
+                        interaction,
+                        (
+                            "A reference run already exists for this leaderboard. "
+                            "Use the 'force' flag to create another."
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+
+        lb_cog = LeaderboardSubmitCog(self.bot)
+
+        await lb_cog.submit(
+            interaction=interaction,
+            leaderboard_name=leaderboard_name,
+            script=None,
+            mode=SubmissionMode.REFERENCE,
+            gpu=gpu,
+        )

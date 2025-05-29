@@ -221,7 +221,6 @@ class LeaderboardSubmitCog(app_commands.Group):
     async def post_submit_hook(self, interaction: discord.Interaction, sub_id: int):
         with self.bot.leaderboard_db as db:
             sub_data: SubmissionItem = db.get_submission_by_id(sub_id)
-        print(f"sub_data: {sub_data}")
         result_lines = []
         for run in sub_data["runs"]:
             if (
@@ -230,7 +229,6 @@ class LeaderboardSubmitCog(app_commands.Group):
                 and run["passed"]
             ):
                 result_lines.append(self.generate_run_verdict(run, sub_data))
-        print(f"result_lines: {result_lines}")
         if len(result_lines) > 0:
             await send_discord_message(
                 interaction,
@@ -355,34 +353,6 @@ class LeaderboardSubmitCog(app_commands.Group):
             interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD, gpu=gpu
         )
 
-    @app_commands.command(name="reference_run", description="Create a reference run for a leaderboard")
-    @app_commands.describe(
-        leaderboard_name="Name of the leaderboard to create a reference run for",
-        gpu="Select GPU. Leave empty for interactive selection.",
-    )
-    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
-    @with_error_handling
-    async def submit_reference(
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: str,
-        gpu: Optional[str] = None,
-    ):
-        # Check if reference run already exists
-        # with self.bot.leaderboard_db as db:
-        #     if db.has_reference_run(leaderboard_name):
-        #         await send_discord_message(
-        #             interaction,
-        #             f"A reference run for leaderboard '{leaderboard_name}' already exists.",
-        #             ephemeral=True,
-        #         )
-        #         return
-        # Process as a special submission
-        return await self.submit(
-            interaction, leaderboard_name, None, mode=SubmissionMode.REFERENCE, gpu=gpu
-        )
-
-
 async def lang_autocomplete(
     interaction: discord.Interaction,
     current: str,
@@ -493,8 +463,7 @@ class LeaderboardCog(commands.Cog):
             processed_submissions = [
                 {
                     "Rank": submission["rank"],
-                    # "User": await get_user_from_id(self.bot, submission["user_id"]),
-                    "User": submission["user_id"],
+                    "User": await get_user_from_id(self.bot, submission["user_id"]),
                     "Score": f"{format_time(float(submission['submission_score']) * 1e9)}",
                     "Submission Name": submission["submission_name"],
                 }
