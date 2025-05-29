@@ -336,7 +336,7 @@ def main():
     if len(sys.argv) < 3:
         return 2
 
-    mode = sys.argv[1]
+    mode = sys.argv[1].strip()
     print(f"Running in mode {mode}")
     seed = os.getenv("POPCORN_SEED")
     os.unsetenv("POPCORN_SEED")
@@ -345,6 +345,7 @@ def main():
     tests = get_test_cases(sys.argv[2], seed)
 
     with PopcornOutput(int(fd)) as logger:
+        logger.log(f"running in mode {mode}")
         import multiprocessing
         mp_context = multiprocessing.get_context('spawn')
         with mp_context.Pool(1) as pool:
