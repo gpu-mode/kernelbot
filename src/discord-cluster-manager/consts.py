@@ -99,10 +99,6 @@ class SubmissionMode(Enum):
     SCRIPT = "script"
     BASELINE = "baseline"
 
-    # Alias for backward compatibility; to be removed in future release
-    REFERENCE = "baseline"
-
-
 class Language(Enum):
     Python = "py"
     CUDA = "cu"
@@ -165,7 +161,3 @@ torch
 # Constants used for baseline runs
 BASELINE_USER = "BASELINE_USER"
 BASELINE_USER_ID = -123
-
-# Aliases for backward compatibility (to be removed in future release)
-REFERENCE_USER = BASELINE_USER
-REFERENCE_USER_ID = BASELINE_USER_ID

@@ -20,6 +20,7 @@ from ui.table import create_table
 from utils import (
     LeaderboardItem,
     LeaderboardRankedEntry,
+    RunItem,
     SubmissionItem,
     format_time,
     get_user_from_id,
@@ -184,6 +185,38 @@ class LeaderboardSubmitCog(app_commands.Group):
         if mode == SubmissionMode.LEADERBOARD or mode == SubmissionMode.BASELINE:
             await self.post_submit_hook(interaction, sub_id)
         return sub_id
+
+    def generate_run_verdict(self, run: RunItem, sub_data: SubmissionItem):
+        medals = {1: "🥇 First", 2: "🥈 Second", 3: "🥉 Third"}
+
+        # get the competition
+        with self.bot.leaderboard_db as db:
+            competition = db.get_leaderboard_submissions(
+                sub_data["leaderboard_name"], run["runner"]
+            )
+        # compare against the competition
+        other_by_user = False
+        run_time = float(run["score"])
+        score_text = format_time(run_time * 1e9)
+
+        for entry in competition:
+            # can we find our own run? Only if it is the fastest submission by this user
+            if entry["submission_id"] == sub_data["submission_id"]:
+                rank = entry["rank"]
+                if 1 <= rank <= 3:
+                    return f"> {medals[rank]} place on {run['runner']}: {score_text}"
+                elif rank <= 10:
+                    return f"> {rank}th place on {run['runner']}: {score_text}"
+                else:
+                    return f"> Personal best on {run['runner']}: {score_text}"
+            elif entry["user_id"] == sub_data["user_id"]:
+                other_by_user = True
+        if other_by_user:
+            # User already has a submission that is faster
+            return f"> Successful on {run['runner']}: {score_text}"
+        else:
+            # no submission by the user exists
+            return f"> 🍾 First successful submission on {run['runner']}: {score_text}"
 
     async def post_submit_hook(self, interaction: discord.Interaction, sub_id: int):
         with self.bot.leaderboard_db as db:

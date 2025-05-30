@@ -18,10 +18,7 @@ jobs:
     container:
       image: nvidia/cuda:12.4.0-devel-ubuntu22.04
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
+    - uses: actions/checkout@v4
 
     - name: Setup Python
       uses: actions/setup-python@v5
