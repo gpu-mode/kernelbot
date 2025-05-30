@@ -220,14 +220,14 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
     elif full:
         result.append("❌ Leaderboard missing")
     
-    if "reference" in runs:
-        ref_run = runs["reference"].run
+    if "baseline" in runs:
+        ref_run = runs["baseline"].run
         if not ref_run.success:
-            result.append("❌ Running reference failed" + _short_fail_reason(ref_run))
+            result.append("❌ Running baseline failed" + _short_fail_reason(ref_run))
         elif not ref_run.passed:
-            result.append("❌ Reference run failed")
+            result.append("❌ Baseline run failed")
         else:
-            result.append("✅ Reference run successful")
+            result.append("✅ Baseline run successful")
 
     return result
 

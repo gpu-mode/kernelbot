@@ -27,7 +27,7 @@ from utils import (
     setup_logging,
 )
 
-from consts import REFERENCE_USER_ID, REFERENCE_USER
+from consts import BASELINE_USER_ID, BASELINE_USER
 
 leaderboard_name_cache = LRUCache(max_size=512)
 
@@ -215,7 +215,7 @@ class LeaderboardDB:
         time: datetime.datetime,
         user_name: str = None,
     ) -> Optional[int]:
-        if user_id == REFERENCE_USER_ID and user_name == REFERENCE_USER:
+        if user_id == BASELINE_USER_ID and user_name == BASELINE_USER:
             # todo: add reference code to the database
             code = ""
             file_name = "reference.py"
@@ -294,7 +294,7 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error during creation of submission") from e
 
-    def has_reference_run(self, leaderboard_name: str) -> bool:
+    def has_baseline_run(self, leaderboard_name: str) -> bool:
         try:
             self.cursor.execute(
                 """
@@ -303,7 +303,7 @@ class LeaderboardDB:
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 WHERE l.name = %s AND s.user_id = %s
                 """,
-                (leaderboard_name, str(REFERENCE_USER_ID)),
+                (leaderboard_name, str(BASELINE_USER_ID)),
             )
             return self.cursor.fetchone()[0] > 0
         except psycopg2.Error as e:

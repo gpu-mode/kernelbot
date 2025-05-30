@@ -7,6 +7,8 @@ import discord
 from consts import (
     SubmissionMode,
     get_gpu_by_name,
+    BASELINE_USER_ID,
+    BASELINE_USER,
 )
 from discord import app_commands
 from discord.ext import commands
@@ -26,8 +28,6 @@ from utils import (
     setup_logging,
     with_error_handling,
 )
-
-from consts import REFERENCE_USER_ID, REFERENCE_USER
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot
@@ -74,10 +74,10 @@ class LeaderboardSubmitCog(app_commands.Group):
         """
 
         if script is None:
-            if mode != SubmissionMode.REFERENCE:
+            if mode != SubmissionMode.BASELINE and not script:
                 await send_discord_message(
                     interaction,
-                    "Script attachment is required for this unless submission mode is reference",
+                    "Script attachment is required for this unless submission mode is baseline",
                     ephemeral=True,
                 )
                 return -1
@@ -94,12 +94,12 @@ class LeaderboardSubmitCog(app_commands.Group):
                     interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
                 )
                 return -1
-        if mode == SubmissionMode.REFERENCE:
-            # create fake reference submission
+        if mode == SubmissionMode.BASELINE:
+            # create fake baseline submission
             file_name = None
             submission_content = None
-            user_id = REFERENCE_USER_ID
-            user_name = REFERENCE_USER
+            user_id = BASELINE_USER_ID
+            user_name = BASELINE_USER
         else:
             file_name = script.filename
             submission_content = submission_content
@@ -140,8 +140,8 @@ class LeaderboardSubmitCog(app_commands.Group):
                 time=datetime.now(),
                 user_name=user_name,
             )
-        if mode == SubmissionMode.REFERENCE:
-            run_msg = f"Submission **{sub_id}**: is a reference submission for `{req.leaderboard}`"
+        if mode == SubmissionMode.BASELINE:
+            run_msg = f"Submission **{sub_id}**: is a baseline submission for `{req.leaderboard}`"
         else:
             run_msg = f"Submission **{sub_id}**: `{file_name}` for `{req.leaderboard}`"
 
@@ -182,41 +182,9 @@ class LeaderboardSubmitCog(app_commands.Group):
             with self.bot.leaderboard_db as db:
                 db.mark_submission_done(sub_id)
 
-        if mode == SubmissionMode.LEADERBOARD or mode == SubmissionMode.REFERENCE:
+        if mode == SubmissionMode.LEADERBOARD or mode == SubmissionMode.BASELINE:
             await self.post_submit_hook(interaction, sub_id)
         return sub_id
-
-    def generate_run_verdict(self, run: RunItem, sub_data: SubmissionItem):
-        medals = {1: "🥇 First", 2: "🥈 Second", 3: "🥉 Third"}
-
-        # get the competition
-        with self.bot.leaderboard_db as db:
-            competition = db.get_leaderboard_submissions(
-                sub_data["leaderboard_name"], run["runner"]
-            )
-        # compare against the competition
-        other_by_user = False
-        run_time = float(run["score"])
-        score_text = format_time(run_time * 1e9)
-
-        for entry in competition:
-            # can we find our own run? Only if it is the fastest submission by this user
-            if entry["submission_id"] == sub_data["submission_id"]:
-                rank = entry["rank"]
-                if 1 <= rank <= 3:
-                    return f"> {medals[rank]} place on {run['runner']}: {score_text}"
-                elif rank <= 10:
-                    return f"> {rank}th place on {run['runner']}: {score_text}"
-                else:
-                    return f"> Personal best on {run['runner']}: {score_text}"
-            elif entry["user_id"] == sub_data["user_id"]:
-                other_by_user = True
-        if other_by_user:
-            # User already has a submission that is faster
-            return f"> Successful on {run['runner']}: {score_text}"
-        else:
-            # no submission by the user exists
-            return f"> 🍾 First successful submission on {run['runner']}: {score_text}"
 
     async def post_submit_hook(self, interaction: discord.Interaction, sub_id: int):
         with self.bot.leaderboard_db as db:
@@ -225,7 +193,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         for run in sub_data["runs"]:
             if (
                 not run["secret"]
-                and (run["mode"] == SubmissionMode.LEADERBOARD.value or run["mode"] == SubmissionMode.REFERENCE.value)
+                and (run["mode"] == SubmissionMode.LEADERBOARD.value or run["mode"] == SubmissionMode.BASELINE.value)
                 and run["passed"]
             ):
                 result_lines.append(self.generate_run_verdict(run, sub_data))
@@ -254,10 +222,10 @@ class LeaderboardSubmitCog(app_commands.Group):
         gpu: Optional[str],
     ):
 
-        if not mode == SubmissionMode.REFERENCE and not script:
+        if not mode == SubmissionMode.BASELINE and not script:
             await send_discord_message(
                 interaction,
-                "Script attachment is required for this unless submission mode is reference",
+                "Script attachment is required for this unless submission mode is baseline",
                 ephemeral=True,
             )
             return

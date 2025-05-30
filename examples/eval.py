@@ -21,9 +21,9 @@ from reference import check_implementation, generate_input, ref_kernel
 
 
 # -----------------------------------------------------------------------------
-# Determine which kernel to use (reference or submission)
+# Determine which kernel to use (baseline or submission)
 # -----------------------------------------------------------------------------
-MODE_REFERENCE_STRING = "reference"  # Define the string to check for mode
+MODE_BASELINE_STRING = "baseline"  # Define the string to check for mode
 class PopcornOutput:
     def __init__(self, fd: int):
         self.file = os.fdopen(fd, 'w')
@@ -202,11 +202,11 @@ def run_testing(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[T
         return 112
 
 
-def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_reference_run: bool) -> Stats | Any:
+def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_baseline_run: bool) -> Stats | Any:
     """
     Runs one benchmark. Do not call directly.
     """
-    if not is_reference_run:
+    if not is_baseline_run:
         # submission does not exist for a reference run
         from submission import custom_kernel
 
@@ -214,7 +214,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     # generate input data once
     data = generate_input(**test.args)
     check_copy = _clone_data(data)
-    active_kernel = ref_kernel if is_reference_run else custom_kernel
+    active_kernel = ref_kernel if is_baseline_run else custom_kernel
     #  first, one obligatory correctness check
     output = active_kernel(data)
     good, message = wrap_check_implementation(check_copy, output)
@@ -256,7 +256,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     return calculate_stats(durations)
 
 
-def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_reference_run: bool = False):
+def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int, max_time_ns: float, is_baseline_run: bool = False):
     """
     For a particular test case, check correctness (if applicable) and grab runtime results.
 
@@ -267,7 +267,7 @@ def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bo
     @param max_time_ns: Timeout time in nanoseconds.
     @return: A Stats object for this particular benchmark case or an error if the test fails.
     """
-    return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns, is_reference_run))
+    return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns, is_baseline_run))
 
 
 def run_benchmarking(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[TestCase]):
@@ -354,13 +354,13 @@ def main():
                 return run_benchmarking(logger, pool, tests)
 
             if mode == "leaderboard" or mode == "reference":
-                is_reference_run = mode == "reference"
+                is_baseline_run = mode == "reference"
                 # warmup
-                run_single_benchmark(pool, tests[0], False, 100, 1e7, is_reference_run)
+                run_single_benchmark(pool, tests[0], False, 100, 1e7, is_baseline_run)
                 logger.log("benchmark-count", len(tests))
                 passed = True
                 for i in range(len(tests)):
-                    result = run_single_benchmark(pool, tests[i], True, 100, 30e9, is_reference_run)
+                    result = run_single_benchmark(pool, tests[i], True, 100, 30e9, is_baseline_run)
                     logger.log(f"benchmark.{i}.spec", tests[i].spec)
                     if isinstance(result, Stats):
                         for field in dataclasses.fields(Stats):

@@ -29,10 +29,10 @@ class ProcessedSubmissionRequest(SubmissionRequest):
 def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB) -> ProcessedSubmissionRequest:
     # Detect reference submissions (no file name & no code provided)
     # A reference submission is identified by missing/empty code content (no user file)
-    is_reference_submission = not req.code
+    is_baseline_submission = not req.code
 
     # Perform filename/content related checks only for *non* reference submissions
-    if not is_reference_submission:
+    if not is_baseline_submission:
         if profanity.contains_profanity(req.file_name):
             raise KernelBotError("Please provide a non rude filename")
 

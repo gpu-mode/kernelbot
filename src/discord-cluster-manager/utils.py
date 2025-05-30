@@ -5,7 +5,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any, List, NotRequired, Optional, TypedDict
 
 import discord
-from consts import Language, SubmissionMode, REFERENCE_TIMING_ARG
+from consts import Language, SubmissionMode
 
 if TYPE_CHECKING:
     from task import LeaderboardTask
@@ -246,8 +246,7 @@ def build_task_config(
         if lang == "py":
             config["main"] = "eval.py"
         args = []
-        if mode == SubmissionMode.REFERENCE:
-            args.append(REFERENCE_TIMING_ARG)
+        if mode == SubmissionMode.BASELINE:
             submission_content = ""
         config["args"] = args
         return {
@@ -274,10 +273,7 @@ def build_task_config(
             "ranked_timeout": task.ranked_timeout,
             "ranking_by": task.ranking_by.value,
             "seed": task.seed,
-            "args": [],
         }
-        if mode == SubmissionMode.REFERENCE:
-            common["args"].append(REFERENCE_TIMING_ARG)
 
         if task.lang == Language.Python:
             return {

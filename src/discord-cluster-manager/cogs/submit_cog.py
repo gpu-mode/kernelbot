@@ -107,16 +107,16 @@ class SubmitCog(commands.Cog):
                 ("leaderboard" in result.runs
                 and result.runs["leaderboard"].run.success
                 and result.runs["leaderboard"].run.passed)
-                or ("reference" in result.runs
-                and result.runs["reference"].run.success
-                and result.runs["reference"].run.passed)
+                or ("baseline" in result.runs
+                and result.runs["baseline"].run.success
+                and result.runs["baseline"].run.passed)
             ):
                 if "leaderboard" in result.runs:
                     key = "leaderboard"
-                elif "reference" in result.runs:
-                    key = "reference"
+                elif "baseline" in result.runs:
+                    key = "baseline"
                 else:
-                    raise KernelBotError("Leaderboard or reference run failed")
+                    raise KernelBotError("Leaderboard or baseline run failed")
                 score = 0.0
                 num_benchmarks = int(result.runs[key].run.result["benchmark-count"])
                 if task.ranking_by == RankCriterion.LAST:
@@ -152,7 +152,7 @@ class SubmitCog(commands.Cog):
                             value.end,
                             mode=key,
                             runner=gpu_type.name,
-                            score=None if (key != "leaderboard" and key != "reference") else score,
+                            score=None if (key != "leaderboard" and key != "baseline") else score,
                             secret=mode == SubmissionMode.PRIVATE,
                             compilation=value.compilation,
                             result=value.run,
@@ -228,7 +228,7 @@ class SubmitCog(commands.Cog):
             await reporter.update_title(reporter.title + " ✅ success")
 
         short_report = make_short_report(
-            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD, SubmissionMode.REFERENCE]
+            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
         )
         await reporter.push(short_report)
         if mode != SubmissionMode.PRIVATE:

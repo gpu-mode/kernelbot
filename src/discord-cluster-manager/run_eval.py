@@ -10,7 +10,7 @@ from pathlib import Path
 from types import NoneType
 from typing import Optional, Protocol, Union
 
-from consts import CUDA_FLAGS, ExitCode, REFERENCE_TIMING_ARG, Timeout
+from consts import CUDA_FLAGS, ExitCode, Timeout
 
 
 @dataclasses.dataclass
@@ -218,8 +218,6 @@ def compile_cuda_script(  # # noqa: C901
 
 
 def run_program(args: list[str], seed: Optional[int], timeout: int) -> RunResult:
-    print("[Running]")
-    print("Running with args: %s", args)
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
     pipe_read, pipe_write = os.pipe()
@@ -434,6 +432,7 @@ def run_cuda_script(  # # noqa: C901
 def run_pytorch_script(  # noqa: C901
     sources: dict[str, str],
     main: str,
+    is_baseline: bool = False,
     **kwargs,
 ) -> EvalResult:
     """
@@ -448,17 +447,6 @@ def run_pytorch_script(  # noqa: C901
         RunResult
     """
     start = datetime.datetime.now()
-    args = kwargs.get("args", [])
-    # log everything that's going on
-    print("Running with kwargs: %s" % kwargs)
-    print("Running with args: %s" % args)
-    print("Running with sources: %s" % sources)
-    print("Running with main: %s" % main)
-    is_reference = False
-    if REFERENCE_TIMING_ARG in args:
-        # pluck out submission.py from sources as it is not needed for the run and is None normally
-        sources.pop("submission.py", None)
-        is_reference = True
     try:
         assert main in sources.keys()
         _create_files(sources)
@@ -466,7 +454,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         comp = None
-        if not is_reference:
+        if not is_baseline:
             try:
                 compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
                 if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
@@ -522,7 +510,7 @@ def run_evaluation(
     require multiple runner calls.
     """
     results: dict[str, EvalResult] = {}
-    if mode in ["test", "benchmark", "profile", "script", "reference"]:
+    if mode in ["test", "benchmark", "profile", "script", "baseline"]:
         results[mode] = call(mode=mode)
     elif mode in ["private", "leaderboard"]:
         # first, run the tests
@@ -539,7 +527,7 @@ def run_evaluation(
         # if they pass, run the leaderboard validation
         results["leaderboard"] = call(mode="leaderboard")
     else:
-        raise AssertionError("Invalid mode")
+        raise AssertionError(f"Invalid mode: {mode}")
 
     return results
 
@@ -555,6 +543,12 @@ def build_test_string(tests: list[dict]):
 
 
 def run_config(config: dict):
+    mode = config["mode"]
+    is_baseline = False
+    if mode == "baseline":
+        config["sources"].pop("submission.py", None)
+        is_baseline = True
+
     common_args = {
         "tests": build_test_string(config.get("tests", [])),
         "benchmarks": build_test_string(config.get("benchmarks", [])),
@@ -563,13 +557,13 @@ def run_config(config: dict):
         "ranked_timeout": config.get("ranked_timeout", Timeout.RANKED),
         "benchmark_timeout": config.get("benchmark_timeout", Timeout.BENCHMARK),
         "test_timeout": config.get("test_timeout", Timeout.TEST),
-        "args": config.get("args", []),
     }
     if config["lang"] == "py":
         runner = functools.partial(
             run_pytorch_script,
             sources=config["sources"],
             main=config["main"],
+            is_baseline=is_baseline,
             **common_args,
         )
     elif config["lang"] == "cu":
