@@ -49,6 +49,7 @@ def custom_kernel(input):
         """
 
     run = run_pytorch_helper({**files, "submission.py": sub})
+    print(f"full run is: \n {run}")
     assert run.success is True
     assert run.passed is False
     assert "python eval.py test" in run.command
