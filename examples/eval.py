@@ -20,10 +20,6 @@ except ImportError:
 from reference import check_implementation, generate_input, ref_kernel
 
 
-# -----------------------------------------------------------------------------
-# Determine which kernel to use (baseline or submission)
-# -----------------------------------------------------------------------------
-MODE_BASELINE_STRING = "baseline"  # Define the string to check for mode
 class PopcornOutput:
     def __init__(self, fd: int):
         self.file = os.fdopen(fd, 'w')
@@ -207,7 +203,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     Runs one benchmark. Do not call directly.
     """
     if not is_baseline_run:
-        # submission does not exist for a reference run
+        # submission does not exist for a baseline run
         from submission import custom_kernel
 
     durations = []
@@ -337,7 +333,6 @@ def main():
         return 222
 
     mode = sys.argv[1].strip()
-    print(f"Running in mode {mode}")
     seed = os.getenv("POPCORN_SEED")
     os.unsetenv("POPCORN_SEED")
     seed = int(seed) if seed else None
@@ -353,8 +348,8 @@ def main():
             if mode == "benchmark":
                 return run_benchmarking(logger, pool, tests)
 
-            if mode == "leaderboard" or mode == "reference":
-                is_baseline_run = mode == "reference"
+            if (mode == "leaderboard") or (mode == "baseline"):
+                is_baseline_run = mode == "baseline"
                 # warmup
                 run_single_benchmark(pool, tests[0], False, 100, 1e7, is_baseline_run)
                 logger.log("benchmark-count", len(tests))
