@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import discord
 import psycopg2
+from consts import BASELINE_USER, BASELINE_USER_ID
 from env import (
     DATABASE_URL,
     DISABLE_SSL,
@@ -26,8 +27,6 @@ from utils import (
     SubmissionItem,
     setup_logging,
 )
-
-from consts import BASELINE_USER_ID, BASELINE_USER
 
 leaderboard_name_cache = LRUCache(max_size=512)
 

@@ -285,7 +285,6 @@ def run_single_evaluation(
     ranked_timeout: int = Timeout.RANKED,
     ranking_by: str = "last",
     seed: Optional[int] = None,
-    args: Optional[list[str]] = [],
 ) -> RunResult:
     """
     A single runner run, either in the context of test files, or in the
@@ -456,7 +455,10 @@ def run_pytorch_script(  # noqa: C901
         comp = None
         if not is_baseline:
             try:
-                compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
+                compile_run = run_program(["python",
+                "submission.py"],
+                 seed=1,
+                 timeout=Timeout.COMPILE)
                 if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                     comp = CompileResult(
                         nvcc_found=True,

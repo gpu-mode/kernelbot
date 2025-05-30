@@ -160,7 +160,7 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
     Creates a minimalistic report for `runs`,
     returned as a list of status strings
     """
-    
+
     any_compile = False
     result = []
     for r in runs.values():
@@ -219,7 +219,7 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
             result.append("✅ Leaderboard run successful")
     elif full:
         result.append("❌ Leaderboard missing")
-    
+
     if "baseline" in runs:
         ref_run = runs["baseline"].run
         if not ref_run.success:

@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, List, Optional
 
 import discord
 from consts import (
+    BASELINE_USER,
+    BASELINE_USER_ID,
     SubmissionMode,
     get_gpu_by_name,
-    BASELINE_USER_ID,
-    BASELINE_USER,
 )
 from discord import app_commands
 from discord.ext import commands
@@ -20,7 +20,6 @@ from ui.table import create_table
 from utils import (
     LeaderboardItem,
     LeaderboardRankedEntry,
-    RunItem,
     SubmissionItem,
     format_time,
     get_user_from_id,
@@ -193,7 +192,8 @@ class LeaderboardSubmitCog(app_commands.Group):
         for run in sub_data["runs"]:
             if (
                 not run["secret"]
-                and (run["mode"] == SubmissionMode.LEADERBOARD.value or run["mode"] == SubmissionMode.BASELINE.value)
+                and (run["mode"] == SubmissionMode.LEADERBOARD.value
+                or run["mode"] == SubmissionMode.BASELINE.value)
                 and run["passed"]
             ):
                 result_lines.append(self.generate_run_verdict(run, sub_data))

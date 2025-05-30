@@ -44,7 +44,6 @@ class GitHubLauncher(Launcher):
             raise ValueError(f"Invalid GPU type: {gpu_type.value}")
 
         lang = config["lang"]
-        args = config.get("args", [])
         if lang == "cu" and gpu_vendor == "AMD":
             # TODO implement HIP
             raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")

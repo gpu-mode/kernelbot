@@ -64,7 +64,7 @@ class LeaderboardTask:
     ranking_by: RankCriterion = RankCriterion.LAST
     templates: dict[str, str] = dataclasses.field(default_factory=dict)
     seed: Optional[int] = None
-    
+
 
     @staticmethod
     def from_dict(data: dict):

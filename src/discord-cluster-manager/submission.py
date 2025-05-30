@@ -48,7 +48,8 @@ def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB) -> Processe
     # Ensure leaderboard name is present (might have come from the command directly)
     if req.leaderboard is None:
         raise KernelBotError(
-            "Missing leaderboard name. Either supply one as a command argument or via ``#!POPCORN leaderboard <name>`` directive.",
+            "Missing leaderboard name. Either supply one as a command \
+                argument or via ``#!POPCORN leaderboard <name>`` directive.",
         )
 
     leaderboard = lookup_leaderboard(req.leaderboard, lb_db)
