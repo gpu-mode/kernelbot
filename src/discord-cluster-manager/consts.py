@@ -159,3 +159,6 @@ AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
 torch
 """
+
+# A buffer for timeouts to account for github setup time
+TIMEOUT_BUFFER_MINUTES = 2

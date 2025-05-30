@@ -13,6 +13,7 @@ from consts import (
     DEFAULT_GITHUB_TIMEOUT_MINUTES,
     GPU,
     NVIDIA_REQUIREMENTS,
+    TIMEOUT_BUFFER_MINUTES,
     GitHubGPU,
     SubmissionMode,
 )
@@ -88,7 +89,7 @@ class GitHubLauncher(Launcher):
         await status.push("⏳ Waiting for workflow to start...")
         logger.info("Waiting for workflow to start...")
 
-        timeout = get_timeout(config)
+        timeout = get_timeout(config) + TIMEOUT_BUFFER_MINUTES
         logger.info(f"Waiting for workflow to complete... (timeout: {timeout} minutes)")
         await run.wait_for_completion(
             lambda x: self.wait_callback(x, status),
