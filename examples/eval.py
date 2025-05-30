@@ -156,7 +156,7 @@ def _run_single_test(test: TestCase):
     from submission import custom_kernel
     data = generate_input(**test.args)
     torch.cuda.synchronize()
-    submission_output = active_kernel(_clone_data(data))
+    submission_output = custom_kernel(_clone_data(data))
     torch.cuda.synchronize()
     return wrap_check_implementation(data, submission_output)
 
