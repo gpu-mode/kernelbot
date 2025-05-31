@@ -7,6 +7,7 @@ import discord
 import env
 import uvicorn
 from api.main import app, init_api
+from backend_client import BackendClient
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
@@ -63,6 +64,9 @@ class ClusterBot(commands.Bot):
             POSTGRES_PASSWORD,
             POSTGRES_PORT,
         )
+
+        # Initialize backend client for API operations
+        self.backend_client = BackendClient()
 
         try:
             if not self.leaderboard_db.connect():
@@ -250,7 +254,7 @@ async def start_bot_and_api(debug_mode: bool):
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
-        port=int(os.environ.get("PORT") or 8000),
+        port=int(os.environ.get("PORT") or 8001),
         log_level="info",
         limit_concurrency=10,
     )

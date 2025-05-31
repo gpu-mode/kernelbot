@@ -239,18 +239,16 @@ async def _stream_submission_response(
 
         while not task.done():
             elapsed_time = time.time() - start_time
-            yield f"event: status\ndata: {json.dumps({'status': 'processing',
-                                                      'elapsed_time': round(elapsed_time, 2)}
-                                                      ,default=json_serializer)}\n\n"
+            content = {"status": "processing", "elapsed_time": round(elapsed_time, 2)}
+            yield f"event: status\ndata: {json.dumps(content, default=json_serializer)}\n\n"
 
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                yield f"event: error\ndata: {json.dumps(
-                    {'status': 'error', 'detail': 'Submission cancelled'},
-                    default=json_serializer)}\n\n"
+                content = {"status": "error", "detail": "Submission cancelled"}
+                yield f"event: error\ndata: {json.dumps(content, default=json_serializer)}\n\n"
                 return
 
         result = await task

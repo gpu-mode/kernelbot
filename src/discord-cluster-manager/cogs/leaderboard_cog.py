@@ -396,7 +396,6 @@ class LeaderboardCog(commands.Cog):
             name="get-submission", description="Retrieve one of your past submissions"
         )(self.get_submission_by_id)
 
-
     # --------------------------------------------------------------------------
     # |                           HELPER FUNCTIONS                              |
     # --------------------------------------------------------------------------
@@ -564,8 +563,8 @@ class LeaderboardCog(commands.Cog):
         Helper for grabbing the leaderboard DB and forming the
         renderable item.
         """
-        with self.bot.leaderboard_db as db:
-            leaderboards = db.get_leaderboards()
+        async with self.bot.backend_client as client:
+            leaderboards = await client.get_leaderboards()
 
         if not leaderboards:
             return None, None
@@ -724,8 +723,8 @@ class LeaderboardCog(commands.Cog):
         interaction: discord.Interaction,
         submission_id: int,
     ):
-        with self.bot.leaderboard_db as db:
-            sub: SubmissionItem = db.get_submission_by_id(submission_id)
+        async with self.bot.backend_client as client:
+            sub: SubmissionItem = await client.get_submission_by_id(submission_id)
 
         # allowed/possible to see submission
         if sub is None or int(sub["user_id"]) != interaction.user.id:

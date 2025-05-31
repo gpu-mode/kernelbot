@@ -41,7 +41,7 @@ class LeaderboardCreateSchema(BaseModel):
 
     name: str
     deadline: datetime
-    task: str  # JSON string representation
+    task: Dict[str, Any]  # Task as dictionary
     creator_id: int
     forum_id: Optional[int] = None
     gpu_types: List[str]
@@ -53,7 +53,7 @@ class LeaderboardSchema(BaseModel):
     id: int
     name: str
     deadline: datetime
-    task: str  # JSON string representation
+    task: Dict[str, Any]  # Task as dictionary
     creator_id: int
     forum_id: Optional[int] = None
     secret_seed: Optional[int] = None
@@ -67,7 +67,7 @@ class LeaderboardUpdateSchema(BaseModel):
     """Schema for updating a leaderboard"""
 
     deadline: Optional[datetime] = None
-    task: Optional[str] = None  # JSON string representation
+    task: Optional[Dict[str, Any]] = None  # Task as dictionary
 
 
 class SubmissionCreateSchema(BaseModel):
