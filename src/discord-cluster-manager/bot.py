@@ -26,7 +26,7 @@ from env import (
     POSTGRES_USER,
     init_environment,
 )
-from launchers import GitHubLauncher, ModalLauncher
+from launchers import GitHubLauncher, ModalLauncher, GenericLauncher
 from leaderboard_db import LeaderboardDB
 from utils import setup_logging
 
@@ -80,6 +80,7 @@ class ClusterBot(commands.Bot):
             submit_cog = SubmitCog(self)
             submit_cog.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
             submit_cog.register_launcher(GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN))
+            submit_cog.register_launcher(GenericLauncher("http://65.108.32.167:8000/run", token='TOKEN'))
             await self.add_cog(submit_cog)
             await self.add_cog(BotManagerCog(self))
             await self.add_cog(LeaderboardCog(self))

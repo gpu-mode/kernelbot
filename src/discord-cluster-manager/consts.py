@@ -31,6 +31,10 @@ class ModalGPU(Enum):
     B200 = "B200"
 
 
+class OtherGPU(Enum):
+    A6000 = "A6000"
+
+
 @dataclasses.dataclass
 class GPU:
     name: str
@@ -48,7 +52,7 @@ def _make_gpu_lookup(runner_map: dict[str, Type[Enum]]):
     return lookup
 
 
-_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU})
+_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU, "Generic": OtherGPU})
 
 
 def get_gpu_by_name(name: str) -> GPU:
@@ -114,6 +118,7 @@ GPU_TO_SM = {
     "T4": "75",
     "L4": "80",
     "A100": "80",
+    "A6000": "86",
     "H100": "90a",
     "B200": "100",
     "NVIDIA": None,

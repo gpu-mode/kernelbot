@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict
 import discord
 import env
 import yaml
-from consts import GitHubGPU, ModalGPU
+from consts import GitHubGPU, ModalGPU, OtherGPU
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
@@ -153,6 +153,7 @@ class AdminCog(commands.Cog):
     @app_commands.choices(
         gpu=[app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in GitHubGPU]
         + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in ModalGPU]
+        + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in OtherGPU]
     )
     @with_error_handling
     async def leaderboard_create_local(
