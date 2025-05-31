@@ -8,7 +8,10 @@ lint.select = [
     "C",   # mccabe
     "W",   # pycodestyle warnings
 ]
-lint.ignore = []
+lint.ignore = [
+    "B904",
+    "B008",
+]
 exclude = [
     "docs/",
     "examples/",
