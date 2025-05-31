@@ -19,6 +19,8 @@ operating_sys = "ubuntu22.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
 # Move this to another file later:
+
+
 cuda_image = (
     Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.11")
     .apt_install(
@@ -50,11 +52,18 @@ cuda_image = (
     .pip_install("requests")
 )
 
+
 cuda_image = cuda_image.add_local_python_source(
     "consts",
     "modal_runner",
     "modal_runner_archs",
     "run_eval",
+)
+
+cuda_image_b200 = (
+    Image.from_registry("nvidia/cuda:12.8.0-devel-ubuntu24.04", add_python="3.11")
+    .pip_install("ninja", "packaging", "requests")
+    .pip_install("torch==2.7.0", extra_index_url="https://download.pytorch.org/whl/cu128")
 )
 
 
