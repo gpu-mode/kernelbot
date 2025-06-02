@@ -15,7 +15,7 @@ from env import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from run_eval import CompileResult, RunResult, SystemInfo
+from kernelrunner import CompileResult, RunResult, SystemInfo
 from task import LeaderboardTask
 from utils import (
     KernelBotError,

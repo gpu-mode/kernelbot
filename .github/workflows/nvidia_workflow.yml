@@ -60,7 +60,7 @@ jobs:
     - name: Run script
       shell: bash
       run: |
-        python .github/workflows/runner.py
+        python src/kernelrunner/github/runner.py
         cat result.json  # Debug: show output
 
     - name: Upload training artifacts

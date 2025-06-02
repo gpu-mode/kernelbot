@@ -5,7 +5,9 @@ from typing import List
 
 import consts
 import discord
-from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+
+import kernelrunner.run
+from kernelrunner import CompileResult, RunResult, SystemInfo, EvalResult, FullResult
 from utils import format_time
 
 
@@ -109,7 +111,7 @@ def _generate_crash_report(reporter: "RunResultReport", run: RunResult):
     message = "# Running failed\n"
     message += "Command "
     message += f"```bash\n{_limit_length(run.command, 1000)}```\n"
-    if run.exit_code == consts.ExitCode.TIMEOUT_EXPIRED:
+    if run.exit_code == kernelrunner.run.ExitCode.TIMEOUT_EXPIRED:
         message += f"**timed out** after {float(run.duration):.2f} seconds."
     else:
         message += (
@@ -145,11 +147,11 @@ def _short_fail_reason(run: RunResult):
     """
     Translate the exit code of `run` into a short error identifier.
     """
-    if run.exit_code == consts.ExitCode.TIMEOUT_EXPIRED:
+    if run.exit_code == kernelrunner.run.ExitCode.TIMEOUT_EXPIRED:
         return " (timeout)"
-    elif run.exit_code == consts.ExitCode.CUDA_FAIL:
+    elif run.exit_code == kernelrunner.run.ExitCode.CUDA_FAIL:
         return " (cuda api error)"
-    elif run.exit_code != consts.ExitCode.VALIDATE_FAIL:
+    elif run.exit_code != kernelrunner.run.ExitCode.VALIDATE_FAIL:
         return f" (internal error {run.exit_code})"
     else:
         return ""

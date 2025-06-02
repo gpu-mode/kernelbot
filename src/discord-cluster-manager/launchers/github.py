@@ -19,7 +19,7 @@ from consts import (
 )
 from github import Github, UnknownObjectException, WorkflowRun
 from report import RunProgressReporter
-from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+from kernelrunner import CompileResult, RunResult, SystemInfo, EvalResult, FullResult
 from utils import get_github_branch_name, setup_logging
 
 from .launcher import Launcher

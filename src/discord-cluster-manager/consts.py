@@ -1,14 +1,6 @@
 import dataclasses
-from enum import Enum, IntEnum
+from enum import Enum
 from typing import Type
-
-
-class Timeout(IntEnum):
-    TEST = 180
-    BENCHMARK = 180
-    RANKED = 180
-    COMPILE = 120
-    SCRIPT = 120
 
 
 class SchedulerType(Enum):
@@ -54,26 +46,6 @@ _GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU})
 def get_gpu_by_name(name: str) -> GPU:
     name = name.lower()
     return _GPU_LOOKUP.get(name, None)
-
-
-class ExitCode(IntEnum):
-    """
-    Exit codes for our runners. These are just the codes actively return,
-    others are possible (e.g., exiting due to segfault, permissions, signal, ...)
-    """
-
-    # program ran successfully
-    SUCCESS = 0
-    # a cuda API call failed
-    CUDA_FAIL = 110
-    # could not setup file descriptor for custom pipe
-    PIPE_FAILED = 111
-    # didn't crash, but tests failed
-    VALIDATE_FAIL = 112
-    # problem parsing test/benchmark
-    TEST_SPEC = 113
-    # process was shut down because it timed out
-    TIMEOUT_EXPIRED = 114
 
 
 class SubmissionMode(Enum):
@@ -123,19 +95,6 @@ GPU_TO_SM = {
 
 
 # Compilation flags for Modal
-CUDA_FLAGS = [
-    "--std=c++20",
-    "-DNDEBUG",
-    "-Xcompiler=-Wno-psabi",
-    "-Xcompiler=-fno-strict-aliasing",
-    "--expt-extended-lambda",
-    "--expt-relaxed-constexpr",
-    "-forward-unknown-to-host-compiler",
-    "-O3",
-    "-Xnvlink=--verbose",
-    "-Xptxas=--verbose",
-    "-Xptxas=--warn-on-spills",
-]
 MODAL_CUDA_INCLUDE_DIRS = ["/ThunderKittens/include"]
 
 DEFAULT_GITHUB_TIMEOUT_MINUTES = 10  # Default timeout for GitHub launcher in minutes

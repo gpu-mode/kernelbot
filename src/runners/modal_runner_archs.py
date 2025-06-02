@@ -1,6 +1,6 @@
 # This file contains wrapper functions for running
 # Modal apps on specific devices. We will fix this later.
-from modal_runner import app, cuda_image, modal_run_config
+from runners.modal_runner import app, cuda_image, modal_run_config
 
 
 gpus = ["T4", "L4", "A100-80GB", "H100!"]

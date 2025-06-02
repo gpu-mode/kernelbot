@@ -63,7 +63,7 @@ jobs:
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
           source ${VENV_DIR}/bin/activate
         fi
-        python3 .github/workflows/runner.py
+        python3 src/kernelrunner/github/runner.py
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4

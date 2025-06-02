@@ -10,8 +10,8 @@ if Path().resolve().name == "scripts":
 
 sys.path.append("src/discord-cluster-manager")
 
-from consts import ExitCode, SubmissionMode
-from run_eval import compile_cuda_script, run_cuda_script
+from consts import SubmissionMode
+from kernelrunner.run import compile_cuda_script, run_cuda_script, ExitCode
 
 ref = Path("examples/identity_cuda/reference.cuh").read_text()
 task_h = Path("examples/identity_cuda/task.h").read_text()

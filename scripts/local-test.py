@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.append("src/discord-cluster-manager")
 
-from run_eval import run_cuda_script
+from kernelrunner.run import run_cuda_script
 
 ref = Path("examples/identity_cuda/reference.cuh")
 sub = Path("examples/identity_cuda/submission.cu")

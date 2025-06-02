@@ -7,8 +7,8 @@ if Path().resolve().name == "scripts":
 
 sys.path.append("src/discord-cluster-manager")
 
-from consts import ExitCode, SubmissionMode
-from run_eval import run_pytorch_script
+from consts import SubmissionMode
+from kernelrunner.run import run_pytorch_script, ExitCode
 
 ref = Path("examples/identity_py/reference.py").read_text()
 task = Path("examples/identity_py/task.py").read_text()

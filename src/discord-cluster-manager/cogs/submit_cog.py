@@ -17,7 +17,7 @@ from report import (
     generate_report,
     make_short_report,
 )
-from run_eval import FullResult
+from kernelrunner import FullResult
 from task import LeaderboardTask
 from utils import (
     KernelBotError,

@@ -1,12 +1,8 @@
 import json
-import sys
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-
-sys.path.append("src/discord-cluster-manager")
-
-from run_eval import run_config
+from kernelrunner.run import run_config
 
 config = json.loads(Path("payload.json").read_text())
 Path("payload.json").unlink()
