@@ -28,6 +28,10 @@ jobs:
     - name: Create input files
       shell: bash
       run: |
+
+        # install jq
+        apt update && apt install -y jq
+
         # Extract the payload content without printing it
         PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
         
