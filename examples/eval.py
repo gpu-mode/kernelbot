@@ -345,7 +345,7 @@ def main():
             if mode == "benchmark":
                 return run_benchmarking(logger, pool, tests)
 
-            if mode == "leaderboard":
+            if mode == "leaderboard" or mode == "milestone":
                 # warmup
                 run_single_benchmark(pool, tests[0], False, 100, 1e7)
                 logger.log("benchmark-count", len(tests))
