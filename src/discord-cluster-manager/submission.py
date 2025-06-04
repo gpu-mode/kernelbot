@@ -6,7 +6,7 @@ from typing import Optional, Union
 from better_profanity import profanity
 from leaderboard_db import LeaderboardDB
 from task import LeaderboardTask
-from utils import KernelBotError, LeaderboardItem
+from utils import KernelBotError, LeaderboardItem, SubmissionMode
 
 
 @dataclasses.dataclass
@@ -26,15 +26,16 @@ class ProcessedSubmissionRequest(SubmissionRequest):
     task_gpus: list
 
 
-def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB) -> ProcessedSubmissionRequest:
+def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB, mode: SubmissionMode) -> ProcessedSubmissionRequest:
     if profanity.contains_profanity(req.file_name):
         raise KernelBotError("Please provide a non rude filename")
-
-    # check file extension
-    if not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
-        raise KernelBotError(
-            "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
-        )
+    if mode != SubmissionMode.MILESTONE:
+        # for milestones we don't have a submission file
+        # check file extension
+        if not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
+            raise KernelBotError(
+                "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
+            )
 
     # process file directives
     req = handle_popcorn_directives(req)

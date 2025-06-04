@@ -511,7 +511,7 @@ def run_evaluation(
     require multiple runner calls.
     """
     results: dict[str, EvalResult] = {}
-    if mode in ["test", "benchmark", "profile", "script"]:
+    if mode in ["test", "benchmark", "profile", "script", "milestone"]:
         results[mode] = call(mode=mode)
     elif mode in ["private", "leaderboard"]:
         # first, run the tests
@@ -528,7 +528,7 @@ def run_evaluation(
         # if they pass, run the leaderboard validation
         results["leaderboard"] = call(mode="leaderboard")
     else:
-        raise AssertionError("Invalid mode")
+        raise AssertionError(f"Invalid mode: {mode}")
 
     return results
 

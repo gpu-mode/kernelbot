@@ -271,6 +271,7 @@ def build_task_config(
             "ranked_timeout": task.ranked_timeout,
             "ranking_by": task.ranking_by.value,
             "seed": task.seed,
+            "milestones": task.milestones,
         }
 
         if task.lang == Language.Python:

@@ -154,7 +154,7 @@ async def _run_submission(
     submission: SubmissionRequest, user_info: dict, mode: SubmissionMode, bot
 ):
     try:
-        req = prepare_submission(submission, bot.leaderboard_db)
+        req = prepare_submission(submission, bot.leaderboard_db, mode)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

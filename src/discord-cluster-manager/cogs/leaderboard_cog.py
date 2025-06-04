@@ -37,7 +37,12 @@ class LeaderboardSubmitCog(app_commands.Group):
     def __init__(self, bot: "ClusterBot"):
         super().__init__(name="submit", description="Submit to leaderboard")
         self.bot = bot
-
+    
+    async def _admin_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.user.get_role(self.bot.leaderboard_admin_role_id):
+            return False
+        return True
+        
     async def select_gpu_view(
         self,
         interaction: discord.Interaction,
@@ -63,32 +68,35 @@ class LeaderboardSubmitCog(app_commands.Group):
         self,
         interaction: discord.Interaction,
         leaderboard_name: Optional[str],
-        script: discord.Attachment,
+        script: Optional[discord.Attachment],
         mode: SubmissionMode,
         cmd_gpus: Optional[List[str]],
     ) -> int:
         """
         Called as the main body of a submission to route to the correct runner.
         """
+
         # Read the template file
-        submission_content = await script.read()
-
-        try:
-            submission_content = submission_content.decode()
-        except UnicodeError:
-            await send_discord_message(
-                interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
-            )
-            return -1
-
+        submission_content = ""
+        if mode != SubmissionMode.MILESTONE:
+            # for milestones we don't have a submission file and instead use the ones in the task
+            submission_content = await script.read()
+            try:
+                submission_content = submission_content.decode()
+            except UnicodeError:
+                await send_discord_message(
+                    interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
+                )
+                return -1
+        filename = script.filename if not mode == SubmissionMode.MILESTONE else "performance milestone"
         req = SubmissionRequest(
             code=submission_content,
-            file_name=script.filename,
+            file_name=filename,
             user_id=interaction.user.id,
             gpus=cmd_gpus,
             leaderboard=leaderboard_name,
         )
-        req = prepare_submission(req, self.bot.leaderboard_db)
+        req = prepare_submission(req, self.bot.leaderboard_db, mode)
 
         # if there is more than one candidate GPU, display UI to let user select,
         # otherwise just run on that GPU
@@ -106,33 +114,53 @@ class LeaderboardSubmitCog(app_commands.Group):
         command = self.bot.get_cog("SubmitCog").submit_leaderboard
 
         user_name = interaction.user.global_name or interaction.user.name
+
         # Create a submission entry in the database
         with self.bot.leaderboard_db as db:
             sub_id = db.create_submission(
                 leaderboard=req.leaderboard,
-                file_name=script.filename,
+                file_name=filename,
                 code=submission_content,
                 user_id=interaction.user.id,
                 time=datetime.now(),
                 user_name=user_name,
             )
 
-        run_msg = f"Submission **{sub_id}**: `{script.filename}` for `{req.leaderboard}`"
+        run_msg = f"Submission **{sub_id}**: `{filename}` for `{req.leaderboard}`"
         reporter = MultiProgressReporter(interaction, run_msg)
         try:
-            tasks = [
-                command(
-                    sub_id,
-                    submission_content,
-                    script.filename,
-                    gpu,
-                    reporter.add_run(f"{gpu.name} on {gpu.runner}"),
-                    req.task,
-                    mode,
-                    None,
-                )
-                for gpu in selected_gpus
-            ]
+
+            if mode == SubmissionMode.MILESTONE:
+                milestones = req.task.milestones
+                files = req.task.files
+                tasks = [
+                    command(
+                        sub_id,
+                        milestone["filename"],
+                        files[milestone["filename"]],
+                        gpu,
+                        reporter.add_run(f"{gpu.name} on {gpu.runner} for milestone {milestone['milestone_name']}",),
+                        req.task,
+                        mode,
+                        None,
+                    )
+                    for milestone in milestones
+                    for gpu in selected_gpus
+                ]
+            else:
+                tasks = [
+                    command(
+                        sub_id,
+                        submission_content,
+                        script.filename,
+                        gpu,
+                        reporter.add_run(f"{gpu.name} on {gpu.runner}"),
+                        req.task,
+                        mode,
+                        None,
+                    )
+                    for gpu in selected_gpus
+                ]
 
             # also schedule secret run
             if mode == SubmissionMode.LEADERBOARD:
@@ -224,10 +252,18 @@ class LeaderboardSubmitCog(app_commands.Group):
         self,
         interaction: discord.Interaction,
         leaderboard_name: Optional[str],
-        script: discord.Attachment,
+        script: Optional[discord.Attachment],
         mode: SubmissionMode,
         gpu: Optional[str],
     ):
+
+        if mode != SubmissionMode.MILESTONE and script is None:
+            await interaction.response.send_message(
+                "Script is required for non-milestone submissions.",
+                ephemeral=True,
+            )
+            return
+
         if not self.bot.accepts_jobs:
             await send_discord_message(
                 interaction,
@@ -277,6 +313,28 @@ class LeaderboardSubmitCog(app_commands.Group):
     ):
         return await self.submit(
             interaction, leaderboard_name, script, mode=SubmissionMode.BENCHMARK, gpu=gpu
+        )
+
+    @app_commands.command(name="milestone", description="Start a milestone run")
+    @app_commands.describe(
+        leaderboard_name="Name of the competition / kernel to optimize",
+        gpu="Select GPU. Leave empty for interactive or automatic selection.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def submit_milestone(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: Optional[str],
+        gpu: Optional[str],
+    ):
+        if not await self._admin_check(interaction):
+            await interaction.response.send_message(
+                "You do not have permission to submit milestones.", ephemeral=True
+            )
+            return
+        return await self.submit(
+            interaction, leaderboard_name, None, mode=SubmissionMode.MILESTONE, gpu=gpu
         )
 
     @app_commands.command(name="profile", description="Start a profiling run")

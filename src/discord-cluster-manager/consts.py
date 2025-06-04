@@ -97,6 +97,7 @@ class SubmissionMode(Enum):
     LEADERBOARD = "leaderboard"
     PRIVATE = "private"
     SCRIPT = "script"
+    MILESTONE = "milestone"
 
 
 class Language(Enum):

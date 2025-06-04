@@ -6,6 +6,10 @@ files:
   - {"name": "utils.py", "source": "../utils.py"}
   - {"name": "reference.py", "source": "reference.py"}
   - {"name": "eval.py", "source": "../eval.py"}
+  - {"name": "pytorch_ref.py", "source": "pytorch_ref.py"}
+
+milestones:
+  - {"milestone_name": "pytorch reference", "filename": "pytorch_ref.py"}
 
 lang: "py"
 
