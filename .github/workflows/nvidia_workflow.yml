@@ -33,6 +33,7 @@ jobs:
         apt update && apt install -y jq
 
         # Extract the payload content without printing it
+        apt-get update && apt-get install -y jq
         PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
         
         # Apply mask to the extracted content

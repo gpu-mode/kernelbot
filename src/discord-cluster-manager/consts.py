@@ -123,13 +123,6 @@ GPU_TO_SM = {
 }
 
 
-# Modal-specific constants
-MODAL_PATH = "/tmp/dcs/"
-MODAL_EVAL_CODE_PATH = "/tmp/dcs/eval.py"
-MODAL_REFERENCE_CODE_PATH = "/tmp/dcs/reference.py"
-MODAL_SUBMISSION_CODE_PATH = "/tmp/dcs/submission.py"
-
-
 # Compilation flags for Modal
 CUDA_FLAGS = [
     "--std=c++20",
@@ -146,6 +139,8 @@ CUDA_FLAGS = [
 ]
 MODAL_CUDA_INCLUDE_DIRS = ["/ThunderKittens/include"]
 
+DEFAULT_GITHUB_TIMEOUT_MINUTES = 10  # Default timeout for GitHub launcher in minutes
+
 NVIDIA_REQUIREMENTS = """
 numpy
 torch
@@ -158,8 +153,6 @@ AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
 torch
 """
-
-
-# System user constants for milestone submissions
 SYSTEM_USER_ID = -123
 SYSTEM_USER_NAME = "KernelBot"
+TIMEOUT_BUFFER_MINUTES = 2
