@@ -158,3 +158,8 @@ AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
 torch
 """
+
+
+# System user constants for milestone submissions
+SYSTEM_USER_ID = -123
+SYSTEM_USER_NAME = "KernelBot"

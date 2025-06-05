@@ -70,7 +70,7 @@ def lookup_leaderboard(leaderboard: str, lb_db: LeaderboardDB) -> LeaderboardIte
     with lb_db as db:
         leaderboard_item = db.get_leaderboard(leaderboard)
         if not leaderboard_item:
-            raise KernelBotError(f"Leaderboard {leaderboard} not found.")
+            raise KernelBotError(f"Tried to lookup leaderboard {leaderboard} but it was not found.")
         return leaderboard_item
 
 

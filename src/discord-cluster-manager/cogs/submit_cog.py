@@ -103,13 +103,16 @@ class SubmitCog(commands.Cog):
 
         if result.success:
             score = None
-            if (
-                "leaderboard" in result.runs
-                and result.runs["leaderboard"].run.success
-                and result.runs["leaderboard"].run.passed
-            ):
+            # Calculate score for both leaderboard and milestone runs
+            score_run_key = None
+            if "leaderboard" in result.runs and result.runs["leaderboard"].run.success and result.runs["leaderboard"].run.passed:
+                score_run_key = "leaderboard"
+            elif "milestone" in result.runs and result.runs["milestone"].run.success and result.runs["milestone"].run.passed:
+                score_run_key = "milestone"
+            
+            if score_run_key:
                 score = 0.0
-                num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
+                num_benchmarks = int(result.runs[score_run_key].run.result["benchmark-count"])
                 if task.ranking_by == RankCriterion.LAST:
                     if num_benchmarks != 1:
                         logger.error(
@@ -122,12 +125,12 @@ class SubmitCog(commands.Cog):
                             f"Expected submission to have exactly one benchmark,"
                             f"got {num_benchmarks}."
                         )
-                    score = float(result.runs["leaderboard"].run.result["benchmark.0.mean"]) / 1e9
+                    score = float(result.runs[score_run_key].run.result["benchmark.0.mean"]) / 1e9
                 else:
                     scores = []
                     for i in range(num_benchmarks):
                         scores.append(
-                            float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"])
+                            float(result.runs[score_run_key].run.result[f"benchmark.{i}.mean"])
                             / 1e9
                         )
                     if task.ranking_by == RankCriterion.MEAN:
@@ -139,18 +142,36 @@ class SubmitCog(commands.Cog):
             if submission_id != -1:
                 with self.bot.leaderboard_db as db:
                     for key, value in result.runs.items():
-                        db.create_submission_run(
+                        # Assign score for leaderboard and milestone runs
+                        run_score = None
+                        if key == "leaderboard" or (key == "milestone" and mode == SubmissionMode.MILESTONE):
+                            run_score = score
+                            
+                        run_id = db.create_submission_run(
                             submission_id,
                             value.start,
                             value.end,
                             mode=key,
                             runner=gpu_type.name,
-                            score=None if key != "leaderboard" else score,
+                            score=run_score,
                             secret=mode == SubmissionMode.PRIVATE,
                             compilation=value.compilation,
                             result=value.run,
                             system=result.system,
                         )
+                        
+                        # If this is a milestone submission, record the milestone run
+                        if mode == SubmissionMode.MILESTONE and run_id:
+                            # Get submission data to find the leaderboard
+                            submission_data = db.get_submission_by_id(submission_id)
+                            if submission_data:
+                                leaderboard = db.get_leaderboard(submission_data["leaderboard_name"])
+                                if leaderboard:
+                                    # Find the milestone ID based on the filename
+                                    milestones = db.get_leaderboard_milestones(leaderboard["id"])
+                                    milestone = next((m for m in milestones if m["filename"] == name), None)
+                                    if milestone:
+                                        db.record_milestone_run(milestone["id"], submission_id, run_id)
 
         return result
 

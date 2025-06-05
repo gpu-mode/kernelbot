@@ -166,6 +166,35 @@ class LeaderboardDB:
 
     def delete_leaderboard(self, leaderboard_name: str, force: bool = False):
         try:
+            # Get leaderboard ID first
+            self.cursor.execute(
+                "SELECT id FROM leaderboard.leaderboard WHERE name = %s",
+                (leaderboard_name,),
+            )
+            result = self.cursor.fetchone()
+            if not result:
+                # if there is no leaderboard, there is nothing to do
+                return
+            leaderboard_id = result[0]
+
+            # Delete milestone runs first (they reference milestones)
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.milestone_runs 
+                WHERE milestone_id IN (
+                    SELECT id FROM leaderboard.milestones 
+                    WHERE leaderboard_id = %s
+                )
+                """,
+                (leaderboard_id,),
+            )
+
+            # Delete milestones (they reference the leaderboard)
+            self.cursor.execute(
+                "DELETE FROM leaderboard.milestones WHERE leaderboard_id = %s",
+                (leaderboard_id,),
+            )
+
             if force:
                 self.cursor.execute(
                     """
@@ -204,6 +233,133 @@ class LeaderboardDB:
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard {leaderboard_name}.") from e
 
+
+
+    def create_milestone(
+        self,
+        leaderboard_id: int,
+        milestone_name: str,
+        filename: str,
+        description: str = None,
+    ) -> int:
+        """Create a new milestone for a leaderboard"""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.milestones (leaderboard_id, milestone_name, filename, description)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (leaderboard_id, milestone_name, filename, description),
+            )
+            milestone_id = self.cursor.fetchone()[0]
+            self.connection.commit()
+            return milestone_id
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error creating milestone", exc_info=e)
+            raise KernelBotError("Error creating milestone") from e
+
+    def get_leaderboard_milestones(self, leaderboard_id: int) -> list[dict]:
+        """Get all milestones for a leaderboard"""
+        self.cursor.execute(
+            """
+            SELECT id, milestone_name, filename, description, created_at
+            FROM leaderboard.milestones
+            WHERE leaderboard_id = %s
+            ORDER BY created_at
+            """,
+            (leaderboard_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "milestone_name": row[1],
+                "filename": row[2],
+                "description": row[3],
+                "created_at": row[4],
+            }
+            for row in self.cursor.fetchall()
+        ]
+
+    def record_milestone_run(
+        self,
+        milestone_id: int,
+        submission_id: int,
+        run_id: int,
+    ) -> None:
+        """Record that a milestone was run as part of a submission"""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.milestone_runs (milestone_id, submission_id, run_id)
+                VALUES (%s, %s, %s)
+                """,
+                (milestone_id, submission_id, run_id),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error recording milestone run", exc_info=e)
+            raise KernelBotError("Error recording milestone run") from e
+
+    def get_milestone_runs(self, milestone_id: int) -> list[dict]:
+        """Get all runs for a specific milestone"""
+        self.cursor.execute(
+            """
+            SELECT 
+                mr.id,
+                mr.submission_id,
+                mr.run_id,
+                s.user_id,
+                s.submission_time,
+                r.score,
+                r.passed,
+                r.runner,
+                ui.user_name
+            FROM leaderboard.milestone_runs mr
+            JOIN leaderboard.submission s ON mr.submission_id = s.id
+            JOIN leaderboard.runs r ON mr.run_id = r.id
+            JOIN leaderboard.user_info ui ON s.user_id = ui.id
+            WHERE mr.milestone_id = %s
+            ORDER BY r.score ASC NULLS LAST, s.submission_time DESC
+            """,
+            (milestone_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "submission_id": row[1],
+                "run_id": row[2],
+                "user_id": row[3],
+                "user_name": row[8],
+                "submission_time": row[4],
+                "score": row[5],
+                "passed": row[6],
+                "runner": row[7],
+            }
+            for row in self.cursor.fetchall()
+        ]
+
+    def delete_milestone(self, milestone_id: int) -> None:
+        """Delete a milestone and all associated runs"""
+        try:
+            # Delete milestone runs first (foreign key constraint)
+            self.cursor.execute(
+                "DELETE FROM leaderboard.milestone_runs WHERE milestone_id = %s",
+                (milestone_id,),
+            )
+            # Delete the milestone
+            self.cursor.execute(
+                "DELETE FROM leaderboard.milestones WHERE id = %s",
+                (milestone_id,),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error deleting milestone", exc_info=e)
+            raise KernelBotError("Error deleting milestone") from e
+    
     def create_submission(
         self,
         leaderboard: str,
@@ -333,6 +489,7 @@ class LeaderboardDB:
                 secret, runner, score, passed, compilation, meta, result, system_info
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     submission,
@@ -349,7 +506,9 @@ class LeaderboardDB:
                     json.dumps(dataclasses.asdict(system)),
                 ),
             )
+            run_id = self.cursor.fetchone()[0]
             self.connection.commit()
+            return run_id
         except psycopg2.Error as e:
             logger.exception(
                 "Error during adding %s run on %s for submission '%s'",
