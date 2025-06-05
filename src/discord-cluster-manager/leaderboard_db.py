@@ -226,9 +226,9 @@ class LeaderboardDB:
                 """
                 SELECT id, code
                 FROM leaderboard.code_files
-                WHERE hash = encode(sha256(%s), 'hex')
+                WHERE hash = encode(sha256(%s::bytea), 'hex')
                 """,
-                (code.encode("utf-8"),),
+                (code,),
             )
 
             code_id = None
@@ -245,7 +245,7 @@ class LeaderboardDB:
                     VALUES (%s)
                     RETURNING id
                     """,
-                    (code.encode("utf-8"),),
+                    (code,),
                 )
                 code_id = self.cursor.fetchone()
             # Check if user exists in user_info, if not add them

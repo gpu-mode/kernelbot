@@ -1,7 +1,5 @@
-import base64
 import json
 import sys
-import zlib
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -10,10 +8,8 @@ sys.path.append("src/discord-cluster-manager")
 
 from run_eval import run_config
 
-payload = Path("payload.json").read_text()
+config = json.loads(Path("payload.json").read_text())
 Path("payload.json").unlink()
-payload = zlib.decompress(base64.b64decode(payload)).decode("utf-8")
-config = json.loads(payload)
 
 result = asdict(run_config(config))
 

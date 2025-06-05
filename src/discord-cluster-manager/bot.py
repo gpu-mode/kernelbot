@@ -79,9 +79,7 @@ class ClusterBot(commands.Bot):
             # Load cogs
             submit_cog = SubmitCog(self)
             submit_cog.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
-            submit_cog.register_launcher(
-                GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
-            )
+            submit_cog.register_launcher(GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN))
             await self.add_cog(submit_cog)
             await self.add_cog(BotManagerCog(self))
             await self.add_cog(LeaderboardCog(self))
