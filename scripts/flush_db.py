@@ -2,9 +2,9 @@
 
 import os
 
-import psycopg2
 from dotenv import load_dotenv
-from psycopg2 import Error
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def flush_database():
@@ -18,35 +18,34 @@ def flush_database():
         return
 
     try:
-        # Connect to database
+        # Connect to database using SQLAlchemy
         print("📡 Connecting to database...")
-        connection = psycopg2.connect(DATABASE_URL, sslmode="require")
-        cursor = connection.cursor()
-
-        # Drop existing tables
-        print("🗑️  Dropping existing tables...")
-        drop_tables_query = """
-        DROP TABLE IF EXISTS submissions CASCADE;
-        DROP TABLE IF EXISTS leaderboard CASCADE;
-        DROP TABLE IF EXISTS runinfo CASCADE;
-        DROP TABLE IF EXISTS _yoyo_log CASCADE;
-        DROP TABLE IF EXISTS _yoyo_migration CASCADE;
-        DROP TABLE IF EXISTS _yoyo_version CASCADE;
-        DROP TABLE IF EXISTS yoyo_lock CASCADE;
-        DROP SCHEMA IF EXISTS leaderboard CASCADE;
-        """
-        cursor.execute(drop_tables_query)
-        # Commit changes
-        connection.commit()
+        engine = create_engine(DATABASE_URL)
+        
+        with engine.connect() as connection:
+            with connection.begin():
+                # Drop existing tables
+                print("🗑️  Dropping existing tables...")
+                drop_tables_query = text("""
+                DROP TABLE IF EXISTS submissions CASCADE;
+                DROP TABLE IF EXISTS leaderboard CASCADE;
+                DROP TABLE IF EXISTS runinfo CASCADE;
+                DROP TABLE IF EXISTS _yoyo_log CASCADE;
+                DROP TABLE IF EXISTS _yoyo_migration CASCADE;
+                DROP TABLE IF EXISTS _yoyo_version CASCADE;
+                DROP TABLE IF EXISTS yoyo_lock CASCADE;
+                DROP SCHEMA IF EXISTS leaderboard CASCADE;
+                """)
+                connection.execute(drop_tables_query)
+                
         print("✅ Database flushed and recreated successfully!")
 
-    except Error as e:
+    except SQLAlchemyError as e:
         print(f"❌ Database error: {e}")
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
     finally:
-        if "connection" in locals():
-            cursor.close()
-            connection.close()
-            print("🔌 Database connection closed")
+        print("🔌 Database operation completed")
 
 
 if __name__ == "__main__":

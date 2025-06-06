@@ -2,9 +2,10 @@
 import os
 from datetime import datetime
 
-import psycopg2
 import requests
 from jinja2 import Template
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 TOKEN = os.environ.get("DISCORD_DUMMY_TOKEN")
 
@@ -80,102 +81,108 @@ print("Connecting to database...")
 def fetch_leaderboard_data():
     print("Fetching data from database...")
     try:
-        with psycopg2.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, name, deadline
-                    FROM leaderboard.leaderboard
-                    """
+        engine = create_engine(DATABASE_URL)
+        with engine.connect() as connection:
+            # Get all leaderboards
+            leaderboards_query = text("""
+                SELECT id, name, deadline
+                FROM leaderboard.leaderboard
+                """)
+            
+            leaderboards_result = connection.execute(leaderboards_query)
+            leaderboards = leaderboards_result.fetchall()
+
+            # Get active leaderboards with their GPU types and submission counts
+            submissions_query = text("""
+                WITH unique_best_submissions AS (
+                    SELECT DISTINCT ON (s.user_id)
+                        s.file_name,
+                        s.user_id,
+                        s.submission_time,
+                        r.score,
+                        r.runner
+                    FROM leaderboard.runs r
+                    JOIN leaderboard.submission s ON r.submission_id = s.id
+                    JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                    WHERE l.name = :leaderboard_name AND r.runner = :gpu_type AND NOT r.secret
+                        AND r.score IS NOT NULL AND r.passed
+                    ORDER BY s.user_id, r.score ASC
                 )
+                SELECT
+                    file_name,
+                    user_id,
+                    submission_time,
+                    score,
+                    runner,
+                    ROW_NUMBER() OVER (ORDER BY score ASC) as rank
+                FROM unique_best_submissions
+                ORDER BY score ASC;
+                """)
 
-                leaderboards = cur.fetchall()
+            gpu_type_data = {}
+            for _lb_id, name, deadline in leaderboards:
+                # Get GPU types for this leaderboard
+                gpu_types_query = text("""
+                    SELECT gpu_type 
+                    FROM leaderboard.gpu_type 
+                    WHERE leaderboard_id = :leaderboard_id
+                    """)
+                
+                gpu_types_result = connection.execute(gpu_types_query, {'leaderboard_id': _lb_id})
+                gpu_types = [row[0] for row in gpu_types_result.fetchall()]
 
-                # Get active leaderboards with their GPU types and submission counts
-                query = """
-                    WITH unique_best_submissions AS (
-                        SELECT DISTINCT ON (s.user_id)
-                            s.file_name,
-                            s.user_id,
-                            s.submission_time,
-                            r.score,
-                            r.runner
-                        FROM leaderboard.runs r
-                        JOIN leaderboard.submission s ON r.submission_id = s.id
-                        JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
-                        WHERE l.name = %s AND r.runner = %s AND NOT r.secret
-                            AND r.score IS NOT NULL AND r.passed
-                        ORDER BY s.user_id, r.score ASC
+                for gpu_type in gpu_types:
+                    submissions_result = connection.execute(
+                        submissions_query, 
+                        {'leaderboard_name': name, 'gpu_type': gpu_type}
                     )
-                    SELECT
-                        file_name,
-                        user_id,
-                        submission_time,
-                        score,
-                        runner,
-                        ROW_NUMBER() OVER (ORDER BY score ASC) as rank
-                    FROM unique_best_submissions
-                    ORDER BY score ASC;
-                """
+                    submissions = submissions_result.fetchall()
 
-                gpu_type_data = {}
-                for (
-                    _lb_id,
-                    name,
-                    deadline,
-                ) in leaderboards:
-                    cur.execute(
-                        "SELECT * from leaderboard.gpu_type where leaderboard_id = %s", [_lb_id]
+                    print(
+                        f"Found {len(submissions)} active submissions in {name} for {gpu_type}"
                     )
-                    gpu_types = [x[1] for x in cur.fetchall()]
 
-                    for gpu_type in gpu_types:
-                        args = (name, gpu_type)
-                        cur.execute(query, args)
-                        submissions = cur.fetchall()
+                    if len(submissions) > 0:
+                        if gpu_type not in gpu_type_data:
+                            gpu_type_data[gpu_type] = {}
 
-                        print(
-                            f"Found {len(submissions)} active submissions in {name} for {gpu_type}"
-                        )
+                        gpu_submissions = []
+                        for lb in submissions:
+                            user_id = lb[1]
+                            time = lb[3]
+                            rank = lb[5]
+                            global_name = get_name_from_id(user_id)
+                            gpu_submissions.append(
+                                {
+                                    "user": f"{global_name}",
+                                    "time": f"{time:.9f}",
+                                    "rank": rank,
+                                }
+                            )
 
-                        if len(submissions) > 0:
-                            if gpu_type not in gpu_type_data:
-                                gpu_type_data[gpu_type] = {}
+                        # Sort submissions by time
+                        gpu_submissions.sort(key=lambda x: float(x["time"]))
 
-                            gpu_submissions = []
-                            for lb in submissions:
-                                user_id = lb[1]
-                                time = lb[3]
-                                rank = lb[5]
-                                global_name = get_name_from_id(user_id)
-                                gpu_submissions.append(
-                                    {
-                                        "user": f"{global_name}",
-                                        "time": f"{time:.9f}",
-                                        "rank": rank,
-                                    }
-                                )
+                        gpu_type_data[gpu_type][name] = {
+                            "name": name,
+                            "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
+                            "submissions": gpu_submissions,
+                        }
 
-                            # Sort submissions by time
-                            gpu_submissions.sort(key=lambda x: float(x["time"]))
+            # Convert to final format
+            formatted_data = {
+                "gpu_types": [
+                    {"name": gpu_type, "problems": list(problems.values())}
+                    for gpu_type, problems in gpu_type_data.items()
+                ],
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            }
 
-                            gpu_type_data[gpu_type][name] = {
-                                "name": name,
-                                "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
-                                "submissions": gpu_submissions,
-                            }
-
-                # Convert to final format
-                formatted_data = {
-                    "gpu_types": [
-                        {"name": gpu_type, "problems": list(problems.values())}
-                        for gpu_type, problems in gpu_type_data.items()
-                    ],
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
-                }
-
-                print("Data fetched successfully")
-                return formatted_data
+            print("Data fetched successfully")
+            return formatted_data
+    except SQLAlchemyError as e:
+        print(f"Database error: {str(e)}")
+        raise
     except Exception as e:
         print(f"Error fetching data: {str(e)}")
         raise

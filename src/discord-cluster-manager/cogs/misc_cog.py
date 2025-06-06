@@ -2,9 +2,10 @@ import os
 from typing import TYPE_CHECKING
 
 import discord
-import psycopg2
 from discord import app_commands
 from discord.ext import commands
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from env import DATABASE_URL
 from utils import send_discord_message, setup_logging
 
@@ -33,17 +34,21 @@ class BotManagerCog(commands.Cog):
             return
 
         try:
-            with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT RANDOM()")
-                    result = cursor.fetchone()
-                    if result:
-                        random_value = result[0]
-                        await send_discord_message(
-                            interaction, f"Your lucky number is {random_value}."
-                        )
-                    else:
-                        await send_discord_message(interaction, "No result returned.")
+            engine = create_engine(DATABASE_URL)
+            with engine.connect() as connection:
+                result = connection.execute(text("SELECT RANDOM()"))
+                row = result.fetchone()
+                if row:
+                    random_value = row[0]
+                    await send_discord_message(
+                        interaction, f"Your lucky number is {random_value}."
+                    )
+                else:
+                    await send_discord_message(interaction, "No result returned.")
+        except SQLAlchemyError as e:
+            message = "Database error occurred"
+            logger.error(f"{message}: {str(e)}", exc_info=True)
+            await send_discord_message(interaction, f"{message}.")
         except Exception as e:
             message = "Error interacting with the database"
             logger.error(f"{message}: {str(e)}", exc_info=True)
