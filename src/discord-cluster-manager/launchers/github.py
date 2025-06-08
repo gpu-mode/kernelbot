@@ -240,7 +240,7 @@ class GitHubRun:
                         runs_checked += 1
                         logger.debug(
                             f"Checking run {run.id} with name '{run.name}'"
-                            f"created at {run.created_at.isoformat()}"
+                            f" created at {run.created_at.isoformat()}"
                         )
                         if run.name == expected_run_name and run.created_at.replace(
                             tzinfo=datetime.timezone.utc
