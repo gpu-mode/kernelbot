@@ -254,7 +254,7 @@ async def start_bot_and_api(debug_mode: bool):
         host="0.0.0.0",
         port=int(os.environ.get("PORT") or 8000),
         log_level="info",
-        limit_concurrency=10,
+        limit_concurrency=40,
     )
     server = uvicorn.Server(config)
 
