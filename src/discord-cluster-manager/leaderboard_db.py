@@ -348,25 +348,6 @@ class LeaderboardDB:
             for row in self.cursor.fetchall()
         ]
 
-    def delete_milestone(self, milestone_id: int) -> None:
-        """Delete a milestone and all associated runs"""
-        try:
-            # Delete milestone runs first (foreign key constraint)
-            self.cursor.execute(
-                "DELETE FROM leaderboard.milestone_runs WHERE milestone_id = %s",
-                (milestone_id,),
-            )
-            # Delete the milestone
-            self.cursor.execute(
-                "DELETE FROM leaderboard.milestones WHERE id = %s",
-                (milestone_id,),
-            )
-            self.connection.commit()
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            logger.exception("Error deleting milestone", exc_info=e)
-            raise KernelBotError("Error deleting milestone") from e
-    
     def create_submission(
         self,
         leaderboard: str,
