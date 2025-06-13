@@ -218,7 +218,7 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
             result.append("✅ Leaderboard run successful")
     elif full:
         result.append("❌ Leaderboard missing")
-    
+
     if "milestone" in runs:
         ms_run = runs["milestone"].run
         if not ms_run.success:

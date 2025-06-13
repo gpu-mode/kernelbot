@@ -105,11 +105,19 @@ class SubmitCog(commands.Cog):
             score = None
             # Calculate score for both leaderboard and milestone runs
             score_run_key = None
-            if "leaderboard" in result.runs and result.runs["leaderboard"].run.success and result.runs["leaderboard"].run.passed:
+            if (
+                "leaderboard" in result.runs
+                and result.runs["leaderboard"].run.success
+                and result.runs["leaderboard"].run.passed
+            ):
                 score_run_key = "leaderboard"
-            elif "milestone" in result.runs and result.runs["milestone"].run.success and result.runs["milestone"].run.passed:
+            elif (
+                "milestone" in result.runs
+                and result.runs["milestone"].run.success
+                and result.runs["milestone"].run.passed
+            ):
                 score_run_key = "milestone"
-            
+
             if score_run_key:
                 score = 0.0
                 num_benchmarks = int(result.runs[score_run_key].run.result["benchmark-count"])
@@ -144,9 +152,12 @@ class SubmitCog(commands.Cog):
                     for key, value in result.runs.items():
                         # Assign score for leaderboard and milestone runs
                         run_score = None
-                        if key == "leaderboard" or (key == "milestone" and mode == SubmissionMode.MILESTONE):
+                        if (
+                            key == "leaderboard"
+                            or (key == "milestone" and mode == SubmissionMode.MILESTONE)
+                        ):
                             run_score = score
-                            
+
                         run_id = db.create_submission_run(
                             submission_id,
                             value.start,
@@ -159,19 +170,28 @@ class SubmitCog(commands.Cog):
                             result=value.run,
                             system=result.system,
                         )
-                        
+
                         # If this is a milestone submission, record the milestone run
                         if mode == SubmissionMode.MILESTONE and run_id:
                             # Get submission data to find the leaderboard
                             submission_data = db.get_submission_by_id(submission_id)
                             if submission_data:
-                                leaderboard = db.get_leaderboard(submission_data["leaderboard_name"])
+                                leaderboard = db.get_leaderboard(
+                                    submission_data["leaderboard_name"]
+                                )
                                 if leaderboard:
                                     # Find the milestone ID based on the filename
                                     milestones = db.get_leaderboard_milestones(leaderboard["id"])
-                                    milestone = next((m for m in milestones if m["filename"] == name), None)
+                                    milestone = next(
+                                        (m for m in milestones if m["filename"] == name),
+                                        None
+                                    )
                                     if milestone:
-                                        db.record_milestone_run(milestone["id"], submission_id, run_id)
+                                        db.record_milestone_run(
+                                            milestone["id"],
+                                            submission_id,
+                                            run_id
+                                        )
 
         return result
 

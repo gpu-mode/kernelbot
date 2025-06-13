@@ -1,7 +1,7 @@
 import dataclasses
+import hashlib
 from enum import Enum, IntEnum
 from typing import Type
-import hashlib
 
 
 class Timeout(IntEnum):

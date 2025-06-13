@@ -26,7 +26,11 @@ class ProcessedSubmissionRequest(SubmissionRequest):
     task_gpus: list
 
 
-def prepare_submission(req: SubmissionRequest, lb_db: LeaderboardDB, mode: SubmissionMode) -> ProcessedSubmissionRequest:
+def prepare_submission(
+    req: SubmissionRequest,
+    lb_db: LeaderboardDB,
+    mode: SubmissionMode
+) -> ProcessedSubmissionRequest:
     if profanity.contains_profanity(req.file_name):
         raise KernelBotError("Please provide a non rude filename")
     if mode != SubmissionMode.MILESTONE:

@@ -4,7 +4,7 @@ Add milestone table for better milestone tracking
 
 from yoyo import step
 
-__depends__ = {"20250506_01_38PkG-add-index-on-runs-runner-score"}  # Update with the latest migration
+__depends__ = {"20250506_01_38PkG-add-index-on-runs-runner-score"}  # Update to latest migration
 
 steps = [
     step("""

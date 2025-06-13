@@ -15,6 +15,7 @@ from consts import GitHubGPU, ModalGPU, SubmissionMode, get_system_user_name
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
+from submission import lookup_leaderboard
 from task import LeaderboardTask, make_task
 from ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
 from utils import (
@@ -26,7 +27,6 @@ from utils import (
     setup_logging,
     with_error_handling,
 )
-from submission import lookup_leaderboard
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot
@@ -134,10 +134,6 @@ class AdminCog(commands.Cog):
         self.milestone_results = bot.admin_group.command(
             name="milestone-results", description="Show results for a milestone"
         )(self.milestone_results)
-
-        self.delete_milestone = bot.admin_group.command(
-            name="delete-milestone", description="Delete a milestone and all its runs"
-        )(self.delete_milestone)
 
         self._scheduled_cleanup_temp_users.start()
 
@@ -368,7 +364,7 @@ class AdminCog(commands.Cog):
 
         with self.bot.leaderboard_db as db:
             try:
-                leaderboard_id = db.create_leaderboard(
+                db.create_leaderboard(
                     {
                         "name": leaderboard_name,
                         "deadline": date_value,
@@ -391,13 +387,14 @@ class AdminCog(commands.Cog):
             try:
                 await send_discord_message(
                     interaction,
-                    f"🚀 Leaderboard `{leaderboard_name}` created successfully! Auto-submitting {len(task.milestones)} milestone(s)...",
+                    f"🚀 Leaderboard `{leaderboard_name}` created successfully! "
+                    f"Auto-submitting {len(task.milestones)} milestone(s)...",
                     ephemeral=True,
                 )
-                
+
                 # Call the underlying milestone submission logic directly
                 await self._submit_milestones_directly(leaderboard_name, task, selected_gpus)
-                
+
                 await send_discord_message(
                     interaction,
                     f"✅ Milestone submissions completed for `{leaderboard_name}`!",
@@ -407,18 +404,24 @@ class AdminCog(commands.Cog):
                 logger.exception("Error auto-submitting milestones for new leaderboard", exc_info=e)
                 await send_discord_message(
                     interaction,
-                    f"⚠️ Leaderboard `{leaderboard_name}` created but milestone auto-submission failed: {str(e)}",
+                    f"⚠️ Leaderboard `{leaderboard_name}` created but milestone "
+                    f"auto-submission failed: {str(e)}",
                     ephemeral=True,
                 )
 
         return True
 
-    async def _submit_milestones_directly(self, leaderboard_name: str, task: LeaderboardTask, selected_gpus: list[str]):
+    async def _submit_milestones_directly(
+        self,
+        leaderboard_name: str,
+        task: LeaderboardTask,
+        selected_gpus: list[str]
+    ):
         """Directly submit milestones without going through Discord command layer"""
-        from consts import SYSTEM_USER_ID, get_system_user_name, SubmissionMode, get_gpu_by_name
-        from submission import SubmissionRequest, prepare_submission
+        from consts import SYSTEM_USER_ID, SubmissionMode, get_gpu_by_name
         from report import RunProgressReporterAPI
-        
+        from submission import SubmissionRequest, prepare_submission
+
         # Ensure system user exists in database
         with self.bot.leaderboard_db as db:
             db.cursor.execute(
@@ -432,7 +435,7 @@ class AdminCog(commands.Cog):
                     (str(user_id), user_name),
                 )
                 db.connection.commit()
-        
+
         # Prepare submission request for milestones
         req = SubmissionRequest(
             code="",  # Not used for milestones
@@ -441,19 +444,19 @@ class AdminCog(commands.Cog):
             gpus=selected_gpus,
             leaderboard=leaderboard_name,
         )
-        
+
         # Prepare the submission (validates leaderboard, deadline, etc.)
         processed_req = prepare_submission(req, self.bot.leaderboard_db, SubmissionMode.MILESTONE)
-        
+
         # Convert GPU strings to GPU objects
         gpu_objects = [get_gpu_by_name(gpu) for gpu in selected_gpus]
-        
+
         # Sync milestones to database
         leaderboard_item = lookup_leaderboard(leaderboard_name, self.bot.leaderboard_db)
         with self.bot.leaderboard_db as db:
             existing_milestones = db.get_leaderboard_milestones(leaderboard_item["id"])
             existing_names = {m["milestone_name"] for m in existing_milestones}
-            
+
             # Create any new milestones in the database
             for milestone in task.milestones:
                 if milestone["milestone_name"] not in existing_names:
@@ -461,23 +464,26 @@ class AdminCog(commands.Cog):
                         leaderboard_item["id"],
                         milestone["milestone_name"],
                         milestone["filename"],
-                        description=milestone.get("description", f"Milestone for {milestone['filename']}")
+                        description=milestone.get(
+                            "description",
+                            f"Milestone for {milestone['filename']}"
+                        )
                     )
-        
+
         # Get submit cog for the submission runner
         submit_cog = self.bot.get_cog("SubmitCog")
         if not submit_cog:
             raise Exception("SubmitCog not available")
-        
+
         # Create separate submission for each milestone
         submission_ids = []
         tasks = []
-        
+
         for milestone in task.milestones:
             milestone_filename = milestone["filename"]
             milestone_code = task.files[milestone_filename]
             milestone_name = milestone["milestone_name"]
-            
+
             # Create separate submission entry for each milestone
             with self.bot.leaderboard_db as db:
                 user_name, user_id = get_system_user_name(milestone_name)
@@ -490,12 +496,14 @@ class AdminCog(commands.Cog):
                     user_name=user_name,
                 )
             submission_ids.append(sub_id)
-            
+
             # Create tasks for this milestone on all selected GPUs
             for gpu in gpu_objects:
                 # Create a background reporter for this submission
-                reporter = RunProgressReporterAPI(f"Milestone {milestone['milestone_name']} on {gpu.name}")
-                
+                reporter = RunProgressReporterAPI(
+                    f"Milestone {milestone['milestone_name']} on {gpu.name}"
+                )
+
                 tasks.append(
                     submit_cog.submit_leaderboard(
                         sub_id,
@@ -508,10 +516,10 @@ class AdminCog(commands.Cog):
                         None,
                     )
                 )
-        
+
         # Execute all milestone submissions
         await asyncio.gather(*tasks)
-        
+
         # Mark all submissions as done
         with self.bot.leaderboard_db as db:
             for sub_id in submission_ids:
@@ -1190,11 +1198,11 @@ class AdminCog(commands.Cog):
         if not await self.admin_check(interaction):
             await send_discord_message(
                 interaction,
-                "You do not have permission to submit milestones.", 
+                "You do not have permission to submit milestones.",
                 ephemeral=True
             )
             return
-        
+
         # Get the submit cog to access the submission logic
         submit_cog = self.bot.get_cog("SubmitCog")
         if not submit_cog:
@@ -1204,14 +1212,14 @@ class AdminCog(commands.Cog):
                 ephemeral=True
             )
             return
-        
+
         # Get the submit group from the leaderboard cog
         submit_group = None
         for command in self.bot.leaderboard_group.commands:
             if hasattr(command, 'name') and command.name == "submit":
                 submit_group = command
                 break
-                
+
         if not submit_group:
             await send_discord_message(
                 interaction,
@@ -1219,7 +1227,7 @@ class AdminCog(commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         return await submit_group.submit(
             interaction, leaderboard_name, None, mode=SubmissionMode.MILESTONE, gpu=gpu
         )
@@ -1239,20 +1247,82 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
             return
-            
+
         leaderboard = lookup_leaderboard(leaderboard_name, self.bot.leaderboard_db)
         with self.bot.leaderboard_db as db:
             milestones = db.get_leaderboard_milestones(leaderboard["id"])
-        
+
         if not milestones:
             await interaction.response.send_message(f"No milestones found for {leaderboard_name}")
             return
-        
+
         message = f"**Milestones for {leaderboard_name}:**\n"
         for milestone in milestones:
-            message += f"• {milestone['milestone_name']} ({milestone['filename']}) - {milestone['description']}\n"
-        
+            message += (
+                f"• {milestone['milestone_name']} "
+                f"({milestone['filename']}) - "
+                f"{milestone['description']}\n"
+            )
+
         await interaction.response.send_message(message)
+
+    async def _format_milestone_runs(self, runs: list[dict], max_runs: int = 5) -> str:
+        """Format milestone runs into a string message."""
+        message = ""
+        for i, run in enumerate(runs[:max_runs], 1):
+            score = format_time(float(run['score']) * 1e9) if run['score'] else "N/A"
+            status = '✅' if run['passed'] else '❌'
+            message += (
+                f"   {i}. {run['user_name']} - {score} {status} "
+                f"(#{run['submission_id']})\n"
+            )
+
+        if len(runs) > max_runs:
+            message += f"   _... and {len(runs) - max_runs} more runs_\n"
+
+        return message
+
+    def _format_milestone_section(
+        self, milestone: dict, runs: list[dict]
+    ) -> str:
+        """Format a single milestone section with its runs."""
+        section = (
+            f"📍 **{milestone['milestone_name']}** "
+            f"({milestone['filename']}) | {milestone['description']}\n"
+        )
+
+        if not runs:
+            section += "   _No runs found_\n\n"
+            return section
+
+        section += self._format_milestone_runs(runs)
+        section += "\n"
+        return section
+
+    def _create_milestone_messages(
+        self, leaderboard_name: str, milestones: list[dict]
+    ) -> list[str]:
+        """Create a list of messages for all milestones, splitting if needed."""
+        messages = []
+        current_message = f"**All Milestone Results for {leaderboard_name}:**\n\n"
+
+        for milestone in milestones:
+            with self.bot.leaderboard_db as db:
+                runs = db.get_milestone_runs(milestone["id"])
+                runs.sort(key=lambda x: x['submission_time'], reverse=True)
+
+            milestone_section = self._format_milestone_section(milestone, runs)
+
+            if len(current_message) + len(milestone_section) > 1900:
+                messages.append(current_message)
+                current_message = milestone_section
+            else:
+                current_message += milestone_section
+
+        if current_message.strip():
+            messages.append(current_message)
+
+        return messages
 
     @app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
@@ -1269,78 +1339,30 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
             return
-            
+
         leaderboard = lookup_leaderboard(leaderboard_name, self.bot.leaderboard_db)
         with self.bot.leaderboard_db as db:
             milestones = db.get_leaderboard_milestones(leaderboard["id"])
-        
+
         if not milestones:
-            await interaction.response.send_message(f"No milestones found for {leaderboard_name}")
+            await interaction.response.send_message(
+                f"No milestones found for {leaderboard_name}"
+            )
             return
-        
+
+        # Create a single message if it fits within Discord's limit
         message = f"**All Milestone Results for {leaderboard_name}:**\n\n"
-        
         for milestone in milestones:
             with self.bot.leaderboard_db as db:
                 runs = db.get_milestone_runs(milestone["id"])
-            
-            message += f"📍 **{milestone['milestone_name']}** ({milestone['filename']})\n"
-            
-            if not runs:
-                message += "   _No runs found_\n\n"
-                continue
-            
-            # Show top 5 runs for each milestone
-            for i, run in enumerate(runs[:5], 1):
-                score = format_time(float(run['score']) * 1e9) if run['score'] else "N/A"
-                status = '✅' if run['passed'] else '❌'
-                message += f"   {i}. {run['user_name']} - {score} {status} (#{run['submission_id']})\n"
-            
-            if len(runs) > 5:
-                message += f"   _... and {len(runs) - 5} more runs_\n"
-            
-            message += "\n"
-        
-        # Split message if it's too long for Discord
-        if len(message) > 2000:
-            messages = []
-            current_message = f"**All Milestone Results for {leaderboard_name}:**\n\n"
-            
-            for milestone in milestones:
-                with self.bot.leaderboard_db as db:
-                    runs = db.get_milestone_runs(milestone["id"])
-                    # sort runs by submission time
-                    runs.sort(key=lambda x: x['submission_time'], reverse=True)
-                
-                milestone_section = f"📍 **{milestone['milestone_name']}** ({milestone['filename']}) | {milestone['description']}\n"
-                
-                if not runs:
-                    milestone_section += "   _No runs found_\n\n"
-                else:
-                    for i, run in enumerate(runs[:5], 1):
-                        score = format_time(float(run['score']) * 1e9) if run['score'] else "N/A"
-                        status = '✅' if run['passed'] else '❌'
-                        milestone_section += f"{i}. {run['user_name']} - {score} {status} (#{run['submission_id']})\n"
-                    
-                    if len(runs) > 5:
-                        milestone_section += f"_... and {len(runs) - 5} more runs_\n"
-                    
-                    milestone_section += "\n"
-                
-                # Check if adding this milestone would exceed Discord's limit
-                if len(current_message) + len(milestone_section) > 1900:
-                    messages.append(current_message)
-                    current_message = milestone_section
-                else:
-                    current_message += milestone_section
-            
-            # Add the last message
-            if current_message.strip():
-                messages.append(current_message)
-            
-            # Send all messages
-            await interaction.response.send_message(messages[0])
-            for msg in messages[1:]:
-                await interaction.followup.send(msg)
-        else:
+            message += self._format_milestone_section(milestone, runs)
+
+        if len(message) <= 2000:
             await interaction.response.send_message(message)
+            return
+
+        # If message is too long, split it into multiple messages
+        messages = self._create_milestone_messages(leaderboard_name, milestones)
+        await interaction.response.send_message(messages[0])
+        for msg in messages[1:]:
+            await interaction.followup.send(msg)

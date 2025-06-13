@@ -187,9 +187,9 @@ class LeaderboardDB:
             # Delete milestone runs first (they reference milestones)
             self.cursor.execute(
                 """
-                DELETE FROM leaderboard.milestone_runs 
+                DELETE FROM leaderboard.milestone_runs
                 WHERE milestone_id IN (
-                    SELECT id FROM leaderboard.milestones 
+                    SELECT id FROM leaderboard.milestones
                     WHERE leaderboard_id = %s
                 )
                 """,
@@ -240,8 +240,6 @@ class LeaderboardDB:
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard {leaderboard_name}.") from e
 
-
-
     def create_milestone(
         self,
         leaderboard_id: int,
@@ -253,7 +251,9 @@ class LeaderboardDB:
         try:
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.milestones (leaderboard_id, milestone_name, filename, description)
+                INSERT INTO leaderboard.milestones (
+                    leaderboard_id, milestone_name, filename, description
+                )
                 VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
@@ -314,7 +314,7 @@ class LeaderboardDB:
         """Get all runs for a specific milestone"""
         self.cursor.execute(
             """
-            SELECT 
+            SELECT
                 mr.id,
                 mr.submission_id,
                 mr.run_id,

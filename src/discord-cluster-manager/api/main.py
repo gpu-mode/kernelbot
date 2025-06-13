@@ -356,7 +356,11 @@ async def run_submission(  # noqa: C901
                 all_leaderboards = [lb["name"] for lb in db.get_leaderboards()]
                 if leaderboard_name not in all_leaderboards:
                     raise HTTPException(
-                        status_code=404, detail=f"Leaderboard '{leaderboard_name}' not found when trying to run submission."
+                        status_code=404,
+                        detail=(
+                            f"Leaderboard '{leaderboard_name}' not found "
+                            "when trying to run submission."
+                        )
                     )
                 else:
                     raise HTTPException(

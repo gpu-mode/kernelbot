@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, List, Optional
 import discord
 from consts import (
     SYSTEM_USER_ID,
-    get_system_user_name,
     SubmissionMode,
     get_gpu_by_name,
+    get_system_user_name,
 )
 from discord import app_commands
 from discord.ext import commands
@@ -39,7 +39,7 @@ class LeaderboardSubmitCog(app_commands.Group):
     def __init__(self, bot: "ClusterBot"):
         super().__init__(name="submit", description="Submit to leaderboard")
         self.bot = bot
-    
+
 
     async def select_gpu_view(
         self,
@@ -86,7 +86,11 @@ class LeaderboardSubmitCog(app_commands.Group):
                     interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
                 )
                 return -1
-        filename = script.filename if not mode == SubmissionMode.MILESTONE else "performance milestone"
+        filename = (
+            script.filename
+            if not mode == SubmissionMode.MILESTONE
+            else "performance milestone"
+        )
         req = SubmissionRequest(
             code=submission_content,
             file_name=filename,
@@ -123,9 +127,13 @@ class LeaderboardSubmitCog(app_commands.Group):
             user_id = interaction.user.id
             user_name = interaction.user.global_name or interaction.user.name
 
-        run_msg = f"Milestone submissions for `{req.leaderboard}`" if mode == SubmissionMode.MILESTONE else f"Submission: `{filename}` for `{req.leaderboard}`"
+        run_msg = (
+            f"Milestone submissions for `{req.leaderboard}`"
+            if mode == SubmissionMode.MILESTONE
+            else f"Submission: `{filename}` for `{req.leaderboard}`"
+        )
         reporter = MultiProgressReporter(interaction, run_msg)
-        
+
         try:
             if mode == SubmissionMode.MILESTONE:
                 submission_ids = await self._handle_milestone_submissions(
@@ -134,10 +142,10 @@ class LeaderboardSubmitCog(app_commands.Group):
                 return submission_ids
             else:
                 sub_id = await self._handle_regular_submission(
-                    req, submission_content, filename, user_id, user_name, 
+                    req, submission_content, filename, user_id, user_name,
                     selected_gpus, reporter, command, mode
                 )
-                
+
                 if mode == SubmissionMode.LEADERBOARD:
                     await self.post_submit_hook(interaction, sub_id)
                 return [sub_id]
@@ -161,7 +169,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         """Handle milestone submissions with separate submission IDs for each milestone"""
         milestones = req.task.milestones
         files = req.task.files
-        
+
         # Ensure system user exists in database for milestone submissions
         with self.bot.leaderboard_db as db:
             # Check if system user exists
@@ -181,13 +189,13 @@ class LeaderboardSubmitCog(app_commands.Group):
                     (str(SYSTEM_USER_ID), get_system_user_name(None)),
                 )
                 db.connection.commit()
-        
+
         # Sync milestones to database
         leaderboard_item = lookup_leaderboard(req.leaderboard, self.bot.leaderboard_db)
         with self.bot.leaderboard_db as db:
             existing_milestones = db.get_leaderboard_milestones(leaderboard_item["id"])
             existing_names = {m["milestone_name"] for m in existing_milestones}
-            
+
             # Create any new milestones in the database
             for milestone in milestones:
                 if milestone["milestone_name"] not in existing_names:
@@ -195,18 +203,21 @@ class LeaderboardSubmitCog(app_commands.Group):
                         leaderboard_item["id"],
                         milestone["milestone_name"],
                         milestone["filename"],
-                        description=milestone.get("description", f"Milestone for {milestone['filename']}")
+                        description=milestone.get(
+                            "description",
+                            f"Milestone for {milestone['filename']}"
+                        )
                     )
 
         # Create separate submission for each milestone
         submission_ids = []
         tasks = []
-        
+
         for milestone in milestones:
             milestone_filename = milestone["filename"]
             milestone_code = files[milestone_filename]
             milestone_name = milestone["milestone_name"]
-            
+
             # Create separate submission entry for each milestone
             with self.bot.leaderboard_db as db:
                 user_name, user_id = get_system_user_name(milestone_name)
@@ -219,7 +230,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                     user_name=user_name,
                 )
             submission_ids.append(sub_id)
-            
+
             # Create tasks for this milestone on all selected GPUs
             for gpu in selected_gpus:
                 tasks.append(
@@ -228,19 +239,22 @@ class LeaderboardSubmitCog(app_commands.Group):
                         milestone_code,
                         milestone_filename,
                         gpu,
-                        reporter.add_run(f"{gpu.name} on {gpu.runner} for milestone {milestone_name} (#{sub_id})"),
+                        reporter.add_run(
+                            f"{gpu.name} on {gpu.runner} for milestone "
+                            f"{milestone_name} (#{sub_id})"
+                        ),
                         req.task,
                         SubmissionMode.MILESTONE,
                         None,
                     )
                 )
-        
+
         await reporter.show()
         await asyncio.gather(*tasks)
         return submission_ids
 
     async def _handle_regular_submission(
-        self, req, submission_content, filename, user_id, user_name, 
+        self, req, submission_content, filename, user_id, user_name,
         selected_gpus, reporter, command, mode
     ):
         """Handle regular submissions with a single submission ID"""
@@ -284,7 +298,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 )
                 for gpu in selected_gpus
             ]
-        
+
         await reporter.show()
         await asyncio.gather(*tasks)
         return sub_id
