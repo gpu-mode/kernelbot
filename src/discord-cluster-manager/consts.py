@@ -1,6 +1,7 @@
 import dataclasses
 from enum import Enum, IntEnum
 from typing import Type
+import hashlib
 
 
 class Timeout(IntEnum):
@@ -154,5 +155,17 @@ AMD_REQUIREMENTS = """
 torch
 """
 SYSTEM_USER_ID = -123
-SYSTEM_USER_NAME = "KernelBot"
+
+def get_milestone_user_id(milestone_name: str | None = None) -> int:
+    if not milestone_name:
+        return SYSTEM_USER_ID
+    # Generate a consistent negative ID between -1000 and -100 based on the milestone name
+    hash_value = int(hashlib.md5(milestone_name.encode()).hexdigest(), 16)
+    return -100 - (hash_value % 900)  # This ensures ID is between -1000 and -100
+
+def get_system_user_name(milestone_name: str | None = None) -> tuple[str, int]:
+    if milestone_name:
+        return f"KernelBot - {milestone_name}", get_milestone_user_id(milestone_name)
+    return "KernelBot", SYSTEM_USER_ID
+
 TIMEOUT_BUFFER_MINUTES = 2

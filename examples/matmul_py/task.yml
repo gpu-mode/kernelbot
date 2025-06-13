@@ -7,7 +7,7 @@ files:
   - {"name": "reference.py", "source": "reference.py"}
   - {"name": "eval.py", "source": "../eval.py"}
   - {"name": "pytorch_ref.py", "source": "pytorch_ref.py"}
-  - {"name": "triton_ref.py", "source": "triton_ref.py"}
+  - {"name": "torch_mm_ref.py", "source": "torch_mm_ref.py"}
 
 milestones:
   - {
@@ -16,9 +16,9 @@ milestones:
       "description": "PyTorch reference implementation as a performance baseline for matmul"
     }
   - {
-      "milestone_name": "triton reference", 
-      "filename": "triton_ref.py", 
-      "description": "Triton reference implementation as a performance baseline for matmul"
+      "milestone_name": "torch.mm reference", 
+      "filename": "torch_mm_ref.py", 
+      "description": "torch.mm reference implementation as a performance baseline for matmul"
     }
 
 lang: "py"

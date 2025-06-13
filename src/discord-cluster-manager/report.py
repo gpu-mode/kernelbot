@@ -227,8 +227,6 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
             result.append("❌ Milestone run failed")
         else:
             result.append("✅ Milestone run successful")
-    elif full:
-        result.append("❌ Milestone missing")
 
     return result
 

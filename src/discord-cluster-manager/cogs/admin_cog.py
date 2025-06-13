@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict
 import discord
 import env
 import yaml
-from consts import GitHubGPU, ModalGPU, SubmissionMode
+from consts import GitHubGPU, ModalGPU, SubmissionMode, get_system_user_name
 from discord import app_commands
 from discord.ext import commands, tasks
 from leaderboard_db import leaderboard_name_autocomplete
@@ -415,7 +415,7 @@ class AdminCog(commands.Cog):
 
     async def _submit_milestones_directly(self, leaderboard_name: str, task: LeaderboardTask, selected_gpus: list[str]):
         """Directly submit milestones without going through Discord command layer"""
-        from consts import SYSTEM_USER_ID, SYSTEM_USER_NAME, SubmissionMode, get_gpu_by_name
+        from consts import SYSTEM_USER_ID, get_system_user_name, SubmissionMode, get_gpu_by_name
         from submission import SubmissionRequest, prepare_submission
         from report import RunProgressReporterAPI
         
@@ -426,9 +426,10 @@ class AdminCog(commands.Cog):
                 (str(SYSTEM_USER_ID),),
             )
             if not db.cursor.fetchone():
+                user_name, user_id = get_system_user_name()
                 db.cursor.execute(
                     "INSERT INTO leaderboard.user_info (id, user_name) VALUES (%s, %s)",
-                    (str(SYSTEM_USER_ID), SYSTEM_USER_NAME),
+                    (str(user_id), user_name),
                 )
                 db.connection.commit()
         
@@ -475,16 +476,18 @@ class AdminCog(commands.Cog):
         for milestone in task.milestones:
             milestone_filename = milestone["filename"]
             milestone_code = task.files[milestone_filename]
+            milestone_name = milestone["milestone_name"]
             
             # Create separate submission entry for each milestone
             with self.bot.leaderboard_db as db:
+                user_name, user_id = get_system_user_name(milestone_name)
                 sub_id = db.create_submission(
                     leaderboard=leaderboard_name,
                     file_name=milestone_filename,
                     code=milestone_code,
-                    user_id=SYSTEM_USER_ID,
+                    user_id=user_id,
                     time=datetime.now(),
-                    user_name=SYSTEM_USER_NAME,
+                    user_name=user_name,
                 )
             submission_ids.append(sub_id)
             

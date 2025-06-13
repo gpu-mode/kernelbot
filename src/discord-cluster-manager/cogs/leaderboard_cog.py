@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, List, Optional
 import discord
 from consts import (
     SYSTEM_USER_ID,
-    SYSTEM_USER_NAME,
+    get_system_user_name,
     SubmissionMode,
     get_gpu_by_name,
 )
@@ -113,8 +113,12 @@ class LeaderboardSubmitCog(app_commands.Group):
 
         # For milestone submissions, use consistent system user
         if mode == SubmissionMode.MILESTONE:
-            user_id = SYSTEM_USER_ID
-            user_name = SYSTEM_USER_NAME
+            # Get the milestone name from the task
+            leaderboard = lookup_leaderboard(leaderboard_name, self.bot.leaderboard_db)
+            milestone_name = None
+            if leaderboard["task"].milestones:
+                milestone_name = leaderboard["task"].milestones[0]["milestone_name"]
+            user_name, user_id = get_system_user_name(milestone_name)
         else:
             user_id = interaction.user.id
             user_name = interaction.user.global_name or interaction.user.name
@@ -174,7 +178,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                     INSERT INTO leaderboard.user_info (id, user_name)
                     VALUES (%s, %s)
                     """,
-                    (str(SYSTEM_USER_ID), SYSTEM_USER_NAME),
+                    (str(SYSTEM_USER_ID), get_system_user_name(None)),
                 )
                 db.connection.commit()
         
@@ -201,9 +205,11 @@ class LeaderboardSubmitCog(app_commands.Group):
         for milestone in milestones:
             milestone_filename = milestone["filename"]
             milestone_code = files[milestone_filename]
+            milestone_name = milestone["milestone_name"]
             
             # Create separate submission entry for each milestone
             with self.bot.leaderboard_db as db:
+                user_name, user_id = get_system_user_name(milestone_name)
                 sub_id = db.create_submission(
                     leaderboard=req.leaderboard,
                     file_name=milestone_filename,
@@ -222,7 +228,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                         milestone_code,
                         milestone_filename,
                         gpu,
-                        reporter.add_run(f"{gpu.name} on {gpu.runner} for milestone {milestone['milestone_name']} (#{sub_id})"),
+                        reporter.add_run(f"{gpu.name} on {gpu.runner} for milestone {milestone_name} (#{sub_id})"),
                         req.task,
                         SubmissionMode.MILESTONE,
                         None,
