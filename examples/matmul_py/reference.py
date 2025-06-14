@@ -21,7 +21,7 @@ def check_implementation(data: input_t, output: output_t) -> Tuple[bool, str]:
     reasons = verbose_allclose(output, expected)
     if len(reasons) > 0:
         # TODO better processing of reasons
-        return False, "mismatch found! custom implementation doesn't match reference.: " + reasons[0]
+        return False, "mismatch found! custom implementation doesn't match reference: " + reasons[0]
 
     return True, ''
 

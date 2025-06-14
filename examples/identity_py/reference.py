@@ -15,12 +15,12 @@ def ref_kernel(data: input_t) -> output_t:
     return data
 
 
-def check_implementation(data, output) -> Tuple[bool, str]:
+def check_implementation(data: input_t, output: output_t) -> Tuple[bool, str]:
     expected = ref_kernel(data)
     reasons = verbose_allclose(output, expected)
     if len(reasons) > 0:
         # TODO better processing of reasons
-        return False, "mismatch found! custom implementation doesn't match reference.: " + reasons[0]
+        return False, "mismatch found! custom implementation doesn't match reference: " + reasons[0]
 
     return True, ''
 
