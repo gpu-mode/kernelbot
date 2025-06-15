@@ -290,7 +290,7 @@ class LeaderboardDB:
             for row in self.cursor.fetchall()
         ]
 
-    def delete_milestone_runs(self, leaderboard_name: str):
+    def delete_milestone_runs(self, leaderboard_id: int):
         self.cursor.execute(
             """
             DELETE FROM leaderboard.runs
@@ -300,7 +300,7 @@ class LeaderboardDB:
                 WHERE leaderboard_id = %s
             );
             """,
-            (leaderboard_name,),
+            (leaderboard_id,),
         )
         self.connection.commit()
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import subprocess
 import tempfile
@@ -19,8 +20,9 @@ from kernelbot.discord_utils import (
 )
 from kernelbot.env import env
 from kernelbot.ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
-from libkernelbot.consts import GitHubGPU, ModalGPU
+from libkernelbot.consts import GitHubGPU, ModalGPU, SubmissionMode, get_gpu_by_name
 from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
+from libkernelbot.submission import compute_score
 from libkernelbot.task import LeaderboardDefinition, make_task_definition
 from libkernelbot.utils import (
     KernelBotError,
@@ -122,6 +124,10 @@ class AdminCog(commands.Cog):
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
 
+        self.trigger_milestones = bot.admin_group.command(
+            name="trigger-milestones", description="Trigger running of milestones"
+        )(self.trigger_milestones)
+
         self._scheduled_cleanup_temp_users.start()
 
     # --------------------------------------------------------------------------
@@ -162,6 +168,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         directory: str,
         gpu: Optional[app_commands.Choice[str]],
+        milestones: Optional[bool] = False,
     ):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
@@ -180,20 +187,19 @@ class AdminCog(commands.Cog):
         leaderboard_name = directory.name + "-dev"
 
         # create-local overwrites existing leaderboard
+        forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
+        forum_thread = None
+
         with self.bot.leaderboard_db as db:
             try:
                 old_lb = db.get_leaderboard(leaderboard_name)
+                forum_id = old_lb["forum_id"]
+                forum_thread = await self.bot.fetch_channel(forum_id)
             except LeaderboardDoesNotExist:
                 pass
             db.delete_leaderboard(leaderboard_name, force=True)
 
-        # get existing forum thread or create new one
-        forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
-        forum_thread = None
-        if old_lb:
-            forum_id = old_lb["forum_id"]
-            forum_thread = await self.bot.fetch_channel(forum_id)
-
+        # create new forum thread if none exists
         if forum_thread is None:
             forum_thread = await forum_channel.create_thread(
                 name=leaderboard_name,
@@ -216,6 +222,11 @@ class AdminCog(commands.Cog):
                 interaction,
                 f"Leaderboard '{leaderboard_name}' created.",
             )
+        else:
+            raise KernelBotError(f"Error creating leaderboard '{leaderboard_name}'")
+
+        if milestones:
+            await self._submit_milestones(interaction, leaderboard_name)
 
     def _parse_deadline(self, deadline: str):
         # Try parsing with time first
@@ -354,7 +365,7 @@ class AdminCog(commands.Cog):
 
         with self.bot.leaderboard_db as db:
             try:
-                db.create_leaderboard(
+                lb_id = db.create_leaderboard(
                     name=leaderboard_name,
                     deadline=date_value,
                     definition=definition,
@@ -362,6 +373,15 @@ class AdminCog(commands.Cog):
                     creator_id=interaction.user.id,
                     forum_id=forum_id,
                 )
+
+                # create entry in milestones table.
+                for milestone in definition.milestones:
+                    db.create_milestone(
+                        lb_id,
+                        milestone.name,
+                        milestone.code,
+                        description=milestone.description,
+                    )
             except KernelBotError as e:
                 await send_discord_message(
                     interaction,
@@ -370,6 +390,122 @@ class AdminCog(commands.Cog):
                 )
                 return False
             return True
+
+    async def _submit_milestones(
+        self, interaction: discord.Interaction, leaderboard_name: str, gpus: Optional[list] = None
+    ):
+        backend = self.bot.backend
+
+        with self.bot.leaderboard_db as db:
+            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            milestones = db.get_leaderboard_milestones(leaderboard_item["id"])
+
+        task: "LeaderboardTask" = leaderboard_item["task"]
+
+        # ok, submit all that are missing
+        submit_tasks = []
+        from kernelbot.discord_reporter import MultiProgressReporterDiscord
+
+        reporters = MultiProgressReporterDiscord(interaction)
+        await reporters.show(f"Milestone runs for {leaderboard_name}")
+
+        async def submit_milestone(milestone, gpu, reporter):
+            result = await backend.submit_leaderboard(
+                -1,
+                milestone["code"],
+                "milestone.py",
+                gpu,
+                reporter,
+                task,
+                SubmissionMode.LEADERBOARD,
+                None,
+            )
+
+            # we do not allow milestone runs to fail
+            if not result.success:
+                logger.error(f"Milestone run failed: {result}")
+                raise KernelBotError(f"Milestone run failed: {result.error}")
+
+            for key, value in result.runs.items():
+                if not value.run.success or not value.run.passed:
+                    logger.error(f"Milestone run {key} failed: {value}")
+                    raise KernelBotError(f"Milestone run {key} failed.")
+
+            with backend.db as db:
+                for key, value in result.runs.items():
+                    db.create_submission_run(
+                        milestone=milestone["id"],
+                        start=value.start,
+                        end=value.end,
+                        mode=key,
+                        runner=gpu.name,
+                        score=compute_score(result, task, -1),
+                        secret=False,
+                        compilation=value.compilation,
+                        result=value.run,
+                        system=result.system,
+                    )
+
+        if gpus is None:
+            gpus = leaderboard_item["gpu_types"]
+
+        for milestone in milestones:
+            with backend.db as db:
+                existing_runs = db.get_runs_generic(milestone_id=milestone["id"])
+            # create tasks
+            for gpu in gpus:
+                if gpu in [r["runner"] for r in existing_runs]:
+                    await send_discord_message(
+                        interaction,
+                        f"Skipping {gpu}; milestone run already exists.",
+                        ephemeral=True,
+                    )
+                    continue
+                submit_tasks.append(
+                    submit_milestone(
+                        milestone,
+                        get_gpu_by_name(gpu),
+                        reporters.add_run(f"Milestone {milestone['name']} on {gpu}"),
+                    )
+                )
+
+        await send_discord_message(
+            interaction,
+            f"Submitted {len(submit_tasks)} milestone runs for {len(milestones)} milestones.",
+            ephemeral=True,
+        )
+
+        # Execute all milestone submissions
+        await asyncio.gather(*submit_tasks)
+
+    @app_commands.describe(
+        leaderboard_name="Name of Leaderboard",
+        gpu="Select GPU. Leave empty to run for all GPUs.",
+        rerun="Force re-running existing milestones.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def trigger_milestones(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: Optional[str],
+        rerun: Optional[bool] = False,
+    ):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You do not have permission to trigger milestones.", ephemeral=True
+            )
+            return
+
+        if rerun:
+            if gpu is not None:
+                raise KernelBotError("Cannot specify `rerun` and `gpu` at the same time")
+            with self.bot.backend.db as db:
+                db.delete_milestone_runs(db.get_leaderboard_id(leaderboard_name))
+
+        await interaction.response.defer(ephemeral=True)
+        await self._submit_milestones(interaction, leaderboard_name, gpus=gpu)
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
