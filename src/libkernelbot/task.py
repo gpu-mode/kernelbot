@@ -24,6 +24,13 @@ class PythonTaskData:
     main: str
 
 
+@dataclasses.dataclass
+class MilestoneData:
+    name: str
+    code: str
+    description: str = ""
+
+
 TestCaseType = Dict[str, Union[int, str]]
 
 
@@ -110,6 +117,7 @@ class LeaderboardDefinition:
     task: LeaderboardTask
     description: str = ""
     templates: dict[str, str] = dataclasses.field(default_factory=dict)
+    milestones: list[MilestoneData] = dataclasses.field(default_factory=list)
 
 
 def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
@@ -137,6 +145,12 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
         else:
             file_dict[name] = (root / source).read_text()
 
+    milestones = []
+    for milestone in raw.get("milestones", []):
+        milestone["code"] = (root / milestone["source"]).read_text()
+        del milestone["source"]
+        milestones.append(MilestoneData(**milestone))
+
     raw["files"] = file_dict
 
     # load template files
@@ -146,10 +160,14 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
         templates[lang] = (root / source).read_text()
 
     del raw["templates"]
+    del raw["milestones"]
     description = raw["description"]
     del raw["description"]
     task = LeaderboardTask.from_dict(raw)
-    return LeaderboardDefinition(task=task, templates=templates, description=description)
+
+    return LeaderboardDefinition(
+        task=task, templates=templates, milestones=milestones, description=description
+    )
 
 
 def build_task_config(

@@ -7,6 +7,13 @@ files:
   - {"name": "reference.py", "source": "reference.py"}
   - {"name": "eval.py", "source": "../eval.py"}
 
+milestones:
+  - {
+      "name": "pytorch reference",
+      "source": "submission.py",
+      "description": "PyTorch reference implementation as a performance baseline for matmul"
+    }
+
 lang: "py"
 
 description: |
