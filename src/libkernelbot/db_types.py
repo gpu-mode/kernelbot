@@ -56,4 +56,12 @@ class SubmissionItem(TypedDict):
     runs: List[RunItem]
 
 
-__all__ = [LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem]
+class MilestoneItem(TypedDict):
+    id: int
+    name: str
+    code: str
+    description: str
+    created_at: datetime.datetime
+
+
+__all__ = [LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem, MilestoneItem]

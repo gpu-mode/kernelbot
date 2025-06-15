@@ -5,7 +5,13 @@ from typing import Dict, List, Optional
 
 import psycopg2
 
-from libkernelbot.db_types import LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem
+from libkernelbot.db_types import (
+    LeaderboardItem,
+    LeaderboardRankedEntry,
+    MilestoneItem,
+    RunItem,
+    SubmissionItem,
+)
 from libkernelbot.run_eval import CompileResult, RunResult, SystemInfo
 from libkernelbot.task import LeaderboardDefinition, LeaderboardTask
 from libkernelbot.utils import (
@@ -234,6 +240,55 @@ class LeaderboardDB:
 
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard `{leaderboard_name}`.") from e
+
+    def create_milestone(
+        self,
+        leaderboard_id: int,
+        name: str,
+        code: str,
+        description: str = None,
+    ) -> int:
+        """Create a new milestone for a leaderboard"""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.milestones (
+                    leaderboard_id, name, code, description
+                )
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (leaderboard_id, name, code, description),
+            )
+            milestone_id = self.cursor.fetchone()[0]
+            self.connection.commit()
+            return milestone_id
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error creating milestone", exc_info=e)
+            raise KernelBotError("Error creating milestone") from e
+
+    def get_leaderboard_milestones(self, leaderboard_id: int) -> "list[MilestoneItem]":
+        """Get all milestones for a leaderboard"""
+        self.cursor.execute(
+            """
+            SELECT id, name, code, description, created_at
+            FROM leaderboard.milestones
+            WHERE leaderboard_id = %s
+            ORDER BY created_at
+            """,
+            (leaderboard_id,),
+        )
+        return [
+            {
+                "id": row[0],
+                "name": row[1],
+                "code": row[2],
+                "description": row[3],
+                "created_at": row[4],
+            }
+            for row in self.cursor.fetchall()
+        ]
 
     def create_submission(
         self,
