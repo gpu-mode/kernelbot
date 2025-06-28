@@ -1,14 +1,11 @@
 import base64
 import json
-import sys
 import zlib
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-sys.path.append("src/discord-cluster-manager")
-
-from run_eval import run_config
+from libkernelbot.run_eval import run_config
 
 payload = Path("payload.json").read_text()
 Path("payload.json").unlink()

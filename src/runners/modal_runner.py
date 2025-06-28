@@ -3,7 +3,8 @@ import traceback
 from contextlib import contextmanager
 
 from modal import App, Image
-from run_eval import FullResult, SystemInfo, run_config
+
+from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
