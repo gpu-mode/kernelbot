@@ -3,31 +3,33 @@ from io import StringIO
 from typing import TYPE_CHECKING, List, Optional
 
 import discord
-from consts import (
-    SubmissionMode,
-)
 from discord import app_commands
 from discord.ext import commands
-from discord_reporter import MultiProgressReporterDiscord
-from discord_utils import (
-    get_user_from_id,
-    leaderboard_name_autocomplete,
-    send_discord_message,
-    with_error_handling,
+
+from libkernelbot.consts import (
+    SubmissionMode,
 )
-from leaderboard_db import (
+from libkernelbot.leaderboard_db import (
     LeaderboardItem,
     LeaderboardRankedEntry,
     RunItem,
     SubmissionItem,
 )
-from submission import SubmissionRequest, prepare_submission
-from ui.misc import GPUSelectionView
-from ui.table import create_table
-from utils import (
+from libkernelbot.submission import SubmissionRequest, prepare_submission
+from libkernelbot.utils import (
     format_time,
     setup_logging,
 )
+
+from ..discord_reporter import MultiProgressReporterDiscord
+from ..discord_utils import (
+    get_user_from_id,
+    leaderboard_name_autocomplete,
+    send_discord_message,
+    with_error_handling,
+)
+from ..ui.misc import GPUSelectionView
+from ..ui.table import create_table
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot

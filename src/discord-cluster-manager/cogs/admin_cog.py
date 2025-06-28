@@ -8,19 +8,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypedDict
 
 import discord
-import env
 import yaml
-from consts import GitHubGPU, ModalGPU
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord_utils import leaderboard_name_autocomplete, send_discord_message, with_error_handling
-from leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
-from task import LeaderboardDefinition, make_task_definition
-from ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
-from utils import (
+
+from libkernelbot.consts import GitHubGPU, ModalGPU
+from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
+from libkernelbot.task import LeaderboardDefinition, make_task_definition
+from libkernelbot.utils import (
     KernelBotError,
     setup_logging,
 )
+
+from ..discord_utils import leaderboard_name_autocomplete, send_discord_message, with_error_handling
+from ..env import env
+from ..ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot

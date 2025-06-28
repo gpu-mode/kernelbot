@@ -1,23 +1,25 @@
 import requests
-from backend import KernelBackend
-from consts import SubmissionMode
-from env import (
-    CLI_DISCORD_CLIENT_ID,
-    CLI_DISCORD_CLIENT_SECRET,
-    CLI_GITHUB_CLIENT_ID,
-    CLI_GITHUB_CLIENT_SECRET,
-    CLI_TOKEN_URL,
-)
 from fastapi import HTTPException
-from report import Log, MultiProgressReporter, RunProgressReporter, RunResultReport, Text
-from submission import SubmissionRequest, prepare_submission
+
+from libkernelbot.backend import KernelBackend
+from libkernelbot.consts import SubmissionMode
+from libkernelbot.report import (
+    Log,
+    MultiProgressReporter,
+    RunProgressReporter,
+    RunResultReport,
+    Text,
+)
+from libkernelbot.submission import SubmissionRequest, prepare_submission
+
+from ..env import env
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     """Handles the Discord OAuth code exchange and user info retrieval."""
-    client_id = CLI_DISCORD_CLIENT_ID
-    client_secret = CLI_DISCORD_CLIENT_SECRET
-    token_url = CLI_TOKEN_URL
+    client_id = env.CLI_DISCORD_CLIENT_ID
+    client_secret = env.CLI_DISCORD_CLIENT_SECRET
+    token_url = env.CLI_TOKEN_URL
     user_api_url = "https://discord.com/api/users/@me"
 
     if not client_id:
@@ -76,8 +78,8 @@ async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]
 
 async def _handle_github_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     """Handles the GitHub OAuth code exchange and user info retrieval."""
-    client_id = CLI_GITHUB_CLIENT_ID
-    client_secret = CLI_GITHUB_CLIENT_SECRET
+    client_id = env.CLI_GITHUB_CLIENT_ID
+    client_secret = env.CLI_GITHUB_CLIENT_SECRET
 
     token_url = "https://github.com/login/oauth/access_token"
     user_api_url = "https://api.github.com/user"

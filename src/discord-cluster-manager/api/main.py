@@ -7,13 +7,14 @@ import time
 from dataclasses import asdict
 from typing import Annotated, Optional
 
-from backend import KernelBackend
-from consts import SubmissionMode
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from leaderboard_db import LeaderboardRankedEntry
-from submission import SubmissionRequest
-from utils import KernelBotError
+
+from libkernelbot.backend import KernelBackend
+from libkernelbot.consts import SubmissionMode
+from libkernelbot.leaderboard_db import LeaderboardRankedEntry
+from libkernelbot.submission import SubmissionRequest
+from libkernelbot.utils import KernelBotError
 
 from .api_utils import _handle_discord_oauth, _handle_github_oauth, _run_submission
 

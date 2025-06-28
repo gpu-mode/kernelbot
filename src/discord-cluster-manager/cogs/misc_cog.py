@@ -5,9 +5,11 @@ import discord
 import psycopg2
 from discord import app_commands
 from discord.ext import commands
-from discord_utils import send_discord_message
-from env import DATABASE_URL, DISABLE_SSL
-from utils import setup_logging
+
+from libkernelbot.utils import setup_logging
+
+from ..discord_utils import send_discord_message
+from ..env import DATABASE_URL, DISABLE_SSL
 
 if TYPE_CHECKING:
     from ..bot import ClusterBot

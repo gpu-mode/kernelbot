@@ -1,10 +1,11 @@
 import asyncio
 
 import modal
-from consts import GPU, ModalGPU
 from report import RunProgressReporter
 from run_eval import FullResult
-from utils import setup_logging
+
+from libkernelbot.consts import GPU, ModalGPU
+from libkernelbot.utils import setup_logging
 
 from .launcher import Launcher
 

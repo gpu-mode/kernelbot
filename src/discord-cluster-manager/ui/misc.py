@@ -3,7 +3,8 @@ from typing import Awaitable, Callable
 import discord
 from discord import Interaction, SelectOption, ui
 from discord_utils import send_discord_message
-from utils import KernelBotError
+
+from libkernelbot.utils import KernelBotError
 
 
 class GPUSelectionView(ui.View):

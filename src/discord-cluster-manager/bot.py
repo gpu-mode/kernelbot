@@ -2,27 +2,21 @@ import argparse
 import asyncio
 import os
 
-import consts
 import discord
-import env
 import uvicorn
 from api.main import app, init_api
-from backend import KernelBackend
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
 from cogs.verify_run_cog import VerifyRunCog
 from discord import app_commands
 from discord.ext import commands
-from env import (
-    DISCORD_CLUSTER_STAGING_ID,
-    DISCORD_DEBUG_CLUSTER_STAGING_ID,
-    DISCORD_DEBUG_TOKEN,
-    DISCORD_TOKEN,
-    init_environment,
-)
-from launchers import GitHubLauncher, ModalLauncher
-from utils import setup_logging
+from env import env, init_environment
+
+from libkernelbot import consts
+from libkernelbot.backend import KernelBackend
+from libkernelbot.launchers import GitHubLauncher, ModalLauncher
+from libkernelbot.utils import setup_logging
 
 logger = setup_logging(__name__)
 
@@ -43,7 +37,7 @@ class ClusterBot(commands.Bot):
         self.tree.add_command(self.admin_group)
         self.tree.add_command(self.leaderboard_group)
 
-        self.backend = KernelBackend(debug_mode=debug_mode)
+        self.backend = KernelBackend(env=env, debug_mode=debug_mode)
         self.backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
         self.backend.register_launcher(
             GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
@@ -54,7 +48,7 @@ class ClusterBot(commands.Bot):
         return self.backend.db
 
     async def setup_hook(self):
-        logger.info(f"Syncing commands for staging guild {DISCORD_CLUSTER_STAGING_ID}")
+        logger.info(f"Syncing commands for staging guild {env.DISCORD_CLUSTER_STAGING_ID}")
         try:
             # Load cogs
             await self.add_cog(BotManagerCog(self))
@@ -63,9 +57,9 @@ class ClusterBot(commands.Bot):
             await self.add_cog(AdminCog(self))
 
             guild_id = (
-                DISCORD_CLUSTER_STAGING_ID
+                env.DISCORD_CLUSTER_STAGING_ID
                 if not self.debug_mode
-                else DISCORD_DEBUG_CLUSTER_STAGING_ID
+                else env.DISCORD_DEBUG_CLUSTER_STAGING_ID
             )
 
             if guild_id:
@@ -214,7 +208,7 @@ class ClusterBot(commands.Bot):
 
 
 async def start_bot_and_api(debug_mode: bool):
-    token = DISCORD_DEBUG_TOKEN if debug_mode else DISCORD_TOKEN
+    token = env.DISCORD_DEBUG_TOKEN if debug_mode else env.DISCORD_TOKEN
 
     if debug_mode and not token:
         raise ValueError("DISCORD_DEBUG_TOKEN not found")

@@ -1,6 +1,13 @@
 import discord
 from discord_utils import _send_split_log
-from report import Log, MultiProgressReporter, RunProgressReporter, RunResultReport, Text
+
+from libkernelbot.report import (
+    Log,
+    MultiProgressReporter,
+    RunProgressReporter,
+    RunResultReport,
+    Text,
+)
 
 
 class MultiProgressReporterDiscord(MultiProgressReporter):

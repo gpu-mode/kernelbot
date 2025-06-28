@@ -2,7 +2,8 @@ import functools
 import logging
 
 import discord
-from utils import KernelBotError, limit_length, setup_logging
+
+from libkernelbot.utils import KernelBotError, limit_length, setup_logging
 
 logger = setup_logging(__name__)
 

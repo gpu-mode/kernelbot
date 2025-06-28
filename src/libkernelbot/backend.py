@@ -2,9 +2,9 @@ import asyncio
 import copy
 import math
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Optional
 
-import env
 from consts import GPU, GPU_TO_SM, RankCriterion, SubmissionMode, get_gpu_by_name
 from launchers import Launcher
 from leaderboard_db import LeaderboardDB
@@ -12,7 +12,8 @@ from report import MultiProgressReporter, RunProgressReporter, generate_report, 
 from run_eval import FullResult
 from submission import ProcessedSubmissionRequest
 from task import LeaderboardTask, build_task_config
-from utils import KernelBotError, setup_logging
+
+from libkernelbot.utils import KernelBotError, setup_logging
 
 logger = setup_logging(__name__)
 
@@ -20,6 +21,7 @@ logger = setup_logging(__name__)
 class KernelBackend:
     def __init__(
         self,
+        env: SimpleNamespace,
         debug_mode=False,
     ):
         self.debug_mode = debug_mode
