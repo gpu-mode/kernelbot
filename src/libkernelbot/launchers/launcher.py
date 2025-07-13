@@ -1,9 +1,8 @@
 from enum import Enum
 from typing import Type
 
-from report import RunProgressReporter
-
 from libkernelbot.consts import GPU
+from libkernelbot.report import RunProgressReporter
 
 
 class Launcher:

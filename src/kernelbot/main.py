@@ -241,7 +241,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Run in debug/staging mode")
     args = parser.parse_args()
 
-    logger.info("Starting bot and API server...")
+    logger.info("Starting kernelbot and API server...")
 
     with asyncio.Runner(debug=args.debug) as runner:
         runner.get_loop().set_exception_handler(on_unhandled_exception)

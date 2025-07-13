@@ -2,7 +2,7 @@ import pprint
 import sys
 from pathlib import Path
 
-sys.path.append("src/discord-cluster-manager")
+sys.path.append("src/kernelbot")
 
 from run_eval import run_cuda_script
 

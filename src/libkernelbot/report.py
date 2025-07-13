@@ -3,9 +3,9 @@ import dataclasses
 import textwrap
 from typing import List
 
-import consts
-from run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
-from utils import format_time, limit_length
+from libkernelbot import consts
+from libkernelbot.run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+from libkernelbot.utils import format_time, limit_length
 
 
 @dataclasses.dataclass

@@ -310,7 +310,7 @@ async def run_submission(  # noqa: C901
         user_id (str): The validated user ID obtained from the X-Popcorn-Cli-Id header.
 
     Raises:
-        HTTPException: If the bot is not initialized, or header/input is invalid.
+        HTTPException: If the kernelbot is not initialized, or header/input is invalid.
 
     Returns:
         StreamingResponse: A streaming response containing the status and results of the submission.

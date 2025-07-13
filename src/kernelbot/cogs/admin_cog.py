@@ -12,6 +12,13 @@ import yaml
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from kernelbot.discord_utils import (
+    leaderboard_name_autocomplete,
+    send_discord_message,
+    with_error_handling,
+)
+from kernelbot.env import env
+from kernelbot.ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
 from libkernelbot.consts import GitHubGPU, ModalGPU
 from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
 from libkernelbot.task import LeaderboardDefinition, make_task_definition
@@ -20,12 +27,8 @@ from libkernelbot.utils import (
     setup_logging,
 )
 
-from ..discord_utils import leaderboard_name_autocomplete, send_discord_message, with_error_handling
-from ..env import env
-from ..ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
-
 if TYPE_CHECKING:
-    from ..bot import ClusterBot
+    from kernelbot.main import ClusterBot
 
 logger = setup_logging()
 
@@ -68,7 +71,7 @@ class AdminCog(commands.Cog):
     def __init__(self, bot: "ClusterBot"):
         self.bot = bot
 
-        # create-local should only be used for the development bot
+        # create-local should only be used for the development kernelbot
         if self.bot.debug_mode:
             self.leaderboard_create_local = bot.admin_group.command(
                 name="create-local",
@@ -84,11 +87,11 @@ class AdminCog(commands.Cog):
         )(self.delete_submission)
 
         self.accept_jobs = bot.admin_group.command(
-            name="start", description="Make the bot accept new submissions"
+            name="start", description="Make the kernelbot accept new submissions"
         )(self.start)
 
         self.reject_jobs = bot.admin_group.command(
-            name="stop", description="Make the bot stop accepting new submissions"
+            name="stop", description="Make the kernelbot stop accepting new submissions"
         )(self.stop)
 
         self.update_problems = bot.admin_group.command(
@@ -96,7 +99,7 @@ class AdminCog(commands.Cog):
         )(self.update_problems)
 
         self.show_bot_stats = bot.admin_group.command(
-            name="show-stats", description="Show stats for the bot"
+            name="show-stats", description="Show stats for the kernelbot"
         )(self.show_bot_stats)
 
         self.resync = bot.admin_group.command(

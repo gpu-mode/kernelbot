@@ -6,13 +6,12 @@ import psycopg2
 from discord import app_commands
 from discord.ext import commands
 
+from kernelbot.discord_utils import send_discord_message
+from kernelbot.env import env
 from libkernelbot.utils import setup_logging
 
-from ..discord_utils import send_discord_message
-from ..env import DATABASE_URL, DISABLE_SSL
-
 if TYPE_CHECKING:
-    from ..bot import ClusterBot
+    from ..main import ClusterBot
 
 logger = setup_logging()
 
@@ -29,15 +28,15 @@ class BotManagerCog(commands.Cog):
     @app_commands.command(name="verifydb")
     async def verify_db(self, interaction: discord.Interaction):
         """Command to verify database connectivity"""
-        if not DATABASE_URL:
+        if not env.DATABASE_URL:
             message = "DATABASE_URL not set."
             logger.error(message)
             await send_discord_message(interaction, message)
             return
 
         try:
-            sslmode = "disable" if DISABLE_SSL else "require"
-            with psycopg2.connect(DATABASE_URL, sslmode=sslmode) as conn:
+            sslmode = "disable" if env.DISABLE_SSL else "require"
+            with psycopg2.connect(env.DATABASE_URL, sslmode=sslmode) as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT RANDOM()")
                     result = cursor.fetchone()

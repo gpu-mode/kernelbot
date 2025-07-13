@@ -54,10 +54,9 @@ cuda_image = (
 )
 
 cuda_image = cuda_image.add_local_python_source(
-    "consts",
+    "libkernelbot",
     "modal_runner",
     "modal_runner_archs",
-    "run_eval",
 )
 
 

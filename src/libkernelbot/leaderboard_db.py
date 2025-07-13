@@ -4,9 +4,10 @@ import json
 from typing import Dict, List, NotRequired, Optional, TypedDict
 
 import psycopg2
-from run_eval import CompileResult, RunResult, SystemInfo
-from task import LeaderboardDefinition, LeaderboardTask
-from utils import (
+
+from libkernelbot.run_eval import CompileResult, RunResult, SystemInfo
+from libkernelbot.task import LeaderboardDefinition, LeaderboardTask
+from libkernelbot.utils import (
     KernelBotError,
     LRUCache,
     setup_logging,

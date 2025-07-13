@@ -5,8 +5,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from consts import Language, RankCriterion, SubmissionMode
-from utils import KernelBotError
+from libkernelbot.consts import Language, RankCriterion, SubmissionMode
+from libkernelbot.utils import KernelBotError
 
 
 @dataclasses.dataclass

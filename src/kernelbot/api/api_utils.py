@@ -1,6 +1,7 @@
 import requests
 from fastapi import HTTPException
 
+from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.report import (
@@ -11,8 +12,6 @@ from libkernelbot.report import (
     Text,
 )
 from libkernelbot.submission import SubmissionRequest, prepare_submission
-
-from ..env import env
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:

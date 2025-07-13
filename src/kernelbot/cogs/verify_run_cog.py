@@ -10,16 +10,15 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
+from kernelbot.cogs import admin_cog
+from kernelbot.cogs.leaderboard_cog import LeaderboardSubmitCog
+from kernelbot.discord_reporter import MultiProgressReporterDiscord
+from kernelbot.discord_utils import send_discord_message, with_error_handling
+from kernelbot.env import env
 from libkernelbot.consts import GPU, SubmissionMode, get_gpu_by_name
 from libkernelbot.leaderboard_db import RunItem, SubmissionItem
 from libkernelbot.task import make_task_definition
 from libkernelbot.utils import setup_logging
-
-from ..discord_reporter import MultiProgressReporterDiscord
-from ..discord_utils import send_discord_message, with_error_handling
-from ..env import env
-from . import admin_cog
-from .leaderboard_cog import LeaderboardSubmitCog
 
 logger = setup_logging()
 

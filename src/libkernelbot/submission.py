@@ -5,9 +5,10 @@ from datetime import datetime
 from typing import Optional, Union
 
 from better_profanity import profanity
-from leaderboard_db import LeaderboardDB, LeaderboardItem
-from task import LeaderboardTask
-from utils import KernelBotError
+
+from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
+from libkernelbot.task import LeaderboardTask
+from libkernelbot.utils import KernelBotError
 
 if typing.TYPE_CHECKING:
     from backend import KernelBackend

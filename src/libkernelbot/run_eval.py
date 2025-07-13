@@ -10,7 +10,7 @@ from pathlib import Path
 from types import NoneType
 from typing import Optional, Protocol, Union
 
-from consts import CUDA_FLAGS, ExitCode, Timeout
+from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
 
 
 @dataclasses.dataclass
