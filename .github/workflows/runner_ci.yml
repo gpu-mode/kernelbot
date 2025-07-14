@@ -36,24 +36,7 @@ jobs:
 
       - name: Run CUDA test via Modal
         run: |
-          python -c "
-          import modal
-          import subprocess
-          import sys
-          
-          # Run pytest via Modal on GPU
-          func = modal.Function.lookup('discord-bot-runner', 'run_cuda_script_t4')
-          result = func.remote(config={
-              'code': open('scripts/ci_test_cuda.py').read(),
-              'language': 'py',
-              'timeout': 300
-          })
-          
-          print('Modal execution result:', result)
-          if result.get('success') != True:
-              print('CUDA test failed on Modal')
-              sys.exit(1)
-          "
+          python scripts/run_cuda_test.py
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -83,24 +66,7 @@ jobs:
 
       - name: Run PyTorch test via Modal
         run: |
-          python -c "
-          import modal
-          import subprocess
-          import sys
-          
-          # Run pytest via Modal on GPU
-          func = modal.Function.lookup('discord-bot-runner', 'run_pytorch_script_t4')
-          result = func.remote(config={
-              'code': open('scripts/ci_test_python.py').read(),
-              'language': 'py',
-              'timeout': 300
-          })
-          
-          print('Modal execution result:', result)
-          if result.get('success') != True:
-              print('PyTorch test failed on Modal')
-              sys.exit(1)
-          "
+          python scripts/run_pytorch_test.py
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
