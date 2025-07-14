@@ -14,16 +14,16 @@ sys.path.append('src/discord-cluster-manager')
 from run_eval import FullResult, EvalResult, CompileResult, RunResult, SystemInfo
 from consts import ExitCode, SubmissionMode
 
-# Run pytest via Modal on GPU
+# Run simple Python test via Modal on GPU
 func = modal.Function.from_name('discord-bot-runner', 'run_pytorch_script_t4')
-with open('scripts/ci_test_python.py', 'r') as f:
+with open('scripts/ci_test_python_simple.py', 'r') as f:
     code = f.read()
 
 # Pass config in the correct format that run_config expects
 config = {
     'lang': 'py',
-    'sources': {'ci_test_python.py': code},
-    'main': 'ci_test_python.py',
+    'sources': {'ci_test_python_simple.py': code},
+    'main': 'ci_test_python_simple.py',
     'mode': SubmissionMode.TEST.value,
     'tests': [],
     'benchmarks': [],
