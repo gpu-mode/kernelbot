@@ -2,6 +2,7 @@
 import modal
 import sys
 import os
+from pathlib import Path
 
 # Change to the correct directory
 if os.path.basename(os.getcwd()) == 'scripts':
@@ -13,26 +14,24 @@ sys.path.append('src/discord-cluster-manager')
 # Import required modules so they're available for deserialization
 from run_eval import FullResult, EvalResult, CompileResult, RunResult, SystemInfo
 from consts import ExitCode, SubmissionMode
+from task import make_task_definition, build_task_config
 
-# Run simple CUDA test via Modal on GPU
+# Run CUDA test via Modal on GPU using the same framework as Discord bot
 func = modal.Function.from_name('discord-bot-runner', 'run_cuda_script_t4')
-with open('scripts/ci_test_cuda_simple.py', 'r') as f:
-    code = f.read()
 
-# Pass config in the correct format that run_config expects
-config = {
-    'lang': 'py',
-    'sources': {'ci_test_cuda_simple.py': code},
-    'main': 'ci_test_cuda_simple.py',
-    'mode': SubmissionMode.TEST.value,
-    'tests': [],
-    'benchmarks': [],
-    'seed': None,
-    'ranking_by': 'last',
-    'test_timeout': 300,
-    'benchmark_timeout': 300,
-    'ranked_timeout': 300,
-}
+# Load the task definition exactly like the Discord bot does
+task = make_task_definition("examples/identity_cuda")
+
+# Read the submission file
+submission_cu = Path("examples/identity_cuda/submission.cu").read_text()
+
+# Build config using the same function as the Discord bot
+config = build_task_config(
+    task=task.task,
+    submission_content=submission_cu,
+    arch=None,
+    mode=SubmissionMode.TEST,
+)
 
 result = func.remote(config=config)
 
