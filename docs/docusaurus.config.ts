@@ -55,6 +55,11 @@ const config: Config = {
           position: 'left',
           label: 'Guide',
         },
+        {
+          to: '/talks',
+          label: 'Talks',
+          position: 'left',
+        },
       ]
     },
     footer: {
