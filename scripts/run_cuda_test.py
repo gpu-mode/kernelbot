@@ -7,18 +7,45 @@ import os
 if os.path.basename(os.getcwd()) == 'scripts':
     os.chdir('..')
 
+# Add the src directory to Python path for Modal deserialization
+sys.path.append('src/discord-cluster-manager')
+
+# Import required modules so they're available for deserialization
+from run_eval import FullResult, EvalResult, CompileResult, RunResult, SystemInfo
+from consts import ExitCode, SubmissionMode
+
 # Run pytest via Modal on GPU
 func = modal.Function.from_name('discord-bot-runner', 'run_cuda_script_t4')
 with open('scripts/ci_test_cuda.py', 'r') as f:
     code = f.read()
 
-result = func.remote(config={
-    'code': code,
-    'language': 'py',
-    'timeout': 300
-})
+# Pass config in the correct format that run_config expects
+config = {
+    'lang': 'py',
+    'sources': {'ci_test_cuda.py': code},
+    'main': 'ci_test_cuda.py',
+    'mode': SubmissionMode.TEST.value,
+    'tests': [],
+    'benchmarks': [],
+    'seed': None,
+    'ranking_by': 'last',
+    'test_timeout': 300,
+    'benchmark_timeout': 300,
+    'ranked_timeout': 300,
+}
+
+result = func.remote(config=config)
 
 print('Modal execution result:', result)
-if result.get('success') != True:
+if not result.success:
     print('CUDA test failed on Modal')
-    sys.exit(1) 
+    print('Error:', result.error)
+    sys.exit(1)
+
+# Check if any test runs failed
+for run_name, run_result in result.runs.items():
+    if run_result.run and not run_result.run.success:
+        print(f'Test run {run_name} failed')
+        sys.exit(1)
+        
+print('CUDA test passed on Modal') 
