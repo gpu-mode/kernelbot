@@ -24,15 +24,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install modal pytest
+          pip install modal
           pip install -r requirements.txt
-
-      - name: Deploy Modal app
-        run: |
-          modal deploy src/discord-cluster-manager/modal_runner_archs.py
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
       - name: Run CUDA test via Modal
         run: |
@@ -54,15 +47,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install modal pytest
+          pip install modal
           pip install -r requirements.txt
-
-      - name: Deploy Modal app
-        run: |
-          modal deploy src/discord-cluster-manager/modal_runner_archs.py
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
       - name: Run PyTorch test via Modal
         run: |
