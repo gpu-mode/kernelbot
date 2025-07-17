@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -12,6 +13,17 @@ sys.path.append("src/discord-cluster-manager")
 
 from consts import ExitCode, SubmissionMode
 from run_eval import compile_cuda_script, run_cuda_script
+
+# Check if CUDA is available
+def is_cuda_available():
+    try:
+        result = subprocess.run(["which", "nvcc"], capture_output=True, text=True)
+        return result.returncode == 0
+    except:
+        return False
+
+# Skip all tests if CUDA is not available
+pytestmark = pytest.mark.skipif(not is_cuda_available(), reason="CUDA not available in environment")
 
 ref = Path("examples/identity_cuda/reference.cuh").read_text()
 task_h = Path("examples/identity_cuda/task.h").read_text()

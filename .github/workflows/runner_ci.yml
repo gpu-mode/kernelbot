@@ -11,7 +11,7 @@ on:
       - dev
 
 jobs:
-  check-cuda:
+  check-modal:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -27,32 +27,9 @@ jobs:
           pip install modal
           pip install -r requirements.txt
 
-      - name: Run CUDA test via Modal
+      - name: Run Modal tests
         run: |
-          pytest scripts/ci_test_cuda.py
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-
-  check-pytorch:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install modal
-          pip install -r requirements.txt
-
-      - name: Run PyTorch test via Modal
-        run: |
-          pytest scripts/ci_test_python.py
+          python scripts/modal_ci_test.py
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
