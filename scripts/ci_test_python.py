@@ -2,8 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 if Path().resolve().name == "scripts":
     os.chdir("..")
 
@@ -11,17 +9,6 @@ sys.path.append("src/discord-cluster-manager")
 
 from consts import ExitCode, SubmissionMode
 from run_eval import run_pytorch_script
-
-# Check if PyTorch is available
-def is_pytorch_available():
-    try:
-        import torch
-        return True
-    except ImportError:
-        return False
-
-# Skip all tests if PyTorch is not available
-pytestmark = pytest.mark.skipif(not is_pytorch_available(), reason="PyTorch not available in environment")
 
 ref = Path("examples/identity_py/reference.py").read_text()
 task = Path("examples/identity_py/task.py").read_text()
