@@ -28,7 +28,7 @@ cuda_image = (
         "requests~=2.32.4",
         "packaging~=25.0",
         "numpy~=2.3",
-        "pytest~=8.4",
+        "pytest",
 
     )
     .pip_install(
