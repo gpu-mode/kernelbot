@@ -26,11 +26,11 @@ jobs:
 
       - name: Install pytest
         shell: bash
-        run: pip install pytest
+        run: uv pip install pytest
 
       - name: Install package
         shell: bash
-        run: pip install -e .
+        run: uv pip install -e .
 
       - name: Run script
         shell: bash
