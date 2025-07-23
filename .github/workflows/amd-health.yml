@@ -21,8 +21,7 @@ jobs:
     
     - name: Install PyTorch
       run: |
-        python -m pip install --upgrade pip
-        pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
+        pip install torch
     
     - name: GPU Health Check
       run: python -c "import torch; torch.randn(5, device='cuda')"
