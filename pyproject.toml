@@ -12,7 +12,7 @@ dependencies = [
     "PyGithub",
     "aiohttp",
     "discord.py",
-    "audioop-lts",
+    "audioop-lts; python_version >= '3.13'",
     "python-dotenv",
     "requests",
     "modal",

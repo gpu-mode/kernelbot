@@ -62,6 +62,8 @@ jobs:
         EOL
         pip install -r "requirements.txt"
         fi
+        # Install the package to avoid PYTHONPATH
+        pip install -e .
 
     - name: Run script
       shell: bash
@@ -69,7 +71,7 @@ jobs:
         if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
           source ${VENV_DIR}/bin/activate
         fi
-        PYTHONPATH=src python3 src/runners/github-runner.py
+        python3 src/runners/github-runner.py
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4

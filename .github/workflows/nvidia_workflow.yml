@@ -62,11 +62,13 @@ jobs:
         EOL
         uv pip install -r "requirements.txt"
         fi
+        # Install the package to avoid PYTHONPATH
+        uv pip install -e .
 
     - name: Run script
       shell: bash
       run: |
-        PYTHONPATH=src python src/runners/github-runner.py
+        python src/runners/github-runner.py
         cat result.json  # Debug: show output
 
     - name: Upload training artifacts
