@@ -29,9 +29,12 @@ jobs:
         with:
           version: "latest"
 
-      - name: Install pytest
-        shell: bash
-        run: uv pip install pytest
+      - name: Setup Python environment
+        run: |
+          uv venv .venv
+          echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          uv pip install pytest
 
       - name: Install package
         shell: bash
