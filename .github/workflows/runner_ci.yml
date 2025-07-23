@@ -28,10 +28,12 @@ jobs:
         shell: bash
         run: pip install pytest
 
+      - name: Install package
+        shell: bash
+        run: pip install -e .
+
       - name: Run script
         shell: bash
-        env:
-          PYTHONPATH: src
         run: pytest scripts/ci_test_cuda.py
 
     env:
@@ -62,10 +64,12 @@ jobs:
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
           uv pip install numpy torch setuptools ninja pytest
 
+      - name: Install package
+        shell: bash
+        run: uv pip install -e .
+
       - name: Run script
         shell: bash
-        env:
-          PYTHONPATH: src
         run: pytest scripts/ci_test_python.py
 
     env:
