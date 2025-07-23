@@ -30,6 +30,8 @@ jobs:
 
       - name: Run script
         shell: bash
+        env:
+          PYTHONPATH: src
         run: pytest scripts/ci_test_cuda.py
 
     env:
@@ -62,6 +64,8 @@ jobs:
 
       - name: Run script
         shell: bash
+        env:
+          PYTHONPATH: src
         run: pytest scripts/ci_test_python.py
 
     env:
