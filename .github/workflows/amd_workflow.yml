@@ -62,7 +62,6 @@ jobs:
         EOL
         pip install -r "requirements.txt"
         fi
-        # Install the package to avoid PYTHONPATH
         pip install -e .
 
     - name: Run script

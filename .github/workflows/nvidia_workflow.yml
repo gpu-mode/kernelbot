@@ -62,7 +62,6 @@ jobs:
         EOL
         uv pip install -r "requirements.txt"
         fi
-        # Install the package to avoid PYTHONPATH
         uv pip install -e .
 
     - name: Run script
