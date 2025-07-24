@@ -1,74 +1,105 @@
+import asyncio
 import copy
 import math
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime
+from typing import Optional
 
-from launchers import Launcher
-
-if TYPE_CHECKING:
-    from bot import ClusterBot
-
-import discord
+import env
 from consts import GPU, GPU_TO_SM, RankCriterion, SubmissionMode, get_gpu_by_name
-from discord import app_commands
-from discord.ext import commands
-from report import (
-    MultiProgressReporter,
-    RunProgressReporter,
-    generate_report,
-    make_short_report,
-)
+from launchers import Launcher
+from leaderboard_db import LeaderboardDB
+from report import MultiProgressReporter, RunProgressReporter, generate_report, make_short_report
 from run_eval import FullResult
-from task import LeaderboardTask
-from utils import (
-    KernelBotError,
-    build_task_config,
-    send_discord_message,
-    setup_logging,
-    with_error_handling,
-)
+from submission import ProcessedSubmissionRequest
+from task import LeaderboardTask, build_task_config
+from utils import KernelBotError, setup_logging
 
-logger = setup_logging()
+logger = setup_logging(__name__)
 
 
-class SubmitCog(commands.Cog):
-    """
-    Code submission / run schedular cogs.
+class KernelBackend:
+    def __init__(
+        self,
+        debug_mode=False,
+    ):
+        self.debug_mode = debug_mode
+        self.db = LeaderboardDB(
+            env.POSTGRES_HOST,
+            env.POSTGRES_DATABASE,
+            env.POSTGRES_USER,
+            env.POSTGRES_PASSWORD,
+            env.POSTGRES_PORT,
+            url=env.DATABASE_URL,
+            ssl_mode="require" if not env.DISABLE_SSL else "disable",
+        )
 
-    Actual submission logic is handled by the launcher object.
-    """
+        try:
+            if not self.db.connect():
+                logger.error("Could not connect to database, shutting down")
+                exit(1)
+        finally:
+            self.db.disconnect()
 
-    def __init__(self, bot):
-        self.bot: ClusterBot = bot
+        self.accepts_jobs = True
         self.launcher_map = {}
 
     def register_launcher(self, launcher: Launcher):
-        choices = [app_commands.Choice(name=c.name, value=c.value) for c in launcher.gpus]
-
-        run_fn = self.run_script
-
-        # note: these helpers want to set custom attributes on the function, but `method`
-        # does not allow setting any attributes, so we define this wrapper
-        async def run(
-            interaction: discord.Interaction,
-            script: discord.Attachment,
-            gpu_type: app_commands.Choice[str],
-        ):
-            return await run_fn(interaction, script, gpu_type)
-
-        run = app_commands.choices(gpu_type=choices)(run)
-        run = app_commands.describe(
-            script="The Python/CUDA script file to run",
-            gpu_type=f"Choose the GPU type for {launcher.name}",
-        )(run)
-
-        # For now, direct (non-leaderboard) submissions are debug-only.
-        if self.bot.debug_mode:
-            self.bot.run_group.command(
-                name=launcher.name.lower(), description=f"Run a script using {launcher.name}"
-            )(run)
-
         for gpu in launcher.gpus:
             self.launcher_map[gpu.value] = launcher
+
+    async def submit_full(
+        self, req: ProcessedSubmissionRequest, mode: SubmissionMode, reporter: MultiProgressReporter
+    ):
+        with self.db as db:
+            sub_id = db.create_submission(
+                leaderboard=req.leaderboard,
+                file_name=req.file_name,
+                code=req.code,
+                user_id=req.user_id,
+                time=datetime.now(),
+                user_name=req.user_name,
+            )
+
+        selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+
+        try:
+            tasks = [
+                self.submit_leaderboard(
+                    sub_id,
+                    req.code,
+                    req.file_name,
+                    gpu,
+                    reporter.add_run(f"{gpu.name} on {gpu.runner}"),
+                    req.task,
+                    mode,
+                    None,
+                )
+                for gpu in selected_gpus
+            ]
+
+            if mode == SubmissionMode.LEADERBOARD:
+                tasks += [
+                    self.submit_leaderboard(
+                        sub_id,
+                        req.code,
+                        req.file_name,
+                        gpu,
+                        reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
+                        req.task,
+                        SubmissionMode.PRIVATE,
+                        req.secret_seed,
+                    )
+                    for gpu in selected_gpus
+                ]
+            await reporter.show(
+                f"Submission **{sub_id}**: `{req.file_name}` for `{req.leaderboard}`"
+            )
+            results = await asyncio.gather(*tasks)
+        finally:
+            with self.db as db:
+                db.mark_submission_done(sub_id)
+
+        return sub_id, results
 
     async def submit_leaderboard(  # noqa: C901
         self,
@@ -91,7 +122,7 @@ class SubmitCog(commands.Cog):
             task = copy.copy(task)
             task.seed = seed
 
-        result = await self._handle_submission(
+        result = await self.handle_submission(
             gpu_type,
             reporter,
             code=code,
@@ -137,7 +168,7 @@ class SubmitCog(commands.Cog):
 
             # verifyruns uses a fake submission id of -1
             if submission_id != -1:
-                with self.bot.leaderboard_db as db:
+                with self.db as db:
                     for key, value in result.runs.items():
                         db.create_submission_run(
                             submission_id,
@@ -154,34 +185,7 @@ class SubmitCog(commands.Cog):
 
         return result
 
-    @with_error_handling
-    async def run_script(
-        self,
-        interaction: discord.Interaction,
-        script: discord.Attachment,
-        gpu_type: app_commands.Choice[str],
-    ):
-        """
-        Function invoked by the `run` command to run a single script.
-        """
-        reporter = MultiProgressReporter(interaction, "Script run")
-        rep = reporter.add_run(f"{gpu_type.name}")
-        await reporter.show()
-        gpu_type = get_gpu_by_name(gpu_type.name)
-        script_content = await self._validate_input_file(interaction, script)
-        if script_content is None:
-            return
-
-        await self._handle_submission(
-            gpu_type,
-            rep,
-            code=script_content,
-            name=script.filename,
-            task=None,
-            mode=SubmissionMode.SCRIPT,
-        )
-
-    async def _handle_submission(
+    async def handle_submission(
         self,
         gpu_type: GPU,
         reporter: RunProgressReporter,
@@ -194,7 +198,6 @@ class SubmitCog(commands.Cog):
         """
         Generic function to handle code submissions.
         Args:
-            interaction: Interaction that started this command.
             gpu_type: Which GPU to run on.
             code: Submitted code
             name: File name of the submission; used to infer code's language
@@ -238,22 +241,6 @@ class SubmitCog(commands.Cog):
                 raise
 
         return result
-
-    async def _validate_input_file(
-        self,
-        interaction: discord.Interaction,
-        script: discord.Attachment,
-    ) -> Optional[str]:
-        # load and decode
-        try:
-            return (await script.read()).decode("utf-8")
-        except UnicodeError:
-            await send_discord_message(
-                interaction,
-                f"Could not decode your file `{script.filename}`.\nIs it UTF-8?",
-                ephemeral=True,
-            )
-            return None
 
     def _get_arch(self, gpu_type: GPU):
         return GPU_TO_SM[gpu_type.name]

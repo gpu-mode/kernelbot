@@ -13,16 +13,13 @@ import yaml
 from consts import GitHubGPU, ModalGPU
 from discord import app_commands
 from discord.ext import commands, tasks
-from leaderboard_db import leaderboard_name_autocomplete
-from task import LeaderboardTask, make_task
+from discord_utils import leaderboard_name_autocomplete, send_discord_message, with_error_handling
+from leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
+from task import LeaderboardDefinition, make_task_definition
 from ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
 from utils import (
     KernelBotError,
-    LeaderboardItem,
-    SubmissionItem,
-    send_discord_message,
     setup_logging,
-    with_error_handling,
 )
 
 if TYPE_CHECKING:
@@ -172,14 +169,17 @@ class AdminCog(commands.Cog):
 
         directory = Path(env.PROBLEM_DEV_DIR) / directory
         assert directory.resolve().is_relative_to(Path.cwd() / env.PROBLEM_DEV_DIR)
-        task = make_task(directory)
+        definition = make_task_definition(directory)
 
         # clearly mark this leaderboard as development-only
         leaderboard_name = directory.name + "-dev"
 
         # create-local overwrites existing leaderboard
         with self.bot.leaderboard_db as db:
-            old_lb = db.get_leaderboard(leaderboard_name)
+            try:
+                old_lb = db.get_leaderboard(leaderboard_name)
+            except LeaderboardDoesNotExist:
+                pass
             db.delete_leaderboard(leaderboard_name, force=True)
 
         # get existing forum thread or create new one
@@ -203,7 +203,7 @@ class AdminCog(commands.Cog):
             interaction,
             leaderboard_name,
             datetime.now(timezone.utc) + timedelta(days=365),
-            task=task,
+            definition=definition,
             forum_id=forum_id,
             gpu=gpu.value if gpu else None,
         ):
@@ -238,7 +238,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         leaderboard_name: str,
         deadline: str,
-        task: LeaderboardTask,
+        definition: LeaderboardDefinition,
         gpus: Optional[str | list[str]],
     ):
         if len(leaderboard_name) > 95:
@@ -271,13 +271,13 @@ class AdminCog(commands.Cog):
             forum_thread = await forum_channel.create_thread(
                 name=leaderboard_name,
                 content=self._leaderboard_opening_message(
-                    leaderboard_name, date_value, task.description
+                    leaderboard_name, date_value, definition.description
                 ),
                 auto_archive_duration=10080,  # 7 days
             )
 
             success = await self.create_leaderboard_in_db(
-                interaction, leaderboard_name, date_value, task, forum_thread.thread.id, gpus
+                interaction, leaderboard_name, date_value, definition, forum_thread.thread.id, gpus
             )
             if not success:
                 await forum_thread.delete()
@@ -323,7 +323,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         leaderboard_name: str,
         date_value: datetime,
-        task: LeaderboardTask,
+        definition: LeaderboardDefinition,
         forum_id: int,
         gpu: Optional[str | list[str]] = None,
     ) -> bool:
@@ -350,14 +350,12 @@ class AdminCog(commands.Cog):
         with self.bot.leaderboard_db as db:
             try:
                 db.create_leaderboard(
-                    {
-                        "name": leaderboard_name,
-                        "deadline": date_value,
-                        "task": task,
-                        "gpu_types": selected_gpus,
-                        "creator_id": interaction.user.id,
-                        "forum_id": forum_id,
-                    }
+                    name=leaderboard_name,
+                    deadline=date_value,
+                    definition=definition,
+                    gpu_types=selected_gpus,
+                    creator_id=interaction.user.id,
+                    forum_id=forum_id,
                 )
             except KernelBotError as e:
                 await send_discord_message(
@@ -401,8 +399,7 @@ class AdminCog(commands.Cog):
         forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
 
         with self.bot.leaderboard_db as db:
-            lb: LeaderboardItem = db.get_leaderboard(leaderboard_name)
-            forum_id = lb["forum_id"]
+            forum_id = db.get_leaderboard(leaderboard_name)["forum_id"]
         threads = [thread for thread in forum_channel.threads if thread.id == forum_id]
 
         if threads:
@@ -485,7 +482,7 @@ class AdminCog(commands.Cog):
             )
             return
 
-        self.bot.accepts_jobs = False
+        self.bot.backend.accepts_jobs = False
         await send_discord_message(
             interaction, "Bot will refuse all future submissions!", ephemeral=True
         )
@@ -501,7 +498,7 @@ class AdminCog(commands.Cog):
             )
             return
 
-        self.bot.accepts_jobs = True
+        self.bot.backend.accepts_jobs = True
         await send_discord_message(
             interaction, "Bot will accept submissions again!", ephemeral=True
         )
@@ -528,6 +525,9 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
             return
+
+        if "/" in branch:
+            raise KernelBotError(f"branch names with slashes (`{branch}`) are not supported.")
 
         repository_name = repository_name or env.PROBLEMS_REPO
         url = f"https://github.com/{repository_name}/archive/{branch}.zip"
@@ -618,12 +618,13 @@ class AdminCog(commands.Cog):
             if name in leaderboards:
                 # check for differences
                 old = leaderboards[name]  # type: LeaderboardItem
-                new_task = make_task(source)
+                new_def = make_task_definition(source)
+                new_task = new_def.task
 
                 # from the database, we get datetime with timezone,
                 # so we need to convert here to enable comparison
                 new_dl = self._parse_deadline(problem["deadline"])
-                new_dl = new_dl.astimezone()
+                new_dl = new_dl.astimezone(timezone.utc)
                 if old["deadline"] != new_dl:
                     pass
                 elif old["gpu_types"] != problem["gpus"]:
@@ -730,15 +731,17 @@ class AdminCog(commands.Cog):
                     interaction,
                     entry["name"],
                     entry["deadline"],
-                    make_task(root / entry["directory"]),
+                    make_task_definition(root / entry["directory"]),
                     entry["gpus"],
                 )
                 steps += "done\n"
 
             for entry in update_list:
                 with self.bot.leaderboard_db as db:
-                    task = make_task(root / entry["directory"])
-                    db.update_leaderboard(entry["name"], entry["deadline"], task)
+                    task = make_task_definition(root / entry["directory"])
+                    db.update_leaderboard(
+                        entry["name"], self._parse_deadline(entry["deadline"]), task
+                    )
                     new_lb: LeaderboardItem = db.get_leaderboard(entry["name"])
 
                 forum_id = new_lb["forum_id"]

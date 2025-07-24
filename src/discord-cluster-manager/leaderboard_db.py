@@ -1,62 +1,24 @@
 import dataclasses
 import datetime
 import json
-import logging
-from typing import List, Optional
+from typing import Dict, List, NotRequired, Optional, TypedDict
 
-import discord
 import psycopg2
-from env import (
-    DATABASE_URL,
-    DISABLE_SSL,
-    POSTGRES_DATABASE,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
-    POSTGRES_USER,
-)
 from run_eval import CompileResult, RunResult, SystemInfo
-from task import LeaderboardTask
+from task import LeaderboardDefinition, LeaderboardTask
 from utils import (
     KernelBotError,
-    LeaderboardItem,
-    LeaderboardRankedEntry,
     LRUCache,
-    RunItem,
-    SubmissionItem,
     setup_logging,
 )
-
-leaderboard_name_cache = LRUCache(max_size=512)
 
 logger = setup_logging(__name__)
 
 
-async def leaderboard_name_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[discord.app_commands.Choice[str]]:
-    """Return leaderboard names that match the current typed name"""
-    try:
-        cached_value = leaderboard_name_cache[current]
-        if cached_value is not None:
-            return cached_value
-
-        bot = interaction.client
-        with bot.leaderboard_db as db:
-            leaderboards = db.get_leaderboard_names()
-        filtered = [lb for lb in leaderboards if current.lower() in lb.lower()]
-        leaderboard_name_cache[current] = [
-            discord.app_commands.Choice(name=name, value=name) for name in filtered[:25]
-        ]
-        return leaderboard_name_cache[current]
-    except Exception as e:
-        logger.exception("Error in leaderboard autocomplete", exc_info=e)
-        return []
-
-
 class LeaderboardDB:
-    def __init__(self, host: str, database: str, user: str, password: str, port: str = "5432"):
+    def __init__(
+        self, host: str, database: str, user: str, password: str, port: str, url: str, ssl_mode: str
+    ):
         """Initialize database connection parameters"""
         self.connection_params = {
             "host": host,
@@ -65,16 +27,19 @@ class LeaderboardDB:
             "password": password,
             "port": port,
         }
+        self.url = url
+        self.ssl_mode = ssl_mode
         self.connection: Optional[psycopg2.extensions.connection] = None
         self.refcount: int = 0
         self.cursor: Optional[psycopg2.extensions.cursor] = None
+        self.name_cache = LRUCache(max_size=512)
 
     def connect(self) -> bool:
         """Establish connection to the database"""
         try:
             self.connection = (
-                psycopg2.connect(DATABASE_URL, sslmode="require" if not DISABLE_SSL else "disable")
-                if DATABASE_URL
+                psycopg2.connect(self.url, sslmode=self.ssl_mode)
+                if self.url
                 else psycopg2.connect(**self.connection_params)
             )
             self.cursor = self.connection.cursor()
@@ -92,7 +57,7 @@ class LeaderboardDB:
         self.cursor = None
         self.connection = None
 
-    def __enter__(self):
+    def __enter__(self) -> "LeaderboardDB":
         """Context manager entry"""
         if self.connection is not None:
             self.refcount += 1
@@ -101,7 +66,8 @@ class LeaderboardDB:
         if self.connect():
             self.refcount = 1
             return self
-        return None
+
+        raise KernelBotError("Could not connect to database", code=500)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
@@ -109,29 +75,32 @@ class LeaderboardDB:
         if self.refcount == 0:
             self.disconnect()
 
-    def create_leaderboard(self, leaderboard: LeaderboardItem) -> int:
+    def create_leaderboard(
+        self,
+        *,
+        name: str,
+        deadline: datetime.datetime,
+        definition: LeaderboardDefinition,
+        creator_id: int,
+        forum_id: int,
+        gpu_types: list | str,
+    ) -> int:
         try:
+            task = definition.task
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.leaderboard (name, deadline, task, creator_id, forum_id)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO leaderboard.leaderboard (name, deadline, task, creator_id,
+                                                     forum_id, description)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (
-                    leaderboard["name"],
-                    leaderboard["deadline"],
-                    leaderboard["task"].to_str(),
-                    leaderboard["creator_id"],
-                    leaderboard["forum_id"],
-                ),
+                (name, deadline, task.to_str(), creator_id, forum_id, definition.description),
             )
 
             leaderboard_id = self.cursor.fetchone()[0]
 
-            if isinstance(leaderboard["gpu_types"], str):
-                gpu_types = [leaderboard["gpu_types"]]
-            else:
-                gpu_types = leaderboard["gpu_types"]
+            if isinstance(gpu_types, str):
+                gpu_types = [gpu_types]
 
             for gpu_type in gpu_types:
                 self.cursor.execute(
@@ -142,29 +111,76 @@ class LeaderboardDB:
                     (leaderboard_id, gpu_type),
                 )
 
+            # insert templates
+            for lang, code in definition.templates.items():
+                self.cursor.execute(
+                    """
+                    INSERT INTO leaderboard.templates (leaderboard_id, lang, code)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (leaderboard_id, lang, code),
+                )
+
             self.connection.commit()
-            leaderboard_name_cache.invalidate()  # Invalidate autocomplete cache
+            self.name_cache.invalidate()  # Invalidate autocomplete cache
             return leaderboard_id
         except psycopg2.Error as e:
             logger.exception("Error in leaderboard creation.", e)
             if isinstance(e, psycopg2.errors.UniqueViolation):
                 raise KernelBotError(
-                    "Error: Tried to create a leaderboard "
-                    f'"{leaderboard["name"]}" that already exists.'
+                    "Error: Tried to create a leaderboard " f'"{name}" that already exists.'
                 ) from e
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error in leaderboard creation.") from e
 
-    def update_leaderboard(self, name, deadline, task):
+    def update_leaderboard(
+        self, name, deadline: datetime.datetime, definition: LeaderboardDefinition
+    ):
+        task = definition.task
         try:
             self.cursor.execute(
                 """
                 UPDATE leaderboard.leaderboard
-                SET deadline = %s, task = %s
+                SET deadline = %s, task = %s, description = %s
                 WHERE name = %s;
                 """,
-                (deadline, task.to_str(), name),
+                (
+                    deadline.astimezone(datetime.timezone.utc),
+                    task.to_str(),
+                    definition.description,
+                    name,
+                ),
             )
+
+            self.cursor.execute(
+                """
+                SELECT id
+                FROM leaderboard.leaderboard
+                WHERE name = %s
+                """,
+                (name,),
+            )
+
+            lb_id = self.cursor.fetchone()[0]
+
+            # replace templates
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.templates
+                WHERE leaderboard_id = %s
+                """,
+                (lb_id,),
+            )
+
+            for lang, code in definition.templates.items():
+                self.cursor.execute(
+                    """
+                    INSERT INTO leaderboard.templates (leaderboard_id, lang, code)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (lb_id, lang, code),
+                )
+
             self.connection.commit()
         except psycopg2.Error as e:
             self.connection.rollback()
@@ -200,12 +216,21 @@ class LeaderboardDB:
 
             self.cursor.execute(
                 """
+                DELETE FROM leaderboard.templates
+                USING leaderboard.leaderboard
+                WHERE leaderboard.templates.leaderboard_id = leaderboard.leaderboard.id
+                    AND leaderboard.leaderboard.name = %s;
+                """,
+                (leaderboard_name,),
+            )
+            self.cursor.execute(
+                """
                 DELETE FROM leaderboard.leaderboard WHERE name = %s
                 """,
                 (leaderboard_name,),
             )
             self.connection.commit()
-            leaderboard_name_cache.invalidate()  # Invalidate autocomplete cache
+            self.name_cache.invalidate()  # Invalidate autocomplete cache
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
@@ -368,14 +393,20 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Could not create leaderboard submission entry in database") from e
 
-    def get_leaderboard_names(self) -> list[str]:
-        self.cursor.execute("SELECT name FROM leaderboard.leaderboard")
+    def get_leaderboard_names(self, active_only: bool = False) -> list[str]:
+        if active_only:
+            self.cursor.execute(
+                "SELECT name FROM leaderboard.leaderboard WHERE leaderboard.deadline < %s",
+                (datetime.datetime.now().astimezone(datetime.timezone.utc),),
+            )
+        else:
+            self.cursor.execute("SELECT name FROM leaderboard.leaderboard")
         return [x[0] for x in self.cursor.fetchall()]
 
-    def get_leaderboards(self) -> list[LeaderboardItem]:
+    def get_leaderboards(self) -> list["LeaderboardItem"]:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id
+            SELECT id, name, deadline, task, creator_id, forum_id, description
             FROM leaderboard.leaderboard
             """
         )
@@ -397,36 +428,65 @@ class LeaderboardDB:
                     task=LeaderboardTask.from_dict(lb[3]),
                     gpu_types=gpu_types,
                     creator_id=lb[4],
+                    forum_id=lb[5],
+                    description=lb[6],
                 )
             )
 
         return leaderboards
 
-    def get_leaderboard_gpu_types(self, leaderboard_name: str) -> List[str] | None:
+    def get_leaderboard_gpu_types(self, leaderboard_name: str) -> List[str]:
         self.cursor.execute(
             """
-            SELECT *
-            FROM leaderboard.gpu_type
-            WHERE leaderboard_id = (
-                SELECT id
-                FROM leaderboard.leaderboard
-                WHERE name = %s
-            )
+            SELECT id
+            FROM leaderboard.leaderboard
+            WHERE name = %s
             """,
             (leaderboard_name,),
         )
+        lb_id = self.cursor.fetchone()
+        if lb_id is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
 
-        gpu_types = [x[1] for x in self.cursor.fetchall()]
-
-        if gpu_types:
-            return gpu_types
-        else:
-            return None
-
-    def get_leaderboard(self, leaderboard_name: str) -> LeaderboardItem | None:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed
+            SELECT gpu_type
+            FROM leaderboard.gpu_type
+            WHERE leaderboard_id = %s
+            """,
+            (lb_id[0],),
+        )
+
+        return [x[0] for x in self.cursor.fetchall()]
+
+    def get_leaderboard_templates(self, leaderboard_name: str) -> Dict[str, str]:
+        self.cursor.execute(
+            """
+            SELECT id
+            FROM leaderboard.leaderboard
+            WHERE name = %s
+            """,
+            (leaderboard_name,),
+        )
+        lb_id = self.cursor.fetchone()
+        if lb_id is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+
+        self.cursor.execute(
+            """
+            SELECT lang, code
+            FROM leaderboard.templates
+            WHERE leaderboard_id = %s
+            """,
+            (lb_id[0],),
+        )
+
+        return {x[0]: x[1] for x in self.cursor.fetchall()}
+
+    def get_leaderboard(self, leaderboard_name: str) -> "LeaderboardItem":
+        self.cursor.execute(
+            """
+            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -446,9 +506,10 @@ class LeaderboardDB:
                 forum_id=res[5],
                 secret_seed=res[6],
                 gpu_types=self.get_leaderboard_gpu_types(res[1]),
+                description=res[7],
             )
         else:
-            return None
+            raise LeaderboardDoesNotExist(leaderboard_name)
 
     def get_leaderboard_submissions(
         self,
@@ -457,7 +518,7 @@ class LeaderboardDB:
         user_id: Optional[str] = None,
         limit: int = None,
         offset: int = 0,
-    ) -> list[LeaderboardRankedEntry]:
+    ) -> list["LeaderboardRankedEntry"]:
         # separate cases, for personal we want all submissions, for general we want best per user
         if user_id:
             # Query all if user_id (means called from show-personal)
@@ -541,7 +602,7 @@ class LeaderboardDB:
         try:
             return self._generate_stats(last_day)
         except Exception as e:
-            logging.exception("error generating stats", exc_info=e)
+            logger.exception("error generating stats", exc_info=e)
             raise
 
     def _generate_runner_stats(self, last_day: bool = False):
@@ -672,7 +733,7 @@ class LeaderboardDB:
             logger.exception("Could not delete submission %s.", submission_id, exc_info=e)
             raise KernelBotError(f"Could not delete submission {submission_id}!") from e
 
-    def get_submission_by_id(self, submission_id: int) -> Optional[SubmissionItem]:
+    def get_submission_by_id(self, submission_id: int) -> Optional["SubmissionItem"]:
         query = """
                 SELECT s.leaderboard_id, lb.name, s.file_name, s.user_id,
                        s.submission_time, s.done, c.code
@@ -925,21 +986,56 @@ class LeaderboardDB:
             raise KernelBotError("Error validating CLI ID") from e
 
 
-if __name__ == "__main__":
-    print(
-        POSTGRES_HOST,
-        POSTGRES_DATABASE,
-        POSTGRES_USER,
-        POSTGRES_PASSWORD,
-        POSTGRES_PORT,
-    )
+class LeaderboardItem(TypedDict):
+    id: int
+    name: str
+    creator_id: int
+    deadline: datetime.datetime
+    description: str
+    task: "LeaderboardTask"
+    gpu_types: List[str]
+    forum_id: int
+    secret_seed: NotRequired[int]
 
-    leaderboard_db = LeaderboardDB(
-        POSTGRES_HOST,
-        POSTGRES_DATABASE,
-        POSTGRES_USER,
-        POSTGRES_PASSWORD,
-        POSTGRES_PORT,
-    )
-    leaderboard_db.connect()
-    leaderboard_db.disconnect()
+
+class LeaderboardRankedEntry(TypedDict):
+    submission_id: int
+    rank: int
+    submission_name: str
+    submission_time: datetime.datetime
+    submission_score: float
+    leaderboard_name: str
+    user_id: int
+    user_name: str
+    gpu_type: str
+
+
+class RunItem(TypedDict):
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    mode: str
+    secret: bool
+    runner: str
+    score: Optional[float]
+    passed: bool
+    compilation: dict
+    meta: dict
+    result: dict
+    system: dict
+
+
+class SubmissionItem(TypedDict):
+    submission_id: int
+    leaderboard_id: int
+    leaderboard_name: str
+    file_name: str
+    user_id: int
+    submission_time: datetime.datetime
+    done: bool
+    code: str
+    runs: List[RunItem]
+
+
+class LeaderboardDoesNotExist(KernelBotError):
+    def __init__(self, name: str):
+        super().__init__(message=f"Leaderboard `{name}` does not exist.", code=404)

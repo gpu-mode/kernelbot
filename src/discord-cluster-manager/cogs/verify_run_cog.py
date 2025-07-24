@@ -9,14 +9,15 @@ import discord
 import env
 from cogs import admin_cog
 from cogs.leaderboard_cog import LeaderboardSubmitCog
-from cogs.submit_cog import SubmitCog
 from consts import GPU, SubmissionMode, get_gpu_by_name
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
-from report import MultiProgressReporter
-from task import make_task
-from utils import RunItem, SubmissionItem, send_discord_message, setup_logging, with_error_handling
+from discord_reporter import MultiProgressReporterDiscord
+from discord_utils import send_discord_message, with_error_handling
+from leaderboard_db import RunItem, SubmissionItem
+from task import make_task_definition
+from utils import setup_logging
 
 logger = setup_logging()
 
@@ -45,19 +46,18 @@ class VerifyRunCog(commands.Cog):
         self.bot = bot
 
     async def trigger_run(self, interaction: discord.Interaction, gpu: GPU, reporter, lang: str):
-        submit_cog: SubmitCog = self.bot.get_cog("SubmitCog")
-        submit_leaderboard = submit_cog.submit_leaderboard
+        submit_leaderboard = self.bot.backend.submit_leaderboard
 
         if lang == "py":
             sub_code = create_mock_attachment(
                 "submission.py", Path("examples/identity_py/submission.py").read_text()
             )
-            task = make_task("examples/identity_py")
+            task = make_task_definition("examples/identity_py")
         else:
             sub_code = create_mock_attachment(
                 "test.cu", Path("examples/identity_cuda/submission.cu").read_text()
             )
-            task = make_task("examples/identity_cuda")
+            task = make_task_definition("examples/identity_cuda")
 
         return await submit_leaderboard(
             interaction,
@@ -184,7 +184,7 @@ class VerifyRunCog(commands.Cog):
             await send_discord_message(interaction, f"Invalid path {directory.resolve()}")
             return
         try:
-            task = make_task(directory)
+            task = make_task_definition(directory)
         except Exception as E:
             logger.exception("Could not make task", exc_info=E)
             await send_discord_message(interaction, f"Invalid task {directory}")
@@ -287,17 +287,11 @@ class VerifyRunCog(commands.Cog):
             if not interaction.response.is_done():
                 await interaction.response.defer()
 
-            submit_cog = self.bot.get_cog("SubmitCog")
-
-            if not submit_cog:
-                await send_discord_message(interaction, "❌ SubmitCog not found!")
-                return
-
             nvidia = get_gpu_by_name("nvidia")
             amd = get_gpu_by_name("mi300")
             t4 = get_gpu_by_name("T4")
 
-            reporter = MultiProgressReporter("Verifying")
+            reporter = MultiProgressReporterDiscord("Verifying")
             await reporter.show(interaction)
 
             results = await asyncio.gather(

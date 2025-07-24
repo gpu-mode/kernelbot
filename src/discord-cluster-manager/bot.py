@@ -7,10 +7,10 @@ import discord
 import env
 import uvicorn
 from api.main import app, init_api
+from backend import KernelBackend
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
-from cogs.submit_cog import SubmitCog
 from cogs.verify_run_cog import VerifyRunCog
 from discord import app_commands
 from discord.ext import commands
@@ -19,18 +19,12 @@ from env import (
     DISCORD_DEBUG_CLUSTER_STAGING_ID,
     DISCORD_DEBUG_TOKEN,
     DISCORD_TOKEN,
-    POSTGRES_DATABASE,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
-    POSTGRES_USER,
     init_environment,
 )
 from launchers import GitHubLauncher, ModalLauncher
-from leaderboard_db import LeaderboardDB
 from utils import setup_logging
 
-logger = setup_logging()
+logger = setup_logging(__name__)
 
 
 class ClusterBot(commands.Bot):
@@ -41,13 +35,6 @@ class ClusterBot(commands.Bot):
         super().__init__(intents=intents, command_prefix="!")
         self.debug_mode = debug_mode
 
-        # Create the run group for leaderboardless runs. Debugging only.
-        if self.debug_mode:
-            self.run_group = app_commands.Group(
-                name="run", description="Run jobs on different platforms"
-            )
-            self.tree.add_command(self.run_group)
-
         self.leaderboard_group = app_commands.Group(
             name="leaderboard", description="Leaderboard commands"
         )
@@ -56,33 +43,20 @@ class ClusterBot(commands.Bot):
         self.tree.add_command(self.admin_group)
         self.tree.add_command(self.leaderboard_group)
 
-        self.leaderboard_db = LeaderboardDB(
-            POSTGRES_HOST,
-            POSTGRES_DATABASE,
-            POSTGRES_USER,
-            POSTGRES_PASSWORD,
-            POSTGRES_PORT,
+        self.backend = KernelBackend(debug_mode=debug_mode)
+        self.backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
+        self.backend.register_launcher(
+            GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
         )
 
-        try:
-            if not self.leaderboard_db.connect():
-                logger.error("Could not connect to database, shutting down")
-                exit(1)
-        finally:
-            self.leaderboard_db.disconnect()
-
-        self.accepts_jobs = True
+    @property
+    def leaderboard_db(self):
+        return self.backend.db
 
     async def setup_hook(self):
         logger.info(f"Syncing commands for staging guild {DISCORD_CLUSTER_STAGING_ID}")
         try:
             # Load cogs
-            submit_cog = SubmitCog(self)
-            submit_cog.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
-            submit_cog.register_launcher(
-                GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
-            )
-            await self.add_cog(submit_cog)
             await self.add_cog(BotManagerCog(self))
             await self.add_cog(LeaderboardCog(self))
             await self.add_cog(VerifyRunCog(self))
@@ -247,7 +221,7 @@ async def start_bot_and_api(debug_mode: bool):
 
     bot_instance = ClusterBot(debug_mode=debug_mode)
 
-    init_api(bot_instance)
+    init_api(bot_instance.backend)
 
     config = uvicorn.Config(
         app,

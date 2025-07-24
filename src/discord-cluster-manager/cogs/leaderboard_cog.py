@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import TYPE_CHECKING, List, Optional
@@ -6,25 +5,28 @@ from typing import TYPE_CHECKING, List, Optional
 import discord
 from consts import (
     SubmissionMode,
-    get_gpu_by_name,
 )
 from discord import app_commands
 from discord.ext import commands
-from leaderboard_db import leaderboard_name_autocomplete
-from report import MultiProgressReporter
-from submission import SubmissionRequest, prepare_submission
-from ui.misc import GPUSelectionView
-from ui.table import create_table
-from utils import (
+from discord_reporter import MultiProgressReporterDiscord
+from discord_utils import (
+    get_user_from_id,
+    leaderboard_name_autocomplete,
+    send_discord_message,
+    with_error_handling,
+)
+from leaderboard_db import (
     LeaderboardItem,
     LeaderboardRankedEntry,
     RunItem,
     SubmissionItem,
+)
+from submission import SubmissionRequest, prepare_submission
+from ui.misc import GPUSelectionView
+from ui.table import create_table
+from utils import (
     format_time,
-    get_user_from_id,
-    send_discord_message,
     setup_logging,
-    with_error_handling,
 )
 
 if TYPE_CHECKING:
@@ -58,106 +60,6 @@ class LeaderboardSubmitCog(app_commands.Group):
 
         await view.wait()
         return view
-
-    async def on_submit_hook(  # noqa: C901
-        self,
-        interaction: discord.Interaction,
-        leaderboard_name: Optional[str],
-        script: discord.Attachment,
-        mode: SubmissionMode,
-        cmd_gpus: Optional[List[str]],
-    ) -> int:
-        """
-        Called as the main body of a submission to route to the correct runner.
-        """
-        # Read the template file
-        submission_content = await script.read()
-
-        try:
-            submission_content = submission_content.decode()
-        except UnicodeError:
-            await send_discord_message(
-                interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
-            )
-            return -1
-
-        req = SubmissionRequest(
-            code=submission_content,
-            file_name=script.filename,
-            user_id=interaction.user.id,
-            gpus=cmd_gpus,
-            leaderboard=leaderboard_name,
-        )
-        req = prepare_submission(req, self.bot.leaderboard_db)
-
-        # if there is more than one candidate GPU, display UI to let user select,
-        # otherwise just run on that GPU
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
-
-        if req.gpus is None:
-            view = await self.select_gpu_view(interaction, leaderboard_name, req.task_gpus)
-            selected_gpus = view.selected_gpus
-        else:
-            selected_gpus = req.gpus
-
-        selected_gpus = [get_gpu_by_name(gpu) for gpu in selected_gpus]
-
-        command = self.bot.get_cog("SubmitCog").submit_leaderboard
-
-        user_name = interaction.user.global_name or interaction.user.name
-        # Create a submission entry in the database
-        with self.bot.leaderboard_db as db:
-            sub_id = db.create_submission(
-                leaderboard=req.leaderboard,
-                file_name=script.filename,
-                code=submission_content,
-                user_id=interaction.user.id,
-                time=datetime.now(),
-                user_name=user_name,
-            )
-
-        run_msg = f"Submission **{sub_id}**: `{script.filename}` for `{req.leaderboard}`"
-        reporter = MultiProgressReporter(interaction, run_msg)
-        try:
-            tasks = [
-                command(
-                    sub_id,
-                    submission_content,
-                    script.filename,
-                    gpu,
-                    reporter.add_run(f"{gpu.name} on {gpu.runner}"),
-                    req.task,
-                    mode,
-                    None,
-                )
-                for gpu in selected_gpus
-            ]
-
-            # also schedule secret run
-            if mode == SubmissionMode.LEADERBOARD:
-                tasks += [
-                    command(
-                        sub_id,
-                        submission_content,
-                        script.filename,
-                        gpu,
-                        reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
-                        req.task,
-                        SubmissionMode.PRIVATE,
-                        req.secret_seed,
-                    )
-                    for gpu in selected_gpus
-                ]
-            await reporter.show()
-            await asyncio.gather(*tasks)
-        finally:
-            with self.bot.leaderboard_db as db:
-                db.mark_submission_done(sub_id)
-
-        if mode == SubmissionMode.LEADERBOARD:
-            await self.post_submit_hook(interaction, sub_id)
-        return sub_id
 
     def generate_run_verdict(self, run: RunItem, sub_data: SubmissionItem):
         medals = {1: "🥇 First", 2: "🥈 Second", 3: "🥉 Third"}
@@ -228,18 +130,42 @@ class LeaderboardSubmitCog(app_commands.Group):
         mode: SubmissionMode,
         gpu: Optional[str],
     ):
-        if not self.bot.accepts_jobs:
-            await send_discord_message(
-                interaction,
-                "The bot is currently not accepting any new submissions, please try again later.",
-                ephemeral=True,
-            )
-            return
-
         if gpu is not None:
             gpu = [gpu.strip() for gpu in gpu.split(",")]
 
-        return await self.on_submit_hook(interaction, leaderboard_name, script, mode, gpu)
+        submission_content = await script.read()
+
+        try:
+            submission_content = submission_content.decode()
+        except UnicodeError:
+            await send_discord_message(
+                interaction, "Could not decode your file. Is it UTF-8?", ephemeral=True
+            )
+            return -1
+
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        req = SubmissionRequest(
+            code=submission_content,
+            file_name=script.filename,
+            user_id=interaction.user.id,
+            user_name=interaction.user.global_name or interaction.user.name,
+            gpus=gpu,
+            leaderboard=leaderboard_name,
+        )
+        req = prepare_submission(req, self.bot.backend)
+
+        if req.gpus is None:
+            view = await self.select_gpu_view(interaction, leaderboard_name, req.task_gpus)
+            req.gpus = view.selected_gpus
+
+        reporter = MultiProgressReporterDiscord(interaction)
+        sub_id, results = await self.bot.backend.submit_full(req, mode, reporter)
+
+        if mode == SubmissionMode.LEADERBOARD:
+            await self.post_submit_hook(interaction, sub_id)
+        return sub_id
 
     @app_commands.command(name="test", description="Start a testing/debugging run")
     @app_commands.describe(
@@ -335,21 +261,15 @@ async def lang_autocomplete(
 
     with bot.leaderboard_db as db:
         leaderboard_item = db.get_leaderboard(lb)  # type: LeaderboardItem
-        if not leaderboard_item:
-            raise ValueError("Invalid leaderboard")
 
     candidates = leaderboard_item["task"].templates
     return [discord.app_commands.Choice(name=c, value=c) for c in candidates]
 
 
-def add_header_to_template(lang: str, lb: LeaderboardItem):
-    template_file = lb["task"].templates[lang]
-
+def add_header_to_template(lang: str, code: str, lb: LeaderboardItem):
     comment_char = {"CUDA": "//", "Python": "#", "Triton": "#", "HIP": "#"}[lang]
 
-    description_comment = [
-        f"{comment_char} > {line}" for line in lb["task"].description.splitlines()
-    ]
+    description_comment = [f"{comment_char} > {line}" for line in lb["description"].splitlines()]
     header = f"""
 {comment_char}!POPCORN leaderboard {lb["name"]}
 
@@ -363,7 +283,7 @@ def add_header_to_template(lang: str, lb: LeaderboardItem):
 {comment_char} Happy hacking!
 
 """[1:]
-    return header + template_file + "\n"
+    return header + code + "\n"
 
 
 class LeaderboardCog(commands.Cog):
@@ -496,15 +416,6 @@ class LeaderboardCog(commands.Cog):
         try:
             submissions = {}
             with self.bot.leaderboard_db as db:
-                leaderboard_id = db.get_leaderboard(leaderboard_name)["id"]
-                if not leaderboard_id:
-                    await send_discord_message(
-                        interaction,
-                        f'Leaderboard "{leaderboard_name}" not found.',
-                        ephemeral=True,
-                    )
-                    return
-
                 gpus = db.get_leaderboard_gpu_types(leaderboard_name)
 
                 if len(gpus) == 1:
@@ -625,13 +536,6 @@ class LeaderboardCog(commands.Cog):
 
         with self.bot.leaderboard_db as db:
             leaderboard_item = db.get_leaderboard(leaderboard_name)  # type: LeaderboardItem
-            if not leaderboard_item:
-                await send_discord_message(
-                    interaction,
-                    f"Leaderboard with name `{leaderboard_name}` not found.",
-                    ephemeral=True,
-                )
-                return
 
         code = leaderboard_item["task"].files
 
@@ -658,19 +562,11 @@ class LeaderboardCog(commands.Cog):
 
         try:
             with self.bot.leaderboard_db as db:
-                leaderboard_item = db.get_leaderboard(leaderboard_name)  # type: LeaderboardItem
-                if not leaderboard_item:
-                    await send_discord_message(
-                        interaction,
-                        f"Leaderboard with name `{leaderboard_name}` not found.",
-                        ephemeral=True,
-                    )
-                    return
+                templates = db.get_leaderboard_templates(leaderboard_name)
+                leaderboard_item = db.get_leaderboard(leaderboard_name)
 
-            if lang not in leaderboard_item["task"].templates:
-                langs = "\n".join(
-                    (f"* {lang} " for lang in leaderboard_item["task"].templates.keys())
-                )
+            if lang not in templates:
+                langs = "\n".join((f"* {lang} " for lang in templates.keys()))
                 await send_discord_message(
                     interaction,
                     f"Leaderboard `{leaderboard_name}` does not have a template for `{lang}`.\n"  # noqa: E501
@@ -679,7 +575,7 @@ class LeaderboardCog(commands.Cog):
                 )
                 return
 
-            template = add_header_to_template(lang, leaderboard_item)
+            template = add_header_to_template(lang, templates[lang], leaderboard_item)
             ext = {"CUDA": "cu", "Python": "py", "Triton": "py", "HIP": "py"}
             file_name = f"{leaderboard_name}.{ext[lang]}"
             file = discord.File(fp=StringIO(template), filename=file_name)
