@@ -290,6 +290,58 @@ class LeaderboardDB:
             for row in self.cursor.fetchall()
         ]
 
+    def delete_milestone_runs(self, leaderboard_name: str):
+        self.cursor.execute(
+            """
+            DELETE FROM leaderboard.runs
+            WHERE milestone_id IN (
+                SELECT leaderboard.milestones.id
+                FROM leaderboard.milestones
+                WHERE leaderboard_id = %s
+            );
+            """,
+            (leaderboard_name,),
+        )
+        self.connection.commit()
+
+    def get_runs_generic(
+        self, *, milestone_id: Optional[int] = None, submission_id: Optional[int] = None
+    ) -> List["RunItem"]:
+        if milestone_id is not None:
+            key = "milestone_id"
+            value = milestone_id
+            if submission_id is not None:
+                logger.error("milestone_id and submission_id specified simultaneously")
+                raise KernelBotError("`milestone_id` and `submission_id` specified simultaneously")
+        else:
+            key = "submission_id"
+            value = submission_id
+        query = f"""
+                SELECT start_time, end_time, mode, secret, runner, score,
+                       passed, compilation, meta, result, system_info
+                FROM leaderboard.runs
+                WHERE {key} = %s
+                """
+        self.cursor.execute(query, (value,))
+        runs = self.cursor.fetchall()
+
+        return [
+            RunItem(
+                start_time=r[0],
+                end_time=r[1],
+                mode=r[2],
+                secret=r[3],
+                runner=r[4],
+                score=r[5],
+                passed=r[6],
+                compilation=r[7],
+                meta=r[8],
+                result=r[9],
+                system=r[10],
+            )
+            for r in runs
+        ]
+
     def create_submission(
         self,
         leaderboard: str,
@@ -394,7 +446,9 @@ class LeaderboardDB:
 
     def create_submission_run(
         self,
-        submission: int,
+        *,
+        submission: Optional[int] = None,
+        milestone: Optional[int] = None,
         start: datetime.datetime,
         end: datetime.datetime,
         mode: str,
@@ -410,22 +464,23 @@ class LeaderboardDB:
                 compilation = json.dumps(dataclasses.asdict(compilation))
 
             # check validity
-            self.cursor.execute(
-                """
-            SELECT done FROM leaderboard.submission WHERE id = %s
-            """,
-                (submission,),
-            )
-            if self.cursor.fetchone()[0]:
-                logger.error(
-                    "Submission '%s' is already marked as done when trying to add %s run.",
-                    submission,
-                    mode,
+            if submission is not None:
+                self.cursor.execute(
+                    """
+                SELECT done FROM leaderboard.submission WHERE id = %s
+                """,
+                    (submission,),
                 )
-                raise KernelBotError(
-                    "Internal error: Attempted to add run, "
-                    "but submission was already marked as done."
-                )
+                if self.cursor.fetchone()[0]:
+                    logger.error(
+                        "Submission '%s' is already marked as done when trying to add %s run.",
+                        submission,
+                        mode,
+                    )
+                    raise KernelBotError(
+                        "Internal error: Attempted to add run, "
+                        "but submission was already marked as done."
+                    )
 
             meta = {
                 k: result.__dict__[k]
@@ -433,13 +488,14 @@ class LeaderboardDB:
             }
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.runs (submission_id, start_time, end_time, mode,
+                INSERT INTO leaderboard.runs (submission_id, milestone_id, start_time, end_time, mode,
                 secret, runner, score, passed, compilation, meta, result, system_info
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     submission,
+                    milestone,
                     start,
                     end,
                     mode,
@@ -837,33 +893,6 @@ class LeaderboardDB:
         if submission is None:
             return None
 
-        # OK, now get the runs
-        query = """
-                SELECT start_time, end_time, mode, secret, runner, score,
-                       passed, compilation, meta, result, system_info
-                FROM leaderboard.runs
-                WHERE submission_id = %s
-                """
-        self.cursor.execute(query, (submission_id,))
-        runs = self.cursor.fetchall()
-
-        runs = [
-            RunItem(
-                start_time=r[0],
-                end_time=r[1],
-                mode=r[2],
-                secret=r[3],
-                runner=r[4],
-                score=r[5],
-                passed=r[6],
-                compilation=r[7],
-                meta=r[8],
-                result=r[9],
-                system=r[10],
-            )
-            for r in runs
-        ]
-
         return SubmissionItem(
             submission_id=submission_id,
             leaderboard_id=submission[0],
@@ -873,7 +902,7 @@ class LeaderboardDB:
             submission_time=submission[4],
             done=submission[5],
             code=bytes(submission[6]).decode("utf-8"),
-            runs=runs,
+            runs=self.get_runs_generic(submission_id=submission_id),
         )
 
     def get_leaderboard_submission_count(
