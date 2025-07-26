@@ -434,6 +434,13 @@ class AdminCog(commands.Cog):
 
             with backend.db as db:
                 for key, value in result.runs.items():
+                    # Only store LB runs in the database;
+                    # we still want to run test/benchmark to validate
+                    # that the code actually passes, but for all other
+                    # purposes we only need the leaderboard run
+                    if key != SubmissionMode.LEADERBOARD.value:
+                        continue
+
                     db.create_submission_run(
                         milestone=milestone["id"],
                         start=value.start,
