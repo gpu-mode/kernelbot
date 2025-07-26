@@ -310,6 +310,16 @@ class LeaderboardDB:
         )
         self.connection.commit()
 
+    def delete_milestones(self, leaderboard_id: int):
+        self.cursor.execute(
+            """
+            DELETE FROM leaderboard.milestones
+            WHERE leaderboard_id = %s;
+            """,
+            (leaderboard_id,),
+        )
+        self.connection.commit()
+
     def get_runs_generic(
         self, *, milestone_id: Optional[int] = None, submission_id: Optional[int] = None
     ) -> List["RunItem"]:

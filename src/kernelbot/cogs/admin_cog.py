@@ -807,7 +807,7 @@ class AdminCog(commands.Cog):
 
         return update_list, create_list
 
-    async def update_competition(
+    async def update_competition(  # noqa: C901
         self, interaction: discord.Interaction, spec_file: Path, force: bool = False
     ):
         try:
@@ -857,6 +857,21 @@ class AdminCog(commands.Cog):
                         entry["name"], self._parse_deadline(entry["deadline"]), task
                     )
                     new_lb: LeaderboardItem = db.get_leaderboard(entry["name"])
+                    # delete old milestones
+                    db.delete_milestones(new_lb["id"])
+                    # and (re)-create new ones
+                    for milestone in task.milestones:
+                        db.create_milestone(
+                            new_lb["id"],
+                            milestone.name,
+                            milestone.code,
+                            description=milestone.description,
+                            exclude_gpus=milestone.exclude_gpus,
+                        )
+
+                    #  and finally trigger re-run
+                    if task.milestones:
+                        await self._submit_milestones(interaction, new_lb["name"])
 
                 forum_id = new_lb["forum_id"]
                 try:
