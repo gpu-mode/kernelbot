@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import math
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Optional
@@ -11,12 +12,13 @@ from libkernelbot.report import (
     MultiProgressReporter,
     RunProgressReporter,
     generate_report,
+    make_benchmark_log,
     make_short_report,
 )
 from libkernelbot.run_eval import FullResult
 from libkernelbot.submission import ProcessedSubmissionRequest, compute_score
 from libkernelbot.task import LeaderboardTask, build_task_config
-from libkernelbot.utils import setup_logging
+from libkernelbot.utils import KernelBotError, run_item_to_run_result, setup_logging
 
 logger = setup_logging(__name__)
 
@@ -224,3 +226,90 @@ class KernelBackend:
 
     def _get_arch(self, gpu_type: GPU):
         return GPU_TO_SM[gpu_type.name]
+
+    def get_milestone_overview(self, leaderboard_name: str, gpu: Optional[str] = None) -> str:
+        """
+        Generates a message that gives an overview over milestone performance.
+        """
+        message = f"# Milestones for `{leaderboard_name}`\n"
+
+        with self.bot.leaderboard_db as db:
+            lb = db.get_leaderboard(leaderboard_name)
+            milestones = db.get_leaderboard_milestones(leaderboard_id=lb["id"])
+
+        if len(milestones) == 0:
+            return f"Leaderboard `{leaderboard_name}` does not provide any milestones"
+
+        for milestone in milestones:
+            message += f"## {milestone['name']}\n"
+            message += milestone["description"] + "\n"
+            with self.bot.leaderboard_db as db:
+                runs = db.get_runs_generic(milestone_id=milestone["id"])
+
+            runs = [r for r in runs if r["mode"] == SubmissionMode.LEADERBOARD.value]
+
+            if len(runs) == 0:
+                message += "⚠️ No runs available. Maybe they haven't been triggered yet?\n"
+
+            if gpu is not None:
+                runs = [r for r in runs if r["runner"] == gpu]
+            if len(runs) == 0:
+                message += f"⚠️ No runs available for GPU {gpu}\n"
+
+            max_len = 0
+            min_val = float("inf")
+            for run in runs:
+                max_len = max(max_len, len(run["runner"]))
+                min_val = min(min_val, run["score"])
+
+            digits = max(0, 1 - math.floor(math.log10(min_val)))
+
+            message += "```\n"
+            for run in runs:
+                message += f" {run['runner']:<{max_len}}: {run['score']:.{digits}f}\n"
+            message += "```\n\n"
+
+        return message
+
+    async def get_milestone_result(
+        self,
+        leaderboard_name: str,
+        milestone_name: str,
+        gpu: Optional[str] = None,
+    ) -> list[str]:
+        with self.db as db:
+            lb = db.get_leaderboard(leaderboard_name)
+            milestones = db.get_leaderboard_milestones(leaderboard_id=lb["id"])
+
+        selected = None
+        for milestone in milestones:
+            if milestone["name"].lower() == milestone_name.lower():
+                selected = milestone
+                break
+
+        if selected is None:
+            raise KernelBotError(
+                f"Could not find milestone `{milestone_name}` for leaderboard `{leaderboard_name}`"
+            )
+
+        with self.db as db:
+            runs = db.get_runs_generic(milestone_id=selected["id"])
+
+        runs = [r for r in runs if r["mode"] == SubmissionMode.LEADERBOARD.value]
+
+        if len(runs) == 0:
+            return [
+                f"⚠️ No runs available for milestone `{milestone_name}`. Maybe they haven't been triggered yet?"
+            ]
+        if gpu is not None:
+            runs = [r for r in runs if r["runner"] == gpu]
+
+        if len(runs) == 0:
+            return [f"⚠️ No runs available for GPU {gpu}"]
+
+        messages = []
+        for run in runs:
+            log = make_benchmark_log(run_item_to_run_result(run))
+            messages.append(f"{milestone_name} on {run['runner']}\n```{log}```\n")
+
+        return messages
