@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import TYPE_CHECKING, List, Optional
@@ -22,8 +23,9 @@ from libkernelbot.leaderboard_db import (
     RunItem,
     SubmissionItem,
 )
+from libkernelbot.report import make_benchmark_log
 from libkernelbot.submission import SubmissionRequest, prepare_submission
-from libkernelbot.utils import format_time, setup_logging
+from libkernelbot.utils import format_time, run_item_to_run_result, setup_logging
 
 if TYPE_CHECKING:
     from kernelbot.main import ClusterBot
@@ -308,6 +310,13 @@ class LeaderboardCog(commands.Cog):
             name="template", description="Get a starter template file for a task"
         )(self.get_task_template)
 
+        self.get_task_milestones = bot.leaderboard_group.command(
+            name="milestones", description="Show milestone performances"
+        )(self.get_task_milestones)
+        self.show_milestone_result = bot.leaderboard_group.command(
+            name="milestone-result", description="Show detailed results of a milestone run"
+        )(self.show_milestone_result)
+
         self.get_submission_by_id = bot.leaderboard_group.command(
             name="get-submission", description="Retrieve one of your past submissions"
         )(self.get_submission_by_id)
@@ -587,6 +596,135 @@ class LeaderboardCog(commands.Cog):
                 ephemeral=True,
             )
             return
+
+    @app_commands.describe(
+        leaderboard_name="Name of Leaderboard",
+        gpu="Select GPU. Leave empty for all GPUs.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def get_task_milestones(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: Optional[str] = None,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        message = f"# Milestones for `{leaderboard_name}`\n"
+
+        try:
+            with self.bot.leaderboard_db as db:
+                lb = db.get_leaderboard(leaderboard_name)
+                milestones = db.get_leaderboard_milestones(leaderboard_id=lb["id"])
+
+            if len(milestones) == 0:
+                await send_discord_message(
+                    interaction,
+                    f"Leaderboard `{leaderboard_name}` does not provide any milestones",
+                    ephemeral=True,
+                )
+                return
+
+            for milestone in milestones:
+                message += f"## {milestone['name']}\n"
+                message += milestone["description"] + "\n"
+                with self.bot.leaderboard_db as db:
+                    runs = db.get_runs_generic(milestone_id=milestone["id"])
+
+                runs = [r for r in runs if r["mode"] == SubmissionMode.LEADERBOARD.value]
+
+                if len(runs) == 0:
+                    message += "⚠️ No runs available. Maybe they haven't been triggered yet?\n"
+
+                if gpu is not None:
+                    runs = [r for r in runs if r["runner"] == gpu]
+                if len(runs) == 0:
+                    message += f"⚠️ No runs available for GPU {gpu}\n"
+
+                max_len = 0
+                min_val = float("inf")
+                for run in runs:
+                    max_len = max(max_len, len(run["runner"]))
+                    min_val = min(min_val, run["score"])
+
+                digits = max(0, 1 - math.floor(math.log10(min_val)))
+
+                message += "```\n"
+                for run in runs:
+                    message += f" {run['runner']:<{max_len}}: {run['score']:.{digits}f}\n"
+                message += "```\n\n"
+
+            await send_discord_message(
+                interaction,
+                message,
+                ephemeral=True,
+            )
+
+        except Exception as E:
+            logger.exception("Error fetching milestones for %s", leaderboard_name, exc_info=E)
+            await send_discord_message(
+                interaction,
+                f"Could not fetch milestones for leaderboard `{leaderboard_name}`",
+                ephemeral=True,
+            )
+            return
+
+    @app_commands.describe(
+        leaderboard_name="Name of Leaderboard",
+        milestone_name="Name of Milestone",
+        gpu="Select GPU. Leave empty for all GPUs.",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def show_milestone_result(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        milestone_name: str,
+        gpu: Optional[str] = None,
+    ):
+        await interaction.response.defer(ephemeral=True)
+        with self.bot.leaderboard_db as db:
+            lb = db.get_leaderboard(leaderboard_name)
+            milestones = db.get_leaderboard_milestones(leaderboard_id=lb["id"])
+
+        selected = None
+        for milestone in milestones:
+            if milestone["name"].lower() == milestone_name.lower():
+                selected = milestone
+                break
+
+        if selected is None:
+            await send_discord_message(
+                interaction,
+                f"Could not find milestone `{milestone_name}` for leaderboard `{leaderboard_name}`",
+                ephemeral=True,
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            runs = db.get_runs_generic(milestone_id=selected["id"])
+
+        runs = [r for r in runs if r["mode"] == SubmissionMode.LEADERBOARD.value]
+
+        if len(runs) == 0:
+            await send_discord_message(
+                interaction,
+                f"⚠️ No runs available for milestone `{milestone_name}`."
+                "Maybe they haven't been triggered yet?",
+                ephemeral=True,
+            )
+            return
+
+        for run in runs:
+            log = make_benchmark_log(run_item_to_run_result(run))
+            message = f"{milestone_name} on {run['runner']}\n```{log}```\n"
+            await send_discord_message(
+                interaction,
+                message,
+                ephemeral=True,
+            )
 
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)

@@ -2,6 +2,9 @@ import logging
 import subprocess
 from typing import Any, Optional
 
+from libkernelbot.db_types import RunItem
+from libkernelbot.run_eval import RunResult
+
 
 def setup_logging(name: Optional[str] = None):
     """Configure and setup logging for the application"""
@@ -144,3 +147,7 @@ def limit_length(text: str, maxlen: int):
         return text[: maxlen - 6] + " [...]"
     else:
         return text
+
+
+def run_item_to_run_result(item: RunItem) -> RunResult:
+    return RunResult(**item["meta"], result=item["result"], passed=item["passed"])
