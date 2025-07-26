@@ -494,8 +494,8 @@ class LeaderboardDB:
             }
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.runs (submission_id, milestone_id, start_time, end_time, mode,
-                secret, runner, score, passed, compilation, meta, result, system_info
+                INSERT INTO leaderboard.runs (submission_id, milestone_id, start_time, end_time,
+                mode, secret, runner, score, passed, compilation, meta, result, system_info
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,

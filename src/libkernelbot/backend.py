@@ -299,7 +299,8 @@ class KernelBackend:
 
         if len(runs) == 0:
             return [
-                f"⚠️ No runs available for milestone `{milestone_name}`. Maybe they haven't been triggered yet?"
+                f"⚠️ No runs available for milestone `{milestone_name}`. "
+                f"Maybe they haven't been triggered yet?"
             ]
         if gpu is not None:
             runs = [r for r in runs if r["runner"] == gpu]
@@ -313,3 +314,47 @@ class KernelBackend:
             messages.append(f"{milestone_name} on {run['runner']}\n```{log}```\n")
 
         return messages
+
+    async def submit_milestone_run(self, milestone, task, gpu, reporter):
+        result = await self.submit_leaderboard(
+            -1,
+            milestone["code"],
+            "milestone.py",
+            gpu,
+            reporter,
+            task,
+            SubmissionMode.LEADERBOARD,
+            None,
+        )
+
+        # we do not allow milestone runs to fail
+        if not result.success:
+            logger.error(f"Milestone run failed: {result}")
+            raise KernelBotError(f"Milestone run failed: {result.error}")
+
+        for key, value in result.runs.items():
+            if not value.run.success or not value.run.passed:
+                logger.error(f"Milestone run {key} failed: {value}")
+                raise KernelBotError(f"Milestone run {key} failed.")
+
+        with self.db as db:
+            for key, value in result.runs.items():
+                # Only store LB runs in the database;
+                # we still want to run test/benchmark to validate
+                # that the code actually passes, but for all other
+                # purposes we only need the leaderboard run
+                if key != SubmissionMode.LEADERBOARD.value:
+                    continue
+
+                db.create_submission_run(
+                    milestone=milestone["id"],
+                    start=value.start,
+                    end=value.end,
+                    mode=key,
+                    runner=gpu.name,
+                    score=compute_score(result, task, -1),
+                    secret=False,
+                    compilation=value.compilation,
+                    result=value.run,
+                    system=result.system,
+                )

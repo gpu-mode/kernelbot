@@ -20,10 +20,9 @@ from kernelbot.discord_utils import (
 )
 from kernelbot.env import env
 from kernelbot.ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
-from libkernelbot.consts import GitHubGPU, ModalGPU, SubmissionMode, get_gpu_by_name
+from libkernelbot.consts import GitHubGPU, ModalGPU, get_gpu_by_name
 from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
-from libkernelbot.submission import compute_score
-from libkernelbot.task import LeaderboardDefinition, make_task_definition
+from libkernelbot.task import LeaderboardDefinition, LeaderboardTask, make_task_definition
 from libkernelbot.utils import (
     KernelBotError,
     setup_logging,
@@ -401,7 +400,7 @@ class AdminCog(commands.Cog):
             leaderboard_item = db.get_leaderboard(leaderboard_name)
             milestones = db.get_leaderboard_milestones(leaderboard_item["id"])
 
-        task: "LeaderboardTask" = leaderboard_item["task"]
+        task: LeaderboardTask = leaderboard_item["task"]
 
         # ok, submit all that are missing
         submit_tasks = []
@@ -409,50 +408,6 @@ class AdminCog(commands.Cog):
 
         reporters = MultiProgressReporterDiscord(interaction)
         await reporters.show(f"Milestone runs for {leaderboard_name}")
-
-        async def submit_milestone(milestone, gpu, reporter):
-            result = await backend.submit_leaderboard(
-                -1,
-                milestone["code"],
-                "milestone.py",
-                gpu,
-                reporter,
-                task,
-                SubmissionMode.LEADERBOARD,
-                None,
-            )
-
-            # we do not allow milestone runs to fail
-            if not result.success:
-                logger.error(f"Milestone run failed: {result}")
-                raise KernelBotError(f"Milestone run failed: {result.error}")
-
-            for key, value in result.runs.items():
-                if not value.run.success or not value.run.passed:
-                    logger.error(f"Milestone run {key} failed: {value}")
-                    raise KernelBotError(f"Milestone run {key} failed.")
-
-            with backend.db as db:
-                for key, value in result.runs.items():
-                    # Only store LB runs in the database;
-                    # we still want to run test/benchmark to validate
-                    # that the code actually passes, but for all other
-                    # purposes we only need the leaderboard run
-                    if key != SubmissionMode.LEADERBOARD.value:
-                        continue
-
-                    db.create_submission_run(
-                        milestone=milestone["id"],
-                        start=value.start,
-                        end=value.end,
-                        mode=key,
-                        runner=gpu.name,
-                        score=compute_score(result, task, -1),
-                        secret=False,
-                        compilation=value.compilation,
-                        result=value.run,
-                        system=result.system,
-                    )
 
         if gpus is None:
             gpus = leaderboard_item["gpu_types"]
@@ -479,8 +434,9 @@ class AdminCog(commands.Cog):
                     continue
 
                 submit_tasks.append(
-                    submit_milestone(
+                    backend.submit_milestone_run(
                         milestone,
+                        task,
                         get_gpu_by_name(gpu),
                         reporters.add_run(f"Milestone {milestone['name']} on {gpu}"),
                     )

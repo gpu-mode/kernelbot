@@ -11,7 +11,8 @@ steps = [
         """
          CREATE TABLE IF NOT EXISTS leaderboard.milestones (
              id SERIAL PRIMARY KEY,
-             leaderboard_id INTEGER NOT NULL REFERENCES leaderboard.leaderboard(id) ON DELETE CASCADE,
+             leaderboard_id INTEGER NOT NULL REFERENCES leaderboard.leaderboard(id)
+                ON DELETE CASCADE,
              name TEXT NOT NULL,
              code TEXT NOT NULL,
              description TEXT,
