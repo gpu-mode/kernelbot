@@ -381,6 +381,7 @@ class AdminCog(commands.Cog):
                         milestone.name,
                         milestone.code,
                         description=milestone.description,
+                        exclude_gpus=milestone.exclude_gpus,
                     )
             except KernelBotError as e:
                 await send_discord_message(
@@ -457,10 +458,19 @@ class AdminCog(commands.Cog):
                 if gpu in [r["runner"] for r in existing_runs]:
                     await send_discord_message(
                         interaction,
-                        f"Skipping {gpu}; milestone run already exists.",
+                        f"Skipping {gpu} for {milestone['name']}; milestone run already exists.",
                         ephemeral=True,
                     )
                     continue
+
+                if gpu in milestone["exclude_gpus"]:
+                    await send_discord_message(
+                        interaction,
+                        f"Skipping {gpu} for {milestone['name']}; is excluded.",
+                        ephemeral=True,
+                    )
+                    continue
+
                 submit_tasks.append(
                     submit_milestone(
                         milestone,

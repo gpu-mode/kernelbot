@@ -62,6 +62,7 @@ class MilestoneItem(TypedDict):
     code: str
     description: str
     created_at: datetime.datetime
+    exclude_gpus: list[str]
 
 
 __all__ = [LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem, MilestoneItem]

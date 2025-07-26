@@ -247,18 +247,23 @@ class LeaderboardDB:
         name: str,
         code: str,
         description: str = None,
+        exclude_gpus: list[str] = None,
     ) -> int:
         """Create a new milestone for a leaderboard"""
+        if exclude_gpus is None:
+            exclude = ""
+        else:
+            exclude = str.join(";", exclude_gpus)
         try:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.milestones (
-                    leaderboard_id, name, code, description
+                    leaderboard_id, name, code, description, exclude_gpus
                 )
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (leaderboard_id, name, code, description),
+                (leaderboard_id, name, code, description, exclude),
             )
             milestone_id = self.cursor.fetchone()[0]
             self.connection.commit()
@@ -272,7 +277,7 @@ class LeaderboardDB:
         """Get all milestones for a leaderboard"""
         self.cursor.execute(
             """
-            SELECT id, name, code, description, created_at
+            SELECT id, name, code, description, created_at, exclude_gpus
             FROM leaderboard.milestones
             WHERE leaderboard_id = %s
             ORDER BY created_at
@@ -286,6 +291,7 @@ class LeaderboardDB:
                 "code": row[2],
                 "description": row[3],
                 "created_at": row[4],
+                "exclude_gpus": str.split(row[5], ";"),
             }
             for row in self.cursor.fetchall()
         ]

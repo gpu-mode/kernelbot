@@ -29,6 +29,7 @@ class MilestoneData:
     name: str
     code: str
     description: str = ""
+    exclude_gpus: list[str] = dataclasses.field(default_factory=list)
 
 
 TestCaseType = Dict[str, Union[int, str]]

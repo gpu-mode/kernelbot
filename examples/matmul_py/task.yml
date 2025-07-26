@@ -9,9 +9,15 @@ files:
 
 milestones:
   - {
-      "name": "pytorch reference",
-      "source": "submission.py",
-      "description": "PyTorch reference implementation as a performance baseline for matmul"
+      name: "pytorch",
+      source: "submission.py",
+      description: "PyTorch reference implementation as a performance baseline for matmul"
+    }
+  - {
+      name: "triton",
+      source: "triton_ref.py",
+      description: "Triton reference implementation as a performance baseline for matmul",
+      exclude_gpus: ['T4']
     }
 
 lang: "py"
