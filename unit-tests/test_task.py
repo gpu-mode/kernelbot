@@ -10,6 +10,7 @@ from libkernelbot.task import (
     Language,
     LeaderboardDefinition,
     LeaderboardTask,
+    MilestoneData,
     PythonTaskData,
     RankCriterion,
     build_task_config,
@@ -58,7 +59,6 @@ def test_from_dict_python_task():
 
 def test_from_dict_cuda_task():
     """Test creating LeaderboardTask from dict with CUDA config"""
-    """Test creating LeaderboardTask from dict with CUDA config"""
     data = {
         "lang": "cu",
         "files": {"kernel.cu": "__global__ void test(){}"},
@@ -93,7 +93,7 @@ def test_type_mismatch():
         )
 
 
-def test_to_dict(leaderboard_task):
+def test_to_dict(leaderboard_task: LeaderboardTask):
     """Test converting LeaderboardTask to dict"""
     result = leaderboard_task.to_dict()
 
@@ -114,7 +114,7 @@ def test_to_dict(leaderboard_task):
     ]
 
 
-def test_serialization_roundtrip(leaderboard_task):
+def test_serialization_roundtrip(leaderboard_task: LeaderboardTask):
     """Test to_str and from_str work together"""
     json_str = leaderboard_task.to_str()
     reconstructed = LeaderboardTask.from_str(json_str)
@@ -122,7 +122,7 @@ def test_serialization_roundtrip(leaderboard_task):
     assert reconstructed == leaderboard_task
 
 
-def test_build_task_config_python(leaderboard_task):
+def test_build_task_config_python(leaderboard_task: LeaderboardTask):
     """Test build_task_config with Python task and submission content."""
     submission_content = "print('Hello World')"
     arch = "sm_80"
@@ -235,6 +235,11 @@ benchmarks:
 templates:
   Python: "template.py"
   CUDA: "template.cu"
+milestones:
+  - name: "Milestone"
+    source: "milestone.py"
+    description: "This milestone is a test milestone"
+    exclude_gpus: ["A100"]
 """
 
 
@@ -245,13 +250,14 @@ def task_directory(tmp_path):
     Path.write_text(tmp_path / "kernel.py", "def kernel(): pass")
     Path.write_text(tmp_path / "template.py", "# Python template")
     Path.write_text(tmp_path / "template.cu", "// CUDA template")
+    Path.write_text(tmp_path / "milestone.py", "def milestone(): pass")
 
     # Create task.yml
     Path.write_text(tmp_path / "task.yml", TASK_YAML)
     return tmp_path
 
 
-def test_make_task_definition(task_directory):
+def test_make_task_definition(task_directory: Path):
     """Test make_task_definition with a complete YAML structure"""
 
     # Test the function
@@ -261,6 +267,14 @@ def test_make_task_definition(task_directory):
     assert isinstance(result, LeaderboardDefinition)
     assert result.description == "Test task description"
     assert result.templates == {"Python": "# Python template", "CUDA": "// CUDA template"}
+    assert result.milestones == [
+        MilestoneData(
+            name="Milestone",
+            code="def milestone(): pass",
+            description="This milestone is a test milestone",
+            exclude_gpus=["A100"],
+        )
+    ]
 
     # Verify the task
     task = result.task

@@ -1,8 +1,11 @@
 import copy
 import dataclasses
 import datetime
+import decimal
 import subprocess
 import time
+from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from test_report import sample_compile_result, sample_run_result, sample_system_info
@@ -16,8 +19,14 @@ DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
 
 @pytest.fixture(scope="module")
 def docker_compose():
+    tgt_path = Path.cwd()
+    if tgt_path.name == "unit-tests":
+        tgt_path = tgt_path.parent
+
     """Start a test database and run migrations"""
-    subprocess.check_call(["docker", "compose", "-f", "docker-compose.test.yml", "up", "-d"])
+    subprocess.check_call(
+        ["docker", "compose", "-f", "docker-compose.test.yml", "up", "-d"], cwd=tgt_path
+    )
 
     try:
         # Wait for migrations to finish
@@ -26,6 +35,7 @@ def docker_compose():
                 ["docker", "compose", "-f", "docker-compose.test.yml", "ps", "-q", "migrate-test"],
                 capture_output=True,
                 text=True,
+                cwd=tgt_path,
             )
 
             if not result.stdout.strip():  # Container no longer exists
@@ -37,6 +47,7 @@ def docker_compose():
             ["docker", "compose", "-f", "docker-compose.test.yml", "logs", "migrate-test"],
             capture_output=True,
             text=True,
+            cwd=tgt_path,
         )
 
         if "error" in logs.stdout.lower():
@@ -52,7 +63,9 @@ def docker_compose():
             ssl_mode="disable",
         )
     finally:
-        subprocess.run(["docker", "compose", "-f", "docker-compose.test.yml", "down", "-v"])
+        subprocess.run(
+            ["docker", "compose", "-f", "docker-compose.test.yml", "down", "-v"], cwd=tgt_path
+        )
 
 
 def _nuke_contents(db):
@@ -114,7 +127,7 @@ def _create_submission_run(
 ):
     """Creates a submission run with suitable default values"""
     db.create_submission_run(
-        submission,
+        submission=submission,
         start=start or datetime.datetime.now(tz=datetime.timezone.utc),
         end=end
         or (datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=10)),
@@ -268,9 +281,9 @@ def test_leaderboard_submission_basic(database, submit_leaderboard):
     with database as db:
         end_time = submit_time + datetime.timedelta(seconds=10)
         db.create_submission_run(
-            sub_id,
-            submit_time,
-            end_time,
+            submission=sub_id,
+            start=submit_time,
+            end=end_time,
             mode="test",
             secret=False,
             runner="A100",
@@ -282,9 +295,9 @@ def test_leaderboard_submission_basic(database, submit_leaderboard):
         # run ends after the contest deadline; this is valid
         end_time_2 = submit_time + datetime.timedelta(days=1, hours=1)
         db.create_submission_run(
-            sub_id,
-            submit_time,
-            end_time_2,
+            submission=sub_id,
+            start=submit_time,
+            end=end_time_2,
             mode="leaderboard",
             secret=True,
             runner="H100",
@@ -575,6 +588,107 @@ def test_leaderboard_update(database, task_directory):
             "CUDA": "// new CUDA template",
             "Python": "# Python template",
         }
+
+
+def test_leaderboard_milestones(database, submit_leaderboard):
+    with database as db:
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        milestones = db.get_leaderboard_milestones(lb_id)
+        assert milestones == []
+
+        # at this point, created_at is filled in at the DB level,
+        # so we cannot set a fixed value for it in the tests below
+        db.create_milestone(lb_id, "Milestone", "sample code", "Test milestone")
+        db.create_milestone(
+            lb_id, "Milestone2", "other code", "Second milestone", exclude_gpus=["T4"]
+        )
+        milestones = db.get_leaderboard_milestones(lb_id)
+        assert milestones == [
+            {
+                "code": "sample code",
+                "created_at": ANY,
+                "description": "Test milestone",
+                "exclude_gpus": [""],
+                "id": 1,
+                "name": "Milestone",
+            },
+            {
+                "code": "other code",
+                "created_at": ANY,
+                "description": "Second milestone",
+                "exclude_gpus": ["T4"],
+                "id": 2,
+                "name": "Milestone2",
+            },
+        ]
+
+        db.delete_milestones(lb_id)
+        milestones = db.get_leaderboard_milestones(lb_id)
+        assert milestones == []
+
+
+def test_leaderboard_milestone_runs(database, submit_leaderboard):
+    with database as db:
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        ms_id = db.create_milestone(lb_id, "Milestone", "sample code", "Test milestone")
+
+        start = datetime.datetime.now(tz=datetime.timezone.utc)
+        end = start + datetime.timedelta(seconds=10)
+        db.create_submission_run(
+            milestone=ms_id,
+            start=start,
+            end=end,
+            mode="leaderboard",
+            secret=False,
+            runner="A100",
+            score=5,
+            compilation=None,
+            result=sample_run_result(),
+            system=sample_system_info(),
+        )
+
+        runs = db.get_runs_generic(milestone_id=ms_id)
+        assert runs == [
+            {
+                "compilation": None,
+                "start_time": start,
+                "end_time": end,
+                "meta": {
+                    "command": "./test",
+                    "duration": 1.5,
+                    "exit_code": 0,
+                    "stderr": "",
+                    "stdout": "All tests passed",
+                    "success": True,
+                },
+                "mode": "leaderboard",
+                "passed": True,
+                "result": {
+                    "test-count": "3",
+                    "test.0.message": "Addition works correctly",
+                    "test.0.spec": "Test addition",
+                    "test.0.status": "pass",
+                    "test.1.spec": "Test multiplication",
+                    "test.1.status": "pass",
+                    "test.2.error": "Division by zero",
+                    "test.2.spec": "Test division",
+                    "test.2.status": "fail",
+                },
+                "runner": "A100",
+                "score": decimal.Decimal("5"),
+                "secret": False,
+                "system": {
+                    "cpu": "Intel i9-12900K",
+                    "gpu": "NVIDIA RTX 4090",
+                    "platform": "Linux-5.15.0",
+                    "torch": "2.0.1+cu118",
+                },
+            }
+        ]
+
+        db.delete_milestone_runs(lb_id)
+        runs = db.get_runs_generic(milestone_id=ms_id)
+        assert runs == []
 
 
 def test_generate_stats(database, submit_leaderboard):
