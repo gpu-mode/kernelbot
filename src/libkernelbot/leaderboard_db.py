@@ -18,17 +18,8 @@ logger = setup_logging(__name__)
 
 
 class LeaderboardDB:
-    def __init__(
-        self, host: str, database: str, user: str, password: str, port: str, url: str, ssl_mode: str
-    ):
+    def __init__(self, url: str, ssl_mode: str):
         """Initialize database connection parameters"""
-        self.connection_params = {
-            "host": host,
-            "database": database,
-            "user": user,
-            "password": password,
-            "port": port,
-        }
         self.url = url
         self.ssl_mode = ssl_mode
         self.connection: Optional[psycopg2.extensions.connection] = None
@@ -39,11 +30,7 @@ class LeaderboardDB:
     def connect(self) -> bool:
         """Establish connection to the database"""
         try:
-            self.connection = (
-                psycopg2.connect(self.url, sslmode=self.ssl_mode)
-                if self.url
-                else psycopg2.connect(**self.connection_params)
-            )
+            self.connection = psycopg2.connect(self.url, sslmode=self.ssl_mode)
             self.cursor = self.connection.cursor()
             return True
         except psycopg2.Error as e:

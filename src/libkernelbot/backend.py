@@ -29,13 +29,8 @@ class KernelBackend:
     ):
         self.debug_mode = debug_mode
         self.db = LeaderboardDB(
-            env.POSTGRES_HOST,
-            env.POSTGRES_DATABASE,
-            env.POSTGRES_USER,
-            env.POSTGRES_PASSWORD,
-            env.POSTGRES_PORT,
             url=env.DATABASE_URL,
-            ssl_mode="require" if not env.DISABLE_SSL else "disable",
+            ssl_mode="require" if not getattr(env, "DISABLE_SSL", "") else "disable",
         )
 
         try:

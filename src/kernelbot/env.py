@@ -45,10 +45,5 @@ env.PROBLEMS_REPO = os.getenv("PROBLEMS_REPO")
 env.PROBLEM_DEV_DIR = os.getenv("PROBLEM_DEV_DIR", "examples")
 
 # PostgreSQL-specific constants
-env.POSTGRES_HOST = os.getenv("POSTGRES_HOST")
-env.POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
-env.POSTGRES_USER = os.getenv("POSTGRES_USER")
-env.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-env.POSTGRES_PORT = os.getenv("POSTGRES_PORT")
 env.DATABASE_URL = os.getenv("DATABASE_URL")
 env.DISABLE_SSL = os.getenv("DISABLE_SSL")
