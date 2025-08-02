@@ -1,6 +1,5 @@
 import copy
 import json
-from pathlib import Path
 
 import pytest
 
@@ -212,43 +211,6 @@ def test_build_task_config_cuda():
     }
 
     assert result == expected
-
-
-TASK_YAML = """
-lang: py
-description: "Test task description"
-ranking_by: geom
-test_timeout: 120
-files:
-  - name: "kernel.py"
-    source: "kernel.py"
-  - name: "submission.py"
-    source: "@SUBMISSION@"
-config:
-  main: "kernel.py"
-tests:
-  - input_size: 1000
-    dtype: "float32"
-benchmarks:
-  - input_size: 10000
-    dtype: "float32"
-templates:
-  Python: "template.py"
-  CUDA: "template.cu"
-"""
-
-
-@pytest.fixture
-def task_directory(tmp_path):
-    """Create a temporary directory structure for task definition testing"""
-    # Create source files
-    Path.write_text(tmp_path / "kernel.py", "def kernel(): pass")
-    Path.write_text(tmp_path / "template.py", "# Python template")
-    Path.write_text(tmp_path / "template.cu", "// CUDA template")
-
-    # Create task.yml
-    Path.write_text(tmp_path / "task.yml", TASK_YAML)
-    return tmp_path
 
 
 def test_make_task_definition(task_directory):

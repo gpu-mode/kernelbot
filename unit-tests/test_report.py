@@ -38,16 +38,9 @@ def sample_compile_result() -> CompileResult:
     )
 
 
-def sample_run_result() -> RunResult:
-    return RunResult(
-        success=True,
-        passed=True,
-        command="./test",
-        exit_code=0,
-        duration=1.5,
-        stdout="All tests passed",
-        stderr="",
-        result={
+def sample_run_result(mode="test") -> RunResult:
+    if mode == "test":
+        result = {
             "test-count": "3",
             "test.0.status": "pass",
             "test.0.spec": "Test addition",
@@ -57,16 +50,38 @@ def sample_run_result() -> RunResult:
             "test.2.status": "fail",
             "test.2.spec": "Test division",
             "test.2.error": "Division by zero",
-        },
+        }
+    elif mode == "benchmark":
+        result = {
+            "benchmark-count": "1",
+            "benchmark.0.status": "pass",
+            "benchmark.0.spec": "Matrix multiplication",
+            "benchmark.0.mean": "1.5",
+            "benchmark.0.err": "0.1",
+            "benchmark.0.best": "1.3",
+            "benchmark.0.worst": "1.8",
+        }
+    else:
+        assert False, f"Invalid mode: {mode}"
+
+    return RunResult(
+        success=True,
+        passed=True,
+        command="./test",
+        exit_code=0,
+        duration=1.5,
+        stdout="log stdout",
+        stderr="",
+        result=result,
     )
 
 
-def create_eval_result() -> EvalResult:
+def create_eval_result(mode="test") -> EvalResult:
     return EvalResult(
         start=datetime.datetime.now() - datetime.timedelta(minutes=5),
         end=datetime.datetime.now(),
         compilation=sample_compile_result(),
-        run=sample_run_result(),
+        run=sample_run_result(mode),
     )
 
 
@@ -618,7 +633,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "./test```\n"
             "**timed out** after 10.00 seconds."
         ),
-        Log(header="Program stdout", content="All tests passed"),
+        Log(header="Program stdout", content="log stdout"),
     ]
 
 

@@ -1,76 +1,12 @@
 import copy
 import dataclasses
 import datetime
-import subprocess
-import time
 
 import pytest
 from test_report import sample_compile_result, sample_run_result, sample_system_info
-from test_task import task_directory
 
 from libkernelbot import leaderboard_db
 from libkernelbot.utils import KernelBotError
-
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
-
-
-@pytest.fixture(scope="module")
-def docker_compose():
-    """Start a test database and run migrations"""
-    subprocess.check_call(["docker", "compose", "-f", "docker-compose.test.yml", "up", "-d"])
-
-    try:
-        # Wait for migrations to finish
-        while True:
-            result = subprocess.run(
-                ["docker", "compose", "-f", "docker-compose.test.yml", "ps", "-q", "migrate-test"],
-                capture_output=True,
-                text=True,
-            )
-
-            if not result.stdout.strip():  # Container no longer exists
-                break
-            time.sleep(1)
-
-        # Check if migrations succeeded
-        logs = subprocess.run(
-            ["docker", "compose", "-f", "docker-compose.test.yml", "logs", "migrate-test"],
-            capture_output=True,
-            text=True,
-        )
-
-        if "error" in logs.stdout.lower():
-            raise Exception(f"Migrations failed: {logs.stdout}")
-
-        yield leaderboard_db.LeaderboardDB(
-            host="",
-            database="",
-            port="",
-            user="",
-            password="",
-            url=DATABASE_URL,
-            ssl_mode="disable",
-        )
-    finally:
-        subprocess.run(["docker", "compose", "-f", "docker-compose.test.yml", "down", "-v"])
-
-
-def _nuke_contents(db):
-    db.cursor.execute(
-        "TRUNCATE leaderboard.code_files, leaderboard.submission, leaderboard.runs, "
-        "leaderboard.leaderboard, leaderboard.user_info, leaderboard.templates, "
-        "leaderboard.gpu_type RESTART IDENTITY CASCADE"
-    )
-    db.connection.commit()
-
-
-@pytest.fixture()
-def database(docker_compose):
-    with docker_compose as db:
-        _nuke_contents(db)
-    yield docker_compose
-    with docker_compose as db:
-        _nuke_contents(db)
 
 
 def _submit_leaderboard(database, task_directory):
@@ -628,7 +564,3 @@ def test_generate_stats(database, submit_leaderboard):
             "sub_waiting": 0,
             "total_runtime.A100": datetime.timedelta(seconds=35),
         }
-
-
-# this is her just to make ruff leave pytest fixtures alone
-__all__ = [task_directory]
