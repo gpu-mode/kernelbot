@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from test_leaderboard_db import _submit_leaderboard
@@ -17,20 +17,35 @@ class MockProgressReporter(report.RunProgressReporter):
         self.display_report = AsyncMock()
 
 
+class MockMultReporter(report.MultiProgressReporter):
+    def __init__(self):
+        super().__init__()
+        self.show = AsyncMock()
+        self.make_message = MagicMock()
+        self.reporter_list: list[MockProgressReporter] = []
+
+    def add_run(self, title: str) -> "report.RunProgressReporter":
+        self.reporter_list.append(MockProgressReporter(title))
+        return self.reporter_list[-1]
+
+
+def _mock_launcher(bot: backend.KernelBackend, runs: dict, name="launcher"):
+    mock_launcher = MagicMock(spec=backend.Launcher)
+    mock_launcher.name = name
+    mock_launcher.gpus = [consts.ModalGPU.A100]
+    mock_launcher.run_submission = AsyncMock(
+        return_value=FullResult(success=True, error="", system=sample_system_info(), runs=runs)
+    )
+    bot.register_launcher(mock_launcher)
+    return mock_launcher
+
+
 @pytest.mark.asyncio
 async def test_handle_submission(bot: backend.KernelBackend, task_directory):
     _submit_leaderboard(bot.db, task_directory)
     with bot.db as db:
         task = db.get_leaderboard("submit-leaderboard")["task"]
-    mock_launcher = MagicMock(spec=backend.Launcher)
-    mock_launcher.name = "launcher"
-    mock_launcher.gpus = [consts.ModalGPU.A100]
-    mock_launcher.run_submission = AsyncMock(
-        return_value=FullResult(
-            success=True, error="", system=sample_system_info(), runs={"test": create_eval_result()}
-        )
-    )
-    bot.register_launcher(mock_launcher)
+    mock_launcher = _mock_launcher(bot, {"test": create_eval_result()})
 
     reporter = MockProgressReporter("report")
 
@@ -110,16 +125,8 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
             "pass",
             submit_time,
         )
-    mock_launcher = MagicMock(spec=backend.Launcher)
-    mock_launcher.name = "launcher"
-    mock_launcher.gpus = [consts.ModalGPU.A100]
     eval_result = create_eval_result("benchmark")
-    mock_launcher.run_submission = AsyncMock(
-        return_value=FullResult(
-            success=True, error="", system=sample_system_info(), runs={"leaderboard": eval_result}
-        )
-    )
-    bot.register_launcher(mock_launcher)
+    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
 
     reporter = MockProgressReporter("report")
 
@@ -207,4 +214,149 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
             "submission_id": 1,
             "submission_time": submit_time,
             "user_id": "34",
+        }
+
+
+@pytest.mark.asyncio
+async def test_submit_full(bot: backend.KernelBackend, task_directory):
+    _submit_leaderboard(bot.db, task_directory)
+    with bot.db as db:
+        task = db.get_leaderboard("submit-leaderboard")["task"]
+
+    eval_result = create_eval_result("benchmark")
+    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
+
+    from libkernelbot.submission import ProcessedSubmissionRequest
+
+    req = ProcessedSubmissionRequest(
+        code="pass",
+        file_name="submission.py",
+        user_id=5,
+        user_name="user",
+        gpus=["A100"],
+        leaderboard="submit-leaderboard",
+        task=task,
+        secret_seed=42,
+        task_gpus=["A100", "H100"],
+    )
+    reporter = MockMultReporter()
+    s_id, results = await bot.submit_full(
+        req, mode=consts.SubmissionMode.LEADERBOARD, reporter=reporter
+    )
+
+    expected_result = mock_launcher.run_submission.return_value
+    assert len(results) == 2
+    assert results == [expected_result, expected_result]
+
+    r1, r2 = reporter.reporter_list
+    assert r1.lines == [
+        "> ✅ Compilation successful",
+        "> ❌ Tests missing",
+        "> ❌ Benchmarks missing",
+        "> ✅ Leaderboard run successful",
+    ]
+    assert r2.lines == [
+        "> ✅ Compilation successful",
+        "> ❌ Tests missing",
+        "> ❌ Benchmarks missing",
+        "> ✅ Leaderboard run successful",
+    ]
+    assert r1.title == "A100 on Modal ✅ success"
+    assert r2.title == "A100 on Modal (secret) ✅ success"
+
+    with bot.db as db:
+        db_results = db.get_submission_by_id(s_id)
+        assert db_results == {
+            "code": "pass",
+            "done": True,
+            "file_name": "submission.py",
+            "leaderboard_id": 1,
+            "leaderboard_name": "submit-leaderboard",
+            "runs": [
+                {
+                    "compilation": {
+                        "command": "nvcc -o test test.cu",
+                        "exit_code": 0,
+                        "nvcc_found": True,
+                        "nvcc_version": "11.8",
+                        "stderr": "",
+                        "stdout": "",
+                        "success": True,
+                    },
+                    "end_time": ANY,
+                    "meta": {
+                        "command": "./test",
+                        "duration": 1.5,
+                        "exit_code": 0,
+                        "stderr": "",
+                        "stdout": "log stdout",
+                        "success": True,
+                    },
+                    "mode": "leaderboard",
+                    "passed": True,
+                    "result": {
+                        "benchmark-count": "1",
+                        "benchmark.0.best": "1.3",
+                        "benchmark.0.err": "0.1",
+                        "benchmark.0.mean": "1.5",
+                        "benchmark.0.spec": "Matrix multiplication",
+                        "benchmark.0.status": "pass",
+                        "benchmark.0.worst": "1.8",
+                    },
+                    "runner": "A100",
+                    "score": Decimal("1.5E-9"),
+                    "secret": False,
+                    "start_time": ANY,
+                    "system": {
+                        "cpu": "Intel i9-12900K",
+                        "gpu": "NVIDIA RTX 4090",
+                        "platform": "Linux-5.15.0",
+                        "torch": "2.0.1+cu118",
+                    },
+                },
+                {
+                    "compilation": {
+                        "command": "nvcc -o test test.cu",
+                        "exit_code": 0,
+                        "nvcc_found": True,
+                        "nvcc_version": "11.8",
+                        "stderr": "",
+                        "stdout": "",
+                        "success": True,
+                    },
+                    "end_time": ANY,
+                    "meta": {
+                        "command": "./test",
+                        "duration": 1.5,
+                        "exit_code": 0,
+                        "stderr": "",
+                        "stdout": "log stdout",
+                        "success": True,
+                    },
+                    "mode": "leaderboard",
+                    "passed": True,
+                    "result": {
+                        "benchmark-count": "1",
+                        "benchmark.0.best": "1.3",
+                        "benchmark.0.err": "0.1",
+                        "benchmark.0.mean": "1.5",
+                        "benchmark.0.spec": "Matrix multiplication",
+                        "benchmark.0.status": "pass",
+                        "benchmark.0.worst": "1.8",
+                    },
+                    "runner": "A100",
+                    "score": Decimal("1.5E-9"),
+                    "secret": True,
+                    "start_time": ANY,
+                    "system": {
+                        "cpu": "Intel i9-12900K",
+                        "gpu": "NVIDIA RTX 4090",
+                        "platform": "Linux-5.15.0",
+                        "torch": "2.0.1+cu118",
+                    },
+                },
+            ],
+            "submission_id": 1,
+            "submission_time": ANY,
+            "user_id": "5",
         }
