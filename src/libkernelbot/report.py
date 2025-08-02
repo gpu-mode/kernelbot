@@ -33,14 +33,17 @@ class Log:
 
 
 class RunResultReport:
-    def __init__(self):
-        self.data: List[Text | Log] = []
+    def __init__(self, data=None):
+        self.data: List[Text | Log] = data or []
 
     def add_text(self, section: str):
         self.data.append(Text(section))
 
     def add_log(self, header: str, log: str):
         self.data.append(Log(header, log))
+
+    def __repr__(self):
+        return f"RunResultReport(data={self.data})"
 
 
 def _generate_compile_report(reporter: "RunResultReport", comp: CompileResult):
