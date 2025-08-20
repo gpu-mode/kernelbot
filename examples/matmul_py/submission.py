@@ -1,4 +1,4 @@
-#!POPCORN leaderboard matmul_py
+#!POPCORN leaderboard matmul_py-dev
 
 from task import input_t, output_t
 
