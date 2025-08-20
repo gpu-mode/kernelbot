@@ -39,8 +39,8 @@ jobs:
         # Apply mask to the extracted content
         echo "::add-mask::$PAYLOAD"
         
-        # Now write to file (won't be logged since it's masked)
-        echo "$PAYLOAD" > payload.json
+        # Compress and base64 encode the payload to match what the Python script expects
+        echo "$PAYLOAD" | python3 -c "import sys, zlib, base64; print(base64.b64encode(zlib.compress(sys.stdin.read().encode('utf-8'))).decode('ascii'))" > payload.json
     
     - name: Set venv directory based on runner
       run: |
