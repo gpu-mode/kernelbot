@@ -1,4 +1,4 @@
-#!POPCORN leaderboard vectoradd_py
+#!POPCORN leaderboard vectoradd_py-dev
 
 import torch
 import triton
