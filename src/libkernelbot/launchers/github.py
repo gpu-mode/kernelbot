@@ -101,7 +101,7 @@ class GitHubLauncher(Launcher):
         await run.wait_for_completion(
             lambda x: self.wait_callback(x, status), timeout_minutes=timeout
         )
-        await status.update(f"Workflow [{run.run_id}]({run.html_url}) completed")
+        await status.update(f"Workflow [{run.run_id}](<{run.html_url}>) completed")
         logger.info(f"Workflow [{run.run_id}]({run.html_url}) completed")
         await status.push("Downloading artifacts...")
         logger.info("Downloading artifacts...")
@@ -142,7 +142,7 @@ class GitHubLauncher(Launcher):
 
     async def wait_callback(self, run: "GitHubRun", status: RunProgressReporter):
         await status.update(
-            f"⏳ Workflow [{run.run_id}]({run.html_url}): {run.status} "
+            f"⏳ Workflow [{run.run_id}](<{run.html_url}>): {run.status} "
             f"({run.elapsed_time.total_seconds():.1f}s)"
         )
 
