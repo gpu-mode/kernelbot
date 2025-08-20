@@ -47,7 +47,7 @@ payload = sys.stdin.read()
 compressed = zlib.compress(payload.encode('utf-8'))
 encoded = base64.b64encode(compressed).decode('ascii')
 print(encoded)
-        " > payload.json
+" > payload.json
     
     - name: Set venv directory based on runner
       run: |
