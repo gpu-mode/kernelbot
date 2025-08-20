@@ -12,6 +12,11 @@ Path("payload.json").unlink()
 payload = zlib.decompress(base64.b64decode(payload)).decode("utf-8")
 config = json.loads(payload)
 
+# Set default mode if missing or invalid
+valid_modes = ["test", "benchmark", "profile", "private", "leaderboard"]
+if "mode" not in config or config["mode"] not in valid_modes:
+    config["mode"] = "test"
+
 result = asdict(run_config(config))
 
 
