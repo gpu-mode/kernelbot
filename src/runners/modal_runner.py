@@ -33,10 +33,10 @@ cuda_image = (
         "PyYAML",
     )
     .pip_install(
-        "torch~=2.7",
+        "torch>=2.7.0,<2.8.0",
         "torchvision~=0.22",
-        "torchaudio~=2.7",
-        index_url="https://download.pytorch.org/whl/cu128"
+        "torchaudio>=2.7.0,<2.8.0",
+        index_url="https://download.pytorch.org/whl/cu128",
     )
     # other frameworks
     .pip_install(
