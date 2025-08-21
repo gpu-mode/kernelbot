@@ -19,10 +19,9 @@ from libkernelbot.consts import SubmissionMode
 from libkernelbot.leaderboard_db import (
     LeaderboardItem,
     LeaderboardRankedEntry,
-    RunItem,
     SubmissionItem,
 )
-from libkernelbot.submission import SubmissionRequest, prepare_submission
+from libkernelbot.submission import SubmissionRequest, generate_run_verdict, prepare_submission
 from libkernelbot.utils import format_time, setup_logging
 
 if TYPE_CHECKING:
@@ -57,38 +56,6 @@ class LeaderboardSubmitCog(app_commands.Group):
         await view.wait()
         return view
 
-    def generate_run_verdict(self, run: RunItem, sub_data: SubmissionItem):
-        medals = {1: "🥇 First", 2: "🥈 Second", 3: "🥉 Third"}
-
-        # get the competition
-        with self.bot.leaderboard_db as db:
-            competition = db.get_leaderboard_submissions(
-                sub_data["leaderboard_name"], run["runner"]
-            )
-        # compare against the competition
-        other_by_user = False
-        run_time = float(run["score"])
-        score_text = format_time(run_time * 1e9)
-
-        for entry in competition:
-            # can we find our own run? Only if it is the fastest submission by this user
-            if entry["submission_id"] == sub_data["submission_id"]:
-                rank = entry["rank"]
-                if 1 <= rank <= 3:
-                    return f"> {medals[rank]} place on {run['runner']}: {score_text}"
-                elif rank <= 10:
-                    return f"> {rank}th place on {run['runner']}: {score_text}"
-                else:
-                    return f"> Personal best on {run['runner']}: {score_text}"
-            elif entry["user_id"] == sub_data["user_id"]:
-                other_by_user = True
-        if other_by_user:
-            # User already has a submission that is faster
-            return f"> Successful on {run['runner']}: {score_text}"
-        else:
-            # no submission by the user exists
-            return f"> 🍾 First successful submission on {run['runner']}: {score_text}"
-
     async def post_submit_hook(self, interaction: discord.Interaction, sub_id: int):
         with self.bot.leaderboard_db as db:
             sub_data: SubmissionItem = db.get_submission_by_id(sub_id)
@@ -100,7 +67,7 @@ class LeaderboardSubmitCog(app_commands.Group):
                 and run["mode"] == SubmissionMode.LEADERBOARD.value
                 and run["passed"]
             ):
-                result_lines.append(self.generate_run_verdict(run, sub_data))
+                result_lines.append(generate_run_verdict(self.bot.backend, run, sub_data))
 
         if len(result_lines) > 0:
             await send_discord_message(
