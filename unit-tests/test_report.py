@@ -62,7 +62,7 @@ def sample_run_result(mode="test") -> RunResult:
             "benchmark.0.worst": "1.8",
         }
     else:
-        assert False, f"Invalid mode: {mode}"
+        raise AssertionError(f"Invalid mode: {mode}")
 
     return RunResult(
         success=True,
