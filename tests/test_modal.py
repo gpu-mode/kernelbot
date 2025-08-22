@@ -1,12 +1,13 @@
 import os
 import subprocess
-import pytest
 from pathlib import Path
 
+import pytest
+
+from libkernelbot.consts import GPU_TO_SM, ModalGPU, SubmissionMode
 from libkernelbot.launchers import ModalLauncher
-from libkernelbot.consts import SubmissionMode, GPU_TO_SM, ModalGPU
-from libkernelbot.task import make_task_definition, build_task_config
 from libkernelbot.report import RunProgressReporter
+from libkernelbot.task import build_task_config, make_task_definition
 
 
 class MockProgressReporter(RunProgressReporter):
@@ -42,7 +43,7 @@ def modal_deployment(project_root: Path):
             cwd=project_root / "src" / "runners",
             capture_output=True,
             text=True,
-            timeout=600  # 10 minute timeout in case image needs to be built (can be very slow)
+            timeout=600,  # 10 minute timeout in case image needs to be built (can be very slow)
         )
 
         if result.returncode != 0:
@@ -53,10 +54,13 @@ def modal_deployment(project_root: Path):
                     cwd=project_root / "src" / "runners",
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
                 )
                 if result.returncode != 0:
-                    pytest.fail(f"Modal environment `{modal_env}` not available, and failed to create: {result.stderr}")
+                    pytest.fail(
+                        f"Modal environment `{modal_env}` not available, "
+                        f"and failed to create: {result.stderr}"
+                    )
                 else:
                     # try again, now that the env exists.
                     result = subprocess.run(
@@ -64,12 +68,18 @@ def modal_deployment(project_root: Path):
                         cwd=project_root / "src" / "runners",
                         capture_output=True,
                         text=True,
-                        timeout=600
+                        timeout=600,
                     )
                     if result.returncode != 0:
-                        pytest.fail(f"Modal deploy failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+                        pytest.fail(
+                            f"Modal deploy failed:\n"
+                            f"STDOUT:\n{result.stdout}\n"
+                            f"STDERR:\n{result.stderr}"
+                        )
             else:
-                pytest.fail(f"Modal deploy failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+                pytest.fail(
+                    f"Modal deploy failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                )
 
         print(f"✅ Modal deployment to '{modal_env}' completed successfully")
         print(f"Deploy output: {result.stdout}")
@@ -87,15 +97,21 @@ def modal_deployment(project_root: Path):
             del os.environ["MODAL_ENVIRONMENT"]
 
     except subprocess.TimeoutExpired as e:
-        pytest.fail(f"Modal deploy timed out after 5 minutes:\nstdout: {e.stdout}, stderr:{e.stderr}")
+        pytest.fail(
+            f"Modal deploy timed out after 5 minutes:\nstdout: {e.stdout}, stderr:{e.stderr}"
+        )
     except Exception as e:
         pytest.fail(f"Modal deploy failed with exception: {e}")
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.parametrize("gpu_type", [ModalGPU.T4, ModalGPU.L4, ModalGPU.A100, ModalGPU.H100, ModalGPU.B200])
-async def test_modal_launcher_python_script(modal_deployment, project_root: Path, gpu_type: ModalGPU):
+@pytest.mark.parametrize(
+    "gpu_type", [ModalGPU.T4, ModalGPU.L4, ModalGPU.A100, ModalGPU.H100, ModalGPU.B200]
+)
+async def test_modal_launcher_python_script(
+    modal_deployment, project_root: Path, gpu_type: ModalGPU
+):
     """
     Test ModalLauncher with a real Python script using examples/identity_py.
     """
@@ -117,7 +133,7 @@ async def test_modal_launcher_python_script(modal_deployment, project_root: Path
         task=task_definition.task,
         submission_content=submission_content,
         arch=GPU_TO_SM[gpu_type.name],
-        mode=SubmissionMode.TEST
+        mode=SubmissionMode.TEST,
     )
 
     result = await launcher.run_submission(config, gpu_type, reporter)
@@ -133,8 +149,8 @@ async def test_modal_launcher_python_script(modal_deployment, project_root: Path
     assert result.system.torch.startswith("2.7")  # update when the image changes
 
     # Test run structure
-    assert 'test' in result.runs
-    test_run = result.runs['test']
+    assert "test" in result.runs
+    test_run = result.runs["test"]
 
     # For Python runs, compilation is None
     assert test_run.compilation is None
@@ -148,20 +164,20 @@ async def test_modal_launcher_python_script(modal_deployment, project_root: Path
     assert test_run.run.duration > 0
 
     # Test need to succeed
-    assert test_run.run.result['check'] == 'pass'
-    test_count = int(test_run.run.result['test-count'])
+    assert test_run.run.result["check"] == "pass"
+    test_count = int(test_run.run.result["test-count"])
     assert test_count == 5
     for i in range(test_count):
-        assert test_run.run.result[f'test.{i}.status'] == 'pass'
-        assert 'size:' in test_run.run.result[f'test.{i}.spec']
-        assert 'seed:' in test_run.run.result[f'test.{i}.spec']
+        assert test_run.run.result[f"test.{i}.status"] == "pass"
+        assert "size:" in test_run.run.result[f"test.{i}.spec"]
+        assert "seed:" in test_run.run.result[f"test.{i}.spec"]
 
     # sanity check for timings
     assert test_run.start < test_run.end
 
     # check messages
-    assert reporter.messages == ['⏳ Waiting for Modal run to finish...']
-    assert reporter.updates == ['✅ Waiting for modal run to finish... Done']
+    assert reporter.messages == ["⏳ Waiting for Modal run to finish..."]
+    assert reporter.updates == ["✅ Waiting for modal run to finish... Done"]
 
 
 @pytest.mark.integration
@@ -169,8 +185,8 @@ async def test_modal_launcher_python_script(modal_deployment, project_root: Path
 @pytest.mark.parametrize("script", ["cheat-fd.py", "cheat-input.py", "cheat-rng.py"])
 async def test_modal_launcher_failing_script(modal_deployment, project_root: Path, script: str):
     """
-        Test ModalLauncher with a real Python scripts that are designed to be wrong.
-        """
+    Test ModalLauncher with a real Python scripts that are designed to be wrong.
+    """
     launcher = ModalLauncher(add_include_dirs=[])
     reporter = MockProgressReporter("progress")
     gpu_type = ModalGPU.T4
@@ -198,4 +214,4 @@ async def test_modal_launcher_failing_script(modal_deployment, project_root: Pat
     # Basic structure and success
     assert result.success, f"Expected successful run, got: {result.error}"
     assert result.error == ""
-    assert result.runs['test'].run.passed is False or result.runs['benchmark'].run.passed is False
+    assert result.runs["test"].run.passed is False or result.runs["benchmark"].run.passed is False
