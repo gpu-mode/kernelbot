@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
-      - run: uv run pytest --cov-report term --cov-report html --cov-report xml --cov=src/libkernelbot -m "not integration" unit-tests -v
+      - run: uv run pytest --cov-report term --cov-report html --cov-report xml --cov=src/libkernelbot -m "not integration" tests -v
       - uses: actions/upload-artifact@v4
         with:
           name: coverage
@@ -43,4 +43,4 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
       - run: uv run modal token set --token-id ${MODAL_TOKEN_ID} --token-secret ${MODAL_TOKEN_SECRET}
-      - run: uv run pytest -m integration -v
+      - run: uv run pytest -m integration tests -v
