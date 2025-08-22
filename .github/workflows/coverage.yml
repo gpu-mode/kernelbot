@@ -1,7 +1,7 @@
 name: Post coverage comment
 on:
   workflow_run:
-    workflows: ["UnitTests"]
+    workflows: ["Testing"]
     types:
       - completed
 

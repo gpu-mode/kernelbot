@@ -42,7 +42,7 @@ def modal_deployment(project_root: Path):
             cwd=project_root / "src" / "runners",
             capture_output=True,
             text=True,
-            timeout=600  # 10 minute timeout in case image needs to be built
+            timeout=600  # 10 minute timeout in case image needs to be built (can be very slow)
         )
 
         if result.returncode != 0:
@@ -64,7 +64,7 @@ def modal_deployment(project_root: Path):
                         cwd=project_root / "src" / "runners",
                         capture_output=True,
                         text=True,
-                        timeout=300
+                        timeout=600
                     )
                     if result.returncode != 0:
                         pytest.fail(f"Modal deploy failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
@@ -92,6 +92,7 @@ def modal_deployment(project_root: Path):
         pytest.fail(f"Modal deploy failed with exception: {e}")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("gpu_type", [ModalGPU.T4, ModalGPU.L4, ModalGPU.A100, ModalGPU.H100, ModalGPU.B200])
 async def test_modal_launcher_python_script(modal_deployment, project_root: Path, gpu_type: ModalGPU):
@@ -163,6 +164,7 @@ async def test_modal_launcher_python_script(modal_deployment, project_root: Path
     assert reporter.updates == ['✅ Waiting for modal run to finish... Done']
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("script", ["cheat-fd.py", "cheat-input.py", "cheat-rng.py"])
 async def test_modal_launcher_failing_script(modal_deployment, project_root: Path, script: str):

@@ -52,6 +52,9 @@ exclude_lines = [
 [tool.pytest.ini_options]
 testpaths = ["scripts", "tests"]
 python_files = ["test_*.py", "*_test.py", "ci_test_*.py"]
+markers = [
+    "integration: integration tests that need to interact externally, e.g., with modal/github actions/etc"
+]
 
 [tool.ruff]
 line-length = 120
