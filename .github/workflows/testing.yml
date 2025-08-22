@@ -1,4 +1,4 @@
-name: UnitTests
+name: Testing
 
 on:
   push:
@@ -34,3 +34,4 @@ jobs:
           name: python-coverage-comment-action
           # If you use a different name, update COMMENT_FILENAME accordingly
           path: python-coverage-comment-action.txt
+
