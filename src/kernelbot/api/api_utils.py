@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     Log,
     MultiProgressReporter,
@@ -19,7 +20,6 @@ from libkernelbot.report import (
     Text,
 )
 from libkernelbot.submission import SubmissionRequest, prepare_submission
-from src.libkernelbot.leaderboard_db import LeaderboardDB
 
 
 async def _handle_discord_oauth(
@@ -197,7 +197,7 @@ class RunProgressReporterAPI(RunProgressReporter):
                 self.long_report += f"```\n{part.content}```"
 
 
-async def to_submission_info(
+async def to_submit_info(
     user_info: Any,
     submission_mode: str,
     file: UploadFile,
@@ -334,30 +334,25 @@ def start_detached_run(
     submission_request: SubmissionRequest,
     submission_mode_enum: SubmissionMode,
     backend: KernelBackend,
-    db: "LeaderboardDB",
     background_tasks: BackgroundTasks,
 ) -> int:
-    """Starts a submission in the background and returns the submission id immediately."""
 
-    # create submission id, so that it can be return to client before task is started
-    with db:
-        req = submission_request
+    with backend.db as db:
         sub_id = db.create_submission(
-            leaderboard=req.leaderboard,
-            file_name=req.file_name,
-            code=req.code,
-            user_id=req.user_id,
-            time=datetime.now(),
-            user_name=req.user_name,
+            leaderboard=submission_request.leaderboard,
+            file_name=submission_request.file_name,
+            code=submission_request.code,
+            user_id=submission_request.user_id,
+            time=datetime.datetime.now(),
+            user_name=submission_request.user_name,
         )
+        db.upsert_submission_status(sub_id, "initial", None)
 
-    # makes the task run in the background
     background_tasks.add_task(
-        _run_submission,
+        backend.submit_with_status,
         submission_request,
         submission_mode_enum,
         backend,
-        db,
         sub_id,
     )
     return sub_id

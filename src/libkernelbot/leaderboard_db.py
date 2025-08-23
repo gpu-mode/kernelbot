@@ -382,6 +382,28 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error while finalizing submission") from e
 
+    def upsert_submission_status(
+        self, submission_id: int, status: str, info: Optional[str] = None
+    ) -> None:
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_status (submission_id, status, info)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (submission_id)
+                DO UPDATE SET
+                    status = EXCLUDED.status,
+                    info = EXCLUDED.info,
+                    updated_at = now()
+                """,
+                (submission_id, status, info),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error upserting submission status for %s", submission_id, exc_info=e)
+            raise KernelBotError("Error updating submission status") from e
+
     def create_submission_run(
         self,
         submission: int,

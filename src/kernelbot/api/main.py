@@ -1,24 +1,26 @@
 import asyncio
 import base64
-import datetime
 import json
 import os
 import time
-from dataclasses import asdict
-from typing import Annotated, Any, Optional, Tuple
+from typing import Annotated, Any, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile, BackgroundTasks
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
-
 from libkernelbot.backend import KernelBackend
-from libkernelbot.consts import SubmissionMode
+from libkernelbot.db_types import IdentityType
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
-from libkernelbot.submission import SubmissionRequest
-from libkernelbot.utils import KernelBotError,
-from src.libkernelbot.db_types import IdentityType
+from libkernelbot.utils import KernelBotError
+from src.libkernelbot.submission import prepare_submission
 
-from .api_utils import _handle_discord_oauth, _handle_github_oauth, sse_stream_submission, start_detached_run, to_submission_info
+from .api_utils import (
+    _handle_discord_oauth,
+    _handle_github_oauth,
+    sse_stream_submission,
+    start_detached_run,
+    to_submit_info,
+)
 
 # yes, we do want  ... = Depends() in function signatures
 # ruff: noqa: B008
@@ -95,6 +97,51 @@ async def validate_cli_header(
         raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
 
     return user_info
+
+
+async def validate_user_header(
+    x_web_auth_id: Optional[str] = Header(None, alias="X-Web-Auth-Id"),
+    x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
+    db_context: LeaderboardDB =Depends(get_db),
+) -> Any:
+    """
+    Validate either X-Web-Auth-Id or X-Popcorn-Cli-Id and return the associated user id.
+    Prefers X-Web-Auth-Id if both are provided.
+    """
+    token = x_web_auth_id or x_popcorn_cli_id
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing X-Web-Auth-Id or X-Popcorn-Cli-Id header",
+        )
+
+    if x_web_auth_id:
+        token = x_web_auth_id
+        id_type = IdentityType.WEB
+    elif x_popcorn_cli_id:
+        token = x_popcorn_cli_id
+        id_type = IdentityType.CLI
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing header must be eother X-Web-Auth-Id or X-Popcorn-Cli-Id header",
+        )
+    try:
+        with db_context as db:
+            user_info = db.validate_identity(token, id_type)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error during validation: {e}",
+        ) from e
+
+    if not user_info:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or unauthorized auth header elaine",
+        )
+    return user_info
+
 
 
 @app.get("/auth/init")
@@ -218,48 +265,6 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         "is_reset": is_reset,
     }
 
-async def validate_user_header(
-    x_web_auth_id: Optional[str] = Header(None, alias="X-Web-Auth-Id"),
-    x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
-    db_context: LeaderboardDB =Depends(get_db),
-) -> Any:
-    """
-    Validate either X-Web-Auth-Id or X-Popcorn-Cli-Id and return the associated user id.
-    Prefers X-Web-Auth-Id if both are provided.
-    """
-    token = x_web_auth_id or x_popcorn_cli_id
-    if not token:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing X-Web-Auth-Id or X-Popcorn-Cli-Id header",
-        )
-
-    if x_web_auth_id:
-        token = x_web_auth_id
-        id_type = IdentityType.WEB
-    elif x_popcorn_cli_id:
-        token = x_popcorn_cli_id
-        id_type = IdentityType.CLI
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing header must be eother X-Web-Auth-Id or X-Popcorn-Cli-Id header",
-        )
-    try:
-        with db_context as db:
-            user_info = db.validate_identity(token, id_type)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error during validation: {e}",
-        ) from e
-
-    if not user_info:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or unauthorized auth header",
-        )
-    return user_info
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
@@ -289,7 +294,7 @@ async def run_submission(  # noqa: C901
         StreamingResponse: A streaming response containing the status and results of the submission.
     """
     await simple_rate_limit()
-    submission_request,submission_mode_enum = await to_submission_info(
+    submission_request,submission_mode_enum = await to_submit_info(
         user_info,
         submission_mode,
         file,
@@ -304,26 +309,34 @@ async def run_submission(  # noqa: C901
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
-@app.post("submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
-async def run_submission_v2(  # noqa: C901
+@app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
+async def run_submission_v2(
     leaderboard_name: str,
     gpu_type: str,
     submission_mode: str,
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     user_info: Annotated[dict, Depends(validate_user_header)],
-    db_context=Depends(get_db),
-    background_tasks: BackgroundTasks = Depends()
+    db_context = Depends(get_db),
 ) -> Any:
 
     await simple_rate_limit()
 
-    submission_request,submission_mode_enum = await to_submission_info(
+    submission_request,submission_mode_enum = await to_submit_info(
         user_info,
         submission_mode,
         file,
         leaderboard_name,
         gpu_type,
         db_context)
+
+    try:
+        req = prepare_submission(submission_request, backend_instance)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if len(req.gpus) != 1:
+        raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     sub_id = start_detached_run(submission_request, submission_mode_enum, backend_instance, db_context, background_tasks)
     return JSONResponse(

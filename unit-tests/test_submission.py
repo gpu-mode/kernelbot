@@ -1,11 +1,14 @@
 import datetime
 import re
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from fastapi import BackgroundTasks
 
+from kernelbot.api import api_utils
 from libkernelbot import submission
-from libkernelbot.consts import RankCriterion
+from libkernelbot.consts import RankCriterion, SubmissionMode
 from libkernelbot.db_types import LeaderboardItem
 from libkernelbot.utils import KernelBotError
 
@@ -106,7 +109,7 @@ print("code")
     assert result == {"gpus": ["a100", "v100"], "leaderboard": "My_Board"}
 
     # Extra whitespace
-    code_whitespace = """#!POPCORN  gpu   A100    V100  
+    code_whitespace = """#!POPCORN  gpu   A100    V100
 #!POPCORN   leaderboard    my_board   """  # noqa: W291
     result = submission._get_popcorn_directives(code_whitespace)
     assert result == {"gpus": ["A100", "V100"], "leaderboard": "my_board"}
@@ -344,3 +347,77 @@ def test_compute_score():
     mock_task.ranking_by = "WRONG"
     with pytest.raises(KernelBotError, match="Invalid ranking criterion WRONG"):
         submission.compute_score(mock_result, mock_task, 1)
+
+
+@pytest.mark.asyncio
+async def test_start_detached_run_uses_existing_mock_backend(monkeypatch, mock_backend):
+    db = mock_backend.db
+
+    # Ensure the db mock has create_submission and returns a fixed id
+    if not hasattr(db, "create_submission"):
+        db.create_submission = mock.Mock(return_value=777)
+    else:
+        db.create_submission.return_value = 777
+
+    # Minimal submission_request: only the attributes accessed by start_detached_run
+    req = SimpleNamespace(
+        leaderboard="test_board",
+        file_name="hello.py",
+        code="print('hi')",
+        user_id="u-1",
+        user_name="alice",
+    )
+    mode = SubmissionMode.LEADERBOARD
+    bg = BackgroundTasks()
+
+    # Stub _run_submission to avoid running real work and capture the call
+    called = {}
+    async def fake_run_submission(
+        submission_request,
+        submission_mode_enum,
+        backend_arg,
+        db_arg,
+        sub_id_arg):
+        called["args"] = (
+            submission_request,
+            submission_mode_enum,
+            backend_arg, db_arg,
+            sub_id_arg)
+
+    monkeypatch.setattr(api_utils, "_run_submission", fake_run_submission)
+
+    # Execute function under test
+    sub_id = api_utils.start_detached_run(
+        submission_request=req,
+        submission_mode_enum=mode,
+        backend=mock_backend,
+        db=db,
+        background_tasks=bg,
+    )
+
+    # Assert: returned id
+    assert sub_id == 777
+
+    # Assert: database context manager was entered/exited
+    db.__enter__.assert_called_once()
+    db.__exit__.assert_called_once()
+
+    # Assert: create_submission was called with expected kwargs
+    db.create_submission.assert_called_once_with(
+        leaderboard="test_board",
+        file_name="hello.py",
+        code="print('hi')",
+        user_id="u-1",
+        time=mock.ANY,         # time is dynamic
+        user_name="alice",
+    )
+
+    # Assert: task was enqueued into BackgroundTasks with correct function and args
+    assert len(bg.tasks) == 1
+    task = bg.tasks[0]
+    assert task.func is fake_run_submission
+    assert task.args == (req, mode, mock_backend, db, 777)
+
+    # verify the enqueued background task to verify the stub was called
+    await bg()
+    assert called["args"] == (req, mode, mock_backend, db, 777)

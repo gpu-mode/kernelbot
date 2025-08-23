@@ -1,7 +1,6 @@
 PyGithub
 aiohttp
 discord.py
-audioop-lts; python_version >= '3.13'
 python-dotenv
 requests
 modal
@@ -12,4 +11,12 @@ PyYAML
 fastapi[all]
 uvicorn
 jinja2
-pytest-asyncio==1.1.0
+
+[:python_version >= "3.13"]
+audioop-lts
+
+[dev]
+ruff
+pre-commit
+pytest
+pytest-coverage
