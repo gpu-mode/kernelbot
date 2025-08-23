@@ -111,14 +111,10 @@ async def validate_cli_header(
         with db_context as db:
             user_info = db.validate_cli_id(x_popcorn_cli_id)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Database error during validation: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Database error during validation: {e}") from e
 
     if user_info is None:
-        raise HTTPException(
-            status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id"
-        )
+        raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
 
     return user_info
 
@@ -203,9 +199,7 @@ async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
 
 
 @app.get("/auth/cli/{auth_provider}")
-async def cli_auth(
-    auth_provider: str, code: str, state: str, db_context=Depends(get_db)
-):  # noqa: C901
+async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends(get_db)):  # noqa: C901
     """
     Handle Discord/GitHub OAuth redirect. This endpoint receives the authorization code
     and state parameter from the OAuth flow.
@@ -222,9 +216,7 @@ async def cli_auth(
         )
 
     if not code or not state:
-        raise HTTPException(
-            status_code=400, detail="Missing authorization code or state"
-        )
+        raise HTTPException(status_code=400, detail="Missing authorization code or state")
 
     try:
         # Pad state if necessary for correct base64 decoding
@@ -234,14 +226,10 @@ async def cli_auth(
         cli_id = state_data["cli_id"]
         is_reset = state_data.get("is_reset", False)
     except (json.JSONDecodeError, KeyError, Exception) as e:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid state parameter: {e}"
-        ) from None
+        raise HTTPException(status_code=400, detail=f"Invalid state parameter: {e}") from None
 
     # Determine API URL (handle potential None value)
-    api_base_url = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv(
-        "POPCORN_API_URL"
-    )
+    api_base_url = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv("POPCORN_API_URL")
     if not api_base_url:
         raise HTTPException(
             status_code=500,
@@ -265,15 +253,10 @@ async def cli_auth(
         raise e
     except Exception as e:
         # Catch unexpected errors during OAuth handling
-        raise HTTPException(
-            status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}") from e
 
     if not user_id or not user_name:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve user ID or username from provider.",
-        )
+        raise HTTPException(status_code=500,detail="Failed to retrieve user ID or username from provider.",)
 
     try:
         with db_context as db:
@@ -283,13 +266,9 @@ async def cli_auth(
                 db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
 
     except AttributeError as e:
-        raise HTTPException(
-            status_code=500, detail=f"Database interface error during update: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Database interface error during update: {e}") from e
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Database update failed: {e}"
-        ) from e
+        raise HTTPException(status_code=400, detail=f"Database update failed: {e}") from e
 
     return {
         "status": "success",
