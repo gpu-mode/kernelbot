@@ -1,14 +1,11 @@
 import datetime
 import re
-from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from fastapi import BackgroundTasks
 
-from kernelbot.api import api_utils
 from libkernelbot import submission
-from libkernelbot.consts import RankCriterion, SubmissionMode
+from libkernelbot.consts import RankCriterion
 from libkernelbot.db_types import LeaderboardItem
 from libkernelbot.utils import KernelBotError
 

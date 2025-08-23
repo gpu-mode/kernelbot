@@ -348,7 +348,6 @@ class LeaderboardDB:
                 ),
             )
             submission_id = self.cursor.fetchone()[0]
-            submission_id = int(submission_id)
             assert submission_id is not None
             self.connection.commit()
             return submission_id
