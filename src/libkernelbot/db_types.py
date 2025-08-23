@@ -1,10 +1,15 @@
 # This file provides TypeDict definitions for the return types we get from database queries
 import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, List, NotRequired, Optional, TypedDict
 
 if TYPE_CHECKING:
     from libkernelbot.task import LeaderboardTask
 
+class IdentityType(str, Enum):
+    CLI = "cli"
+    WEB = "web"
+    UNKNOWN = "unknown"
 
 class LeaderboardItem(TypedDict):
     id: int
