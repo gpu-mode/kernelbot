@@ -61,6 +61,7 @@ class LeaderboardTask:
     ranked_timeout: int = 180
     ranking_by: RankCriterion = RankCriterion.LAST
     seed: Optional[int] = None
+    multi_gpu: bool = False
 
     def __post_init__(self):
         if self.lang == Language.Python and not isinstance(self.config, PythonTaskData):
@@ -75,6 +76,7 @@ class LeaderboardTask:
         criterion = RankCriterion(data.get("ranking_by", RankCriterion.LAST))
         data_["lang"] = lang
         data_["ranking_by"] = criterion
+        data_["multi_gpu"] = data.get("multi_gpu", False)
         if lang == Language.Python:
             data_["config"] = PythonTaskData(**data["config"])
         else:
@@ -176,6 +178,7 @@ def build_task_config(
         "ranked_timeout": task.ranked_timeout,
         "ranking_by": task.ranking_by.value,
         "seed": task.seed,
+        "multi_gpu": task.multi_gpu,
     }
 
     if task.lang == Language.Python:

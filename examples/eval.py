@@ -1,4 +1,5 @@
 import base64
+import copy
 import dataclasses
 import multiprocessing
 import re
@@ -65,7 +66,7 @@ def get_test_cases(file_name: str, seed: Optional[int]) -> list[TestCase]:
 
     tests = []
     lines = content.splitlines()
-    match = r"\s*([a-zA-Z]+):\s*([a-zA-Z]+|[+-]?[0-9]+)\s*"
+    match = r"\s*([a-zA-Z_]+):\s*([a-zA-Z]+|[+-]?[0-9]+)\s*"
     for line in lines:
         parts = line.split(";")
         case = {}
@@ -123,18 +124,19 @@ def calculate_stats(durations: list[int]):
                  worst=float(worst))
 
 
-def _clone_data(data):
+def _clone_data(data, rank: int):
     """
     Recursively goes through data and clones all tensors.
     """
     if isinstance(data, tuple):
-        return tuple(_clone_data(x) for x in data)
+        return tuple(_clone_data(x, rank) for x in data)
     elif isinstance(data, list):
-        return [_clone_data(x) for x in data]
+        return [_clone_data(x, rank) for x in data]
     elif isinstance(data, dict):
-        return {k: _clone_data(v) for k, v in data.items()}
+        return {k: _clone_data(v, rank) for k, v in data.items()}
     elif isinstance(data, torch.Tensor):
-        return data.clone()
+        device = f"cuda:{rank}"
+        return data.clone().to(device)
     else:
         return data
 
@@ -157,16 +159,60 @@ def _run_single_test(test: TestCase):
     from submission import custom_kernel
     data = generate_input(**test.args)
     torch.cuda.synchronize()
-    submission_output = custom_kernel(_clone_data(data))
+    submission_output = custom_kernel(_clone_data(data, 0))
     torch.cuda.synchronize()
     return wrap_check_implementation(data, submission_output)
+
+
+def _run_distributed_test(test: TestCase, rank: int):
+    """
+    Runs a single test case. Do not call directly
+    """
+    from submission import custom_kernel
+    import torch.distributed as dist
+    world_size = test.args["world_size"]
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = "12356"
+    dist.init_process_group("nccl", init_method="env://", rank=rank, world_size=world_size, device_id=torch.device(f'cuda:{rank}'))
+    try:
+        data = generate_input(**test.args, rank=rank)
+        torch.cuda.synchronize()
+        submission_output = custom_kernel(_clone_data(data, rank))
+        torch.cuda.synchronize()
+        return wrap_check_implementation(data, submission_output)
+    finally:
+        dist.destroy_process_group()
+
+
+def run_multi_gpu_test(pool: multiprocessing.Pool, test: TestCase, world_size: int):
+    """
+    Runs a single test in another process.
+    """
+    rets = []
+    # world_size is a mandatory argument for multi-gpu tests
+    for i in range(world_size):
+        rets.append(
+            pool.apply_async(
+                _run_distributed_test,
+                args=(test, i),
+            )
+        )
+    rets = [el.get() for el in rets]
+
+    correct = all(ret[0] for ret in rets)
+    error_messages = str.join("\n", [f"rank {rank} - {ret[1]}" for rank, ret in enumerate(rets) if not ret[0]])
+    return correct, error_messages
 
 
 def run_single_test(pool: multiprocessing.Pool, test: TestCase):
     """
     Runs a single test in another process.
     """
-    return pool.apply(_run_single_test, (test,))
+    world_size = test.args.get("world_size", None)
+    if world_size is None:
+        return pool.apply(_run_single_test, (test, 0, 0))
+    else:
+        return run_multi_gpu_test(pool, test, world_size)
 
 
 def run_testing(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[TestCase]):
@@ -261,6 +307,142 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     return calculate_stats(durations)
 
 
+def _run_distributed_benchmark(test: TestCase, rank: int, recheck: bool, max_repeats: int,
+                               max_time_ns: float) -> Stats | Any:
+    """
+    Runs one distributed benchmark. Do not call directly.
+    """
+    from submission import custom_kernel
+    import torch.distributed as dist
+
+    world_size = test.args["world_size"]
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = "12356"
+    dist.init_process_group("nccl", init_method="env://", rank=rank, world_size=world_size, device_id=torch.device(f'cuda:{rank}'))
+
+    try:
+        durations = []
+        # generate input data once
+        data = generate_input(**test.args, rank=rank)
+        check_copy = _clone_data(data, rank)
+
+        # first, one obligatory correctness check
+        output = custom_kernel(_clone_data(data, rank))
+        good, message = wrap_check_implementation(check_copy, output)
+        if not good:
+            return message
+
+        # now, do multiple timing runs with proper distributed synchronization
+        bm_start_time = time.perf_counter_ns()
+        for i in range(max_repeats):
+            error_message = None
+            if recheck:
+                # ensure we use a different seed for every benchmark
+                if "seed" in test.args:
+                    test.args["seed"] += 13
+
+                data = generate_input(**test.args, rank=rank)
+                check_copy = _clone_data(data, rank)
+
+            # Synchronize all ranks before timing
+            clear_l2_cache()
+            torch.cuda.synchronize()
+            dist.barrier()
+
+            # Use distributed timing - only rank 0 records the overall time
+            if rank == 0:
+                start_time = time.perf_counter_ns()
+
+            # All ranks execute the kernel
+            output = custom_kernel(_clone_data(data, rank))
+
+            # Synchronize all ranks after kernel execution
+            torch.cuda.synchronize()
+            dist.barrier()
+
+            if rank == 0:
+                end_time = time.perf_counter_ns()
+                duration = end_time - start_time  # Already in nanoseconds
+                durations.append(duration)
+
+            if recheck:
+                good, message = check_implementation(check_copy, output)
+                if not good:
+                    error_message = message
+
+            del output
+
+            has_error = torch.tensor(1 if error_message is not None else 0, dtype=torch.int32, device=f'cuda:{rank}')
+            dist.reduce(has_error, 0)
+            if has_error.item() > 0:
+                return error_message
+
+            # Only rank 0 checks convergence criteria
+            if rank == 0 and i > 1:
+                total_bm_duration = time.perf_counter_ns() - bm_start_time
+                stats = calculate_stats(durations)
+                # stop if either
+                # a) relative error dips below 0.1%
+                # b) we exceed the total time limit for benchmarking the kernel
+                # c) we exceed 2 minutes of total wallclock time.
+                should_stop = (stats.err / stats.mean < 0.001 or
+                               stats.mean * stats.runs > max_time_ns or
+                               total_bm_duration > 120e9)
+            else:
+                should_stop = False
+
+            # Broadcast stop decision to all ranks
+            stop_tensor = torch.tensor(should_stop, dtype=torch.bool, device=f'cuda:{rank}')
+            dist.broadcast(stop_tensor, 0)
+
+            if stop_tensor.item():
+                break
+
+        # Only rank 0 returns meaningful stats
+        if rank == 0:
+            return calculate_stats(durations)
+        else:
+            # Non-zero ranks return a dummy stats object
+            return Stats(runs=len(durations), mean=0.0, std=0.0, err=0.0, best=0.0, worst=0.0)
+
+    finally:
+        dist.destroy_process_group()
+
+
+def run_multi_gpu_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int,
+                            max_time_ns: float, world_size: int):
+    """
+    Runs a multi-GPU benchmark across all ranks.
+    """
+    rets = []
+    for i in range(world_size):
+        rets.append(
+            pool.apply_async(
+                _run_distributed_benchmark,
+                args=(test, i, recheck, max_repeats, max_time_ns),
+            )
+        )
+    rets = [el.get() for el in rets]
+
+    # For multi-GPU benchmarking, only rank 0 has meaningful stats
+    failed_ranks = []
+    rank_0_result = None
+
+    for rank, ret in enumerate(rets):
+        if isinstance(ret, Stats):
+            if rank == 0:
+                rank_0_result = ret
+        else:
+            # ret is an error message
+            failed_ranks.append((rank, ret))
+
+    if failed_ranks:
+        error_messages = str.join("\n", [f"rank {rank} - {msg}" for rank, msg in failed_ranks])
+        return error_messages
+    else:
+        return rank_0_result if rank_0_result else "No stats returned from rank 0"
+
+
 def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bool, max_repeats: int,
                          max_time_ns: float):
     """
@@ -273,7 +455,12 @@ def run_single_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck: bo
     @param max_time_ns: Timeout time in nanoseconds.
     @return: A Stats object for this particular benchmark case or an error if the test fails.
     """
-    return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns))
+
+    world_size: Optional[int] = test.args.get("world_size", None)
+    if world_size is None:
+        return pool.apply(_run_single_benchmark, (test, recheck, max_repeats, max_time_ns))
+    else:
+        return run_multi_gpu_benchmark(pool, test, recheck, max_repeats, max_time_ns, world_size)
 
 
 def run_benchmarking(logger: PopcornOutput, pool: multiprocessing.Pool, tests: list[TestCase]):
@@ -345,6 +532,7 @@ def main():
     mode = sys.argv[1]
     seed = os.getenv("POPCORN_SEED")
     os.unsetenv("POPCORN_SEED")
+    n_gpus = int(os.getenv("POPCORN_GPUS", "1"))
     seed = int(seed) if seed else None
     set_seed(seed or 42)
     tests = get_test_cases(sys.argv[2], seed)
@@ -352,7 +540,7 @@ def main():
     with PopcornOutput(int(fd)) as logger:
         import multiprocessing
         mp_context = multiprocessing.get_context('spawn')
-        with mp_context.Pool(1) as pool:
+        with mp_context.Pool(n_gpus) as pool:
             if mode == "test":
                 return run_testing(logger, pool, tests)
             if mode == "benchmark":

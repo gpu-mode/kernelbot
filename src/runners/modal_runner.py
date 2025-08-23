@@ -40,7 +40,7 @@ cuda_image = (
     )
     # other frameworks
     .pip_install(
-        "jax[cuda12]==0.5.3",   # 0.6 want's cudnn 9.8 in conflict with torch 2.7
+        "jax[cuda12]==0.5.3",  # 0.6 want's cudnn 9.8 in conflict with torch 2.7
         "jax2torch==0.0.7",
         "tinygrad~=0.10",
     )
@@ -50,8 +50,8 @@ cuda_image = (
         "nvidia-cutlass-dsl~=4.0",
         "cuda-core[cu12]~=0.3",
         "cuda-python[all]==12.8",
-        #"nvmath-python[cu12]~=0.4",
-        #"numba-cuda[cu12]~=0.15",
+        # "nvmath-python[cu12]~=0.4",
+        # "numba-cuda[cu12]~=0.15",
     )
 )
 

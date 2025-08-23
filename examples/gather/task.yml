@@ -1,0 +1,28 @@
+# name: identity-py
+
+files:
+  - {"name": "submission.py", "source": "@SUBMISSION@"}
+  - {"name": "task.py", "source": "task.py"}
+  - {"name": "utils.py", "source": "../utils.py"}
+  - {"name": "reference.py", "source": "reference.py"}
+  - {"name": "eval.py", "source": "../eval.py"}
+
+lang: "py"
+multi_gpu: true
+description:
+  A simple test task - python
+
+config:
+  main: "eval.py"
+
+templates:
+  Python: "../template.py"
+
+# small test cases. should be cheap to run.
+tests:
+  - {"seed": 5, "world_size": 4}
+
+benchmarks:
+  - {"seed": 10}
+
+ranking_by: "geom"
