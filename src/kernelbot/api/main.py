@@ -372,21 +372,35 @@ async def run_submission(  # noqa: C901
     submission_request, submission_mode_enum = await to_submit_info(
         user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
     )
-
-    # prepare submission request before the submission is started
-    try:
-        req = prepare_submission(submission_request, backend_instance)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    if not req.gpus or len(req.gpus) != 1:
-        raise HTTPException(status_code=400, detail="Invalid GPU type")
     generator = _stream_submission_response(
         submission_request=submission_request,
         submission_mode_enum=submission_mode_enum,
         backend=backend_instance,
     )
     return StreamingResponse(generator, media_type="text/event-stream")
+
+async def start_detached_run(
+    req: ProcessedSubmissionRequest,
+    mode: SubmissionMode,
+    backend: KernelBackend,
+    manager: BackgroundSubmissionManager,
+):
+
+    # pre-create the submission for api returns
+    with backend.db as db:
+        sub_id = db.create_submission(
+            leaderboard=req.leaderboard,
+            file_name=req.file_name,
+            code=req.code,
+            user_id=req.user_id,
+            time=datetime.datetime.now(),
+            user_name=req.user_name,
+        )
+        db.upsert_submission_job_status(sub_id, "initial", None)
+
+    # put submission request in queue
+    await manager.enqueue(req, mode, sub_id)
+    return sub_id
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_v2(
@@ -397,12 +411,30 @@ async def run_submission_v2(
     user_info: Annotated[dict, Depends(validate_user_header)],
     db_context=Depends(get_db),
 ) -> Any:
+    """An endpoint that runs a submission on a given leaderboard, runner, and GPU type.
+
+    Requires a valid X-Popcorn-Cli-Id or X-Web-Auth-Id header.
+
+    Args:
+        leaderboard_name (str): The name of the leaderboard to run the submission on.
+        gpu_type (str): The type of GPU to run the submission on.
+        submission_mode (str): The mode for the submission (test, benchmark, etc.).
+        file (UploadFile): The file to run the submission on.
+        user_id (str): The validated user ID obtained from the X-Popcorn-Cli-Id header.
+    Raises:
+        HTTPException: If the kernelbot is not initialized, or header/input is invalid.
+
+    Returns:
+        JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
+    """
+
     await simple_rate_limit()
 
     submission_request, submission_mode_enum = await to_submit_info(
         user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
     )
 
+    # throw error if submission request is invalid
     try:
         req = prepare_submission(submission_request, backend_instance)
     except Exception as e:
@@ -412,12 +444,17 @@ async def run_submission_v2(
     if not req.gpus or len(req.gpus) != 1:
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
+    # start the submission
     sub_id = await start_detached_run(
         req, submission_mode_enum, backend_instance, background_submission_manager
     )
     return JSONResponse(
         status_code=202,
-        content={"id": sub_id, "status": "accepted"},
+        content={
+            "id": sub_id,
+            "jobs_id":
+
+        "status": "accepted"},
     )
 
 @app.get("/leaderboards")

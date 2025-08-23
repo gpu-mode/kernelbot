@@ -11,7 +11,8 @@ from libkernelbot.report import (
     RunResultReport,
     Text,
 )
-from libkernelbot.submission import SubmissionRequest, prepare_submission
+from libkernelbot.submission import ProcessedSubmissionRequest, SubmissionRequest, prepare_submission
+from src.libkernelbot.background_submission_manager import BackgroundSubmissionManager
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
