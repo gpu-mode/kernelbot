@@ -1,11 +1,9 @@
-from typing import Any, Optional
-
 import requests
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 
 from kernelbot.env import env
+from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
-from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     Log,
     MultiProgressReporter,
@@ -13,13 +11,10 @@ from libkernelbot.report import (
     RunResultReport,
     Text,
 )
-from libkernelbot.submission import ProcessedSubmissionRequest, SubmissionRequest, prepare_submission
-from src.libkernelbot.backend import KernelBackend
+from libkernelbot.submission import SubmissionRequest, prepare_submission
 
 
-async def _handle_discord_oauth(
-    code: str, redirect_uri: str
-) -> tuple[str, str]:
+async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     """Handles the Discord OAuth code exchange and user info retrieval."""
     client_id = env.CLI_DISCORD_CLIENT_ID
     client_secret = env.CLI_DISCORD_CLIENT_SECRET
@@ -27,17 +22,11 @@ async def _handle_discord_oauth(
     user_api_url = "https://discord.com/api/users/@me"
 
     if not client_id:
-        raise HTTPException(
-            status_code=500, detail="Discord client ID not configured."
-        )
+        raise HTTPException(status_code=500, detail="Discord client ID not configured.")
     if not client_secret:
-        raise HTTPException(
-            status_code=500, detail="Discord client secret not configured."
-        )
+        raise HTTPException(status_code=500, detail="Discord client secret not configured.")
     if not token_url:
-        raise HTTPException(
-            status_code=500, detail="Discord token URL not configured."
-        )
+        raise HTTPException(status_code=500, detail="Discord token URL not configured.")
 
     token_data = {
         "client_id": client_id,
@@ -80,16 +69,13 @@ async def _handle_discord_oauth(
 
     if not user_id or not user_name:
         raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve user ID or username from Discord.",
+            status_code=500, detail="Failed to retrieve user ID or username from Discord."
         )
 
     return user_id, user_name
 
 
-async def _handle_github_oauth(
-    code: str, redirect_uri: str
-) -> tuple[str, str]:
+async def _handle_github_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     """Handles the GitHub OAuth code exchange and user info retrieval."""
     client_id = env.CLI_GITHUB_CLIENT_ID
     client_secret = env.CLI_GITHUB_CLIENT_SECRET
@@ -98,13 +84,9 @@ async def _handle_github_oauth(
     user_api_url = "https://api.github.com/user"
 
     if not client_id:
-        raise HTTPException(
-            status_code=500, detail="GitHub client ID not configured."
-        )
+        raise HTTPException(status_code=500, detail="GitHub client ID not configured.")
     if not client_secret:
-        raise HTTPException(
-            status_code=500, detail="GitHub client secret not configured."
-        )
+        raise HTTPException(status_code=500, detail="GitHub client secret not configured.")
 
     token_data = {
         "client_id": client_id,
@@ -116,9 +98,7 @@ async def _handle_github_oauth(
     headers = {"Accept": "application/json"}  # Request JSON response for token
 
     try:
-        token_response = requests.post(
-            token_url, data=token_data, headers=headers
-        )
+        token_response = requests.post(token_url, data=token_data, headers=headers)
         token_response.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise HTTPException(
@@ -145,18 +125,16 @@ async def _handle_github_oauth(
         ) from e
 
     user_json = user_response.json()
-    user_id = str(
-        user_json.get("id")
-    )  # GitHub ID is integer, convert to string for consistency
+    user_id = str(user_json.get("id"))  # GitHub ID is integer, convert to string for consistency
     user_name = user_json.get("login")  # GitHub uses 'login' for username
 
     if not user_id or not user_name:
         raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve user ID or username from GitHub.",
+            status_code=500, detail="Failed to retrieve user ID or username from GitHub."
         )
 
     return user_id, user_name
+
 
 async def _run_submission(
     submission: SubmissionRequest, mode: SubmissionMode, backend: KernelBackend
@@ -172,6 +150,7 @@ async def _run_submission(
     reporter = MultiProgressReporterAPI()
     sub_id, results = await backend.submit_full(req, mode, reporter)
     return results, [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs]
+
 
 class MultiProgressReporterAPI(MultiProgressReporter):
     def __init__(self):
@@ -204,7 +183,6 @@ class RunProgressReporterAPI(RunProgressReporter):
             elif isinstance(part, Log):
                 self.long_report += f"\n\n## {part.header}:\n"
                 self.long_report += f"```\n{part.content}```"
-
 
 async def to_submit_info(
     user_info: Any,
