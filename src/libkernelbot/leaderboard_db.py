@@ -200,7 +200,7 @@ class LeaderboardDB:
                                 WHERE leaderboard.leaderboard.name = %s
                         )
                     );
-""",
+                    """,
                     (leaderboard_name,),
                 )
                 self.cursor.execute(
@@ -291,7 +291,7 @@ class LeaderboardDB:
         code: str,
         time: datetime.datetime,
         user_name: str = None,
-    ) -> int:
+    ) -> Optional[int]:
         try:
             # check if we already have the code
             self.cursor.execute(

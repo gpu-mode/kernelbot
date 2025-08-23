@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import requests
 from fastapi import HTTPException, UploadFile
@@ -13,7 +13,8 @@ from libkernelbot.report import (
     RunResultReport,
     Text,
 )
-from libkernelbot.submission import SubmissionRequest
+from libkernelbot.submission import ProcessedSubmissionRequest, SubmissionRequest, prepare_submission
+from src.libkernelbot.backend import KernelBackend
 
 
 async def _handle_discord_oauth(
@@ -157,6 +158,20 @@ async def _handle_github_oauth(
 
     return user_id, user_name
 
+async def _run_submission(
+    submission: SubmissionRequest, mode: SubmissionMode, backend: KernelBackend
+):
+    try:
+        req = prepare_submission(submission, backend)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if len(req.gpus) != 1:
+        raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+    reporter = MultiProgressReporterAPI()
+    sub_id, results = await backend.submit_full(req, mode, reporter)
+    return results, [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs]
 
 class MultiProgressReporterAPI(MultiProgressReporter):
     def __init__(self):

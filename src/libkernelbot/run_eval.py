@@ -103,6 +103,7 @@ def _create_files(files: Optional[dict[str, str]]):
         return
 
     for name, content in files.items():
+        print(f"Creating file {name} with type {type(content)}, {content}")
         assert Path(name).resolve().is_relative_to(Path.cwd())
         Path(name).write_text(content)
 
