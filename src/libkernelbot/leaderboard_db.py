@@ -1,11 +1,11 @@
 import dataclasses
 import datetime
 import json
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import psycopg2
 
-from libkernelbot.db_types import LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem
+from libkernelbot.db_types import IdentityType, LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem
 from libkernelbot.run_eval import CompileResult, RunResult, SystemInfo
 from libkernelbot.task import LeaderboardDefinition, LeaderboardTask
 from libkernelbot.utils import (
@@ -15,7 +15,6 @@ from libkernelbot.utils import (
 )
 
 logger = setup_logging(__name__)
-
 
 class LeaderboardDB:
     def __init__(
@@ -235,6 +234,45 @@ class LeaderboardDB:
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard `{leaderboard_name}`.") from e
 
+    def validate_identity(
+        self,
+        identifier: str,
+        id_type: IdentityType,
+    ) -> Optional[dict[str, str]]:
+        """
+        Validate an identity (CLI or Web) and return {user_id, user_name} if found.
+
+        Args:
+            identifier: The identifier value (CLI ID or Web Auth ID).
+            id_type: IdentityType enum (IdentityType.CLI or IdentityType.WEB).
+
+        Returns:
+            Optional[dict[str, str]]: {"user_id": ..., "user_name": ...} if valid; else None.
+        """
+        where_by_type = {
+            IdentityType.CLI: ("cli_id = %s AND cli_valid = TRUE", "CLI ID"),
+            IdentityType.WEB: ("web_auth_id = %s", "WEB AUTH ID"),
+        }
+
+        where_clause, human_label = where_by_type[id_type]
+
+        try:
+            self.cursor.execute(
+                f"""
+                SELECT id, user_name
+                FROM leaderboard.user_info
+                WHERE {where_clause}
+                """,
+                (identifier,),
+            )
+            row = self.cursor.fetchone()
+            return {"user_id": row[0], "user_name": row[1], "id_type":id_type.value} if row else None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
+            raise KernelBotError(f"Error validating {human_label}") from e
+
+
     def create_submission(
         self,
         leaderboard: str,
@@ -243,7 +281,7 @@ class LeaderboardDB:
         code: str,
         time: datetime.datetime,
         user_name: str = None,
-    ) -> Optional[int]:
+    ) -> int:
         try:
             # check if we already have the code
             self.cursor.execute(
@@ -305,6 +343,7 @@ class LeaderboardDB:
                 ),
             )
             submission_id = self.cursor.fetchone()[0]
+            submission_id = int(submission_id)
             assert submission_id is not None
             self.connection.commit()
             return submission_id
