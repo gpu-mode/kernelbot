@@ -372,7 +372,7 @@ If you used our software please cite it as
   title={KernelBot: A Competition Platform for Writing Heterogeneous {GPU} Code},
   author={Alex L Zhang and Matej Sirovatka and Erik Schultheis and Benjamin Horowitz and Mark Saroufim},
   note={Equal Contribution},
-  booktitle={Championing Open-source DEvelopment in ML Workshop @ ICML25},
+  booktitle={Championing Open-source Development in ML Workshop @ ICML25},
   year={2025},
   url={https://openreview.net/forum?id=bq9U4dmuyJ}
 }
