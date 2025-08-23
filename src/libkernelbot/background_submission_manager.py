@@ -46,7 +46,7 @@ class BackgroundSubmissionManager:
         self,
         backend: KernelBackend,
         min_workers: int = 2,
-        max_workers: int = 3,
+        max_workers: int = 24,
         idle_seconds: int = 120,
     ):
         self.backend = backend
@@ -231,17 +231,9 @@ class BackgroundSubmissionManager:
             need = desired - workers
             to_add = max(0, need)
             logger.info(
-                "[Background Job] logging autoscale plan:"
-                "plan to add %d workers. Based on:"
-                "max_workers: %d,"
-                "busy:%d,"
-                "active:%s,"
-                "enqueue:%d,"
-                to_add,
-                self.max_workers,
-                running,
-                workers,
-                qsize,
+                "[Background Job] autoscale plan: add %d workers "
+                "(max=%d, busy=%d, active=%s, enqueue=%d)",
+                to_add, self.max_workers, running, workers, qsize,
             )
             for _ in range(to_add):
                 logging.info("[Background Job] scale up: starting a new worker")
