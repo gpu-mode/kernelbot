@@ -194,14 +194,10 @@ async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
             db.init_user_from_cli(state_uuid, provider)
     except AttributeError as e:
         # Catch if leaderboard_db methods don't exist
-        raise HTTPException(
-            status_code=500, detail=f"Database interface error: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Database interface error: {e}") from e
     except Exception as e:
         # Catch other potential errors during DB interaction
-        raise HTTPException(
-            status_code=500, detail=f"Failed to initialize auth in DB: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Failed to initialize auth in DB: {e}") from e
 
     return {"state": state_uuid}
 
@@ -445,7 +441,6 @@ async def run_submission_v2(
         content={"id": sub_id, "status": "accepted"},
     )
 
-
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
     """An endpoint that returns all leaderboards.
@@ -460,9 +455,7 @@ async def get_leaderboards(db_context=Depends(get_db)):
         with db_context as db:
             return db.get_leaderboards()
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching leaderboards: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Error fetching leaderboards: {e}") from e
 
 
 @app.get("/gpus/{leaderboard_name}")
@@ -482,9 +475,7 @@ async def get_gpus(leaderboard_name: str, db_context=Depends(get_db)) -> list[st
             return db.get_leaderboard_gpu_types(leaderboard_name)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching GPU data: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
 
 
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
@@ -503,46 +494,18 @@ async def get_submissions(
                 leaderboard_name, gpu_name, limit=limit, offset=offset
             )
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching submissions: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Error fetching submissions: {e}") from e
 
 
 @app.get("/submission_count/{leaderboard_name}/{gpu_name}")
 async def get_submission_count(
-    leaderboard_name: str,
-    gpu_name: str,
-    user_id: str = None,
-    db_context=Depends(get_db),
+    leaderboard_name: str, gpu_name: str, user_id: str = None, db_context=Depends(get_db)
 ) -> dict:
     """Get the total count of submissions for pagination"""
     await simple_rate_limit()
     try:
         with db_context as db:
-            count = db.get_leaderboard_submission_count(
-                leaderboard_name, gpu_name, user_id
-            )
+            count = db.get_leaderboard_submission_count(leaderboard_name, gpu_name, user_id)
             return {"count": count}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching submission count: {e}"
-        ) from e
-
-async def start_detached_run(
-    req: ProcessedSubmissionRequest,
-    mode: SubmissionMode,
-    backend: KernelBackend,
-    manager: BackgroundSubmissionManager,
-):
-    with backend.db as db:
-        sub_id = db.create_submission(
-            leaderboard=req.leaderboard,
-            file_name=req.file_name,
-            code=req.code,
-            user_id=req.user_id,
-            time=datetime.datetime.now(),
-            user_name=req.user_name,
-        )
-        db.upsert_submission_job_status(sub_id, "initial", None)
-    await manager.enqueue(req, mode, sub_id)
-    return sub_id
+        raise HTTPException(status_code=500, detail=f"Error fetching submission count: {e}") from e
