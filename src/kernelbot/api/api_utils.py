@@ -1,5 +1,6 @@
+from typing import Any
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException,UploadFile
 
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
@@ -12,7 +13,7 @@ from libkernelbot.report import (
     Text,
 )
 from libkernelbot.submission import ProcessedSubmissionRequest, SubmissionRequest, prepare_submission
-from src.libkernelbot.background_submission_manager import BackgroundSubmissionManager
+from libkernelbot.leaderboard_db import LeaderboardDB
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:

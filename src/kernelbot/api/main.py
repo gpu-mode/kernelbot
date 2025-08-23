@@ -396,11 +396,10 @@ async def start_detached_run(
             time=datetime.datetime.now(),
             user_name=req.user_name,
         )
-        db.upsert_submission_job_status(sub_id, "initial", None)
-
+        job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
-    return sub_id
+    return sub_id,job_id
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_v2(
@@ -445,16 +444,12 @@ async def run_submission_v2(
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     # start the submission
-    sub_id = await start_detached_run(
+    sub_id,job_id = await start_detached_run(
         req, submission_mode_enum, backend_instance, background_submission_manager
     )
     return JSONResponse(
         status_code=202,
-        content={
-            "id": sub_id,
-            "jobs_id":
-
-        "status": "accepted"},
+        content={"id": sub_id, "job_id": job_id, "status": "accepted"},
     )
 
 @app.get("/leaderboards")

@@ -73,7 +73,6 @@ class KernelBackend:
                     user_name=req.user_name,
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
-
         try:
             tasks = [
                 self.submit_leaderboard(
