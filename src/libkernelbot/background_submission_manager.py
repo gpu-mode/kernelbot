@@ -118,7 +118,7 @@ class BackgroundSubmissionManager:
                         self.queue.get(), timeout=self.idle_seconds
                     )
                     logger.info(
-                        "[Background Job] worker %r got submission job %s", id(asyncio.current_task()), item.sub_id
+                        "[Background Job][worker %r] pick the submission job `%s`", id(asyncio.current_task()), item.sub_id
                     )
                 except asyncio.TimeoutError:
                     async with self._state_lock:
@@ -130,7 +130,7 @@ class BackgroundSubmissionManager:
                             try:
                                 self._workers.remove(me)
                                 logger.info(
-                                    "[Background Job] scale down: worker %r exiting; workers=%d",
+                                    "[Background Job][worker %r] idle too long, scale down; existing workers=%d",
                                     me.get_name()
                                     if hasattr(me, "get_name")
                                     else id(me),
@@ -143,11 +143,15 @@ class BackgroundSubmissionManager:
                     continue
 
                 t = asyncio.create_task(self._run_one(item), name=f"submision-job-{item.sub_id}")
+
                 async with self._state_lock:
                     self._live_tasks.add(t)
                 try:
                     await t  # wait submission job to finish
                 finally:
+                    logger.info(
+                        "[Background Job][worker %r] finishes the submission job `%s`", id(asyncio.current_task()), item.sub_id
+                    )
                     async with self._state_lock:
                         self._live_tasks.discard(t)
                     self.queue.task_done()
@@ -191,7 +195,7 @@ class BackgroundSubmissionManager:
                 timeout=HARD_TIMEOUT_SEC,
             )
             ts = dt.datetime.now(dt.timezone.utc)
-            logger.info("[Background Job] run submission %s succeeded", sub_id)
+            logger.info("[Background Job] submission %s succeeded", sub_id)
             with self.backend.db as db:
                 db.upsert_submission_job_status(
                     sub_id, status="succeeded", last_heartbeat=ts
@@ -214,7 +218,7 @@ class BackgroundSubmissionManager:
                         sub_id, status="failed", last_heartbeat=ts, error=str(e)
                     )
             except Exception:
-                logger.error("Failed to write failed status for submission %s", sub_id)
+                logger.error("[Background Job] Failed to write failed status for submission %s", sub_id)
         finally:
             stop_heartbeat.set()
             hb_task.cancel()
