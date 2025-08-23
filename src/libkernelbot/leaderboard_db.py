@@ -272,7 +272,11 @@ class LeaderboardDB:
                 (identifier,),
             )
             row = self.cursor.fetchone()
-            return {"user_id": row[0], "user_name": row[1], "id_type":id_type.value} if row else None
+            return {
+                "user_id": row[0],
+                "user_name": row[1],
+                "id_type":id_type.value
+            } if row else None
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
@@ -382,27 +386,55 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error while finalizing submission") from e
 
-    def upsert_submission_status(
-        self, submission_id: int, status: str, info: Optional[str] = None
-    ) -> None:
+    def update_heartbeat_if_active(self, sub_id: int, ts: datetime.datetime) -> None:
         try:
             self.cursor.execute(
                 """
-                INSERT INTO leaderboard.submission_status (submission_id, status, info)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (submission_id)
-                DO UPDATE SET
-                    status = EXCLUDED.status,
-                    info = EXCLUDED.info,
-                    updated_at = now()
+                UPDATE leaderboard.submission_job_status
+                SET last_heartbeat = %s,
+                    updated_at = %s
+                WHERE submission_id = %s
+                AND status IN ('pending','running')
                 """,
-                (submission_id, status, info),
+                (ts, ts, sub_id),
             )
             self.connection.commit()
         except psycopg2.Error as e:
             self.connection.rollback()
-            logger.exception("Error upserting submission status for %s", submission_id, exc_info=e)
-            raise KernelBotError("Error updating submission status") from e
+            logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
+            raise KernelBotError("Error updating job status") from e
+
+
+    def upsert_submission_job_status(
+        self,
+        sub_id: int,
+        status: str | None = None,
+        error: str | None = None,
+        last_heartbeat: datetime.datetime | None = None,
+    ) -> int:
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_job_status AS s
+                    (submission_id, status, error, last_heartbeat)
+                VALUES
+                    (%s, %s, %s, %s)
+                ON CONFLICT (submission_id) DO UPDATE
+                SET
+                    status         = COALESCE(EXCLUDED.status, s.status),
+                    error          = COALESCE(EXCLUDED.error, s.error),
+                    last_heartbeat = COALESCE(EXCLUDED.last_heartbeat, s.last_heartbeat)
+                RETURNING submission_id;
+                """,
+                (sub_id, status, error, last_heartbeat),
+            )
+            job_id = self.cursor.fetchone()[0]
+            self.connection.commit()
+            return int(job_id)
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
+            raise KernelBotError("Error updating job status") from e
 
     def create_submission_run(
         self,

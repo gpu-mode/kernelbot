@@ -3,7 +3,7 @@ import copy
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Optional
-import json
+
 from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name
 from libkernelbot.launchers import Launcher
 from libkernelbot.leaderboard_db import LeaderboardDB
@@ -14,7 +14,7 @@ from libkernelbot.report import (
     make_short_report,
 )
 from libkernelbot.run_eval import FullResult
-from libkernelbot.submission import ProcessedSubmissionRequest, compute_score, prepare_submission
+from libkernelbot.submission import ProcessedSubmissionRequest, compute_score
 from libkernelbot.task import LeaderboardTask, build_task_config
 from libkernelbot.utils import setup_logging
 
@@ -230,42 +230,3 @@ class KernelBackend:
 
     def _get_arch(self, gpu_type: GPU):
         return GPU_TO_SM[gpu_type.name]
-
-
-    async def submit_with_status(
-        self,
-        req: ProcessedSubmissionRequest,
-        mode: SubmissionMode,
-        reporter: MultiProgressReporter,
-        sub_id: int,
-    ):
-
-        succeeded = False
-        try:
-            with self.db as db:
-                db.upsert_submission_status(sub_id, "prepare", None)
-            req = prepare_submission(req, self)
-            if not req.gpus or len(req.gpus) != 1:
-                    raise ValueError("Invalid GPU type")
-
-            with self.db as db:
-                db.upsert_submission_status(sub_id, "running", None)
-            sub_id2, results = await self.submit_full(
-                req, mode, reporter, pre_sub_id=sub_id
-            )
-            with self.db as db:
-                db.upsert_submission_status(sub_id, "succeeded", None)
-        except Exception as e:
-            info = json.dumps({"error": str(e)}, ensure_ascii=False)
-            try:
-                with self.db as db:
-                    db.upsert_submission_status(sub_id, "failed", info)
-            except Exception:
-                    logger.exception("Failed to write failed status for submission %s", sub_id)
-            logger.exception("Detached run %s failed", sub_id)
-        finally:
-            with self.db as db:
-                if not succeeded:
-                    db.upsert_submission_status(sub_id, "failed", None)
-                else:
-                    db.upsert_submission_status(sub_id, "succeeded", None)

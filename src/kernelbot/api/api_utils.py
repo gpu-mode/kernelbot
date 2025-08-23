@@ -1,15 +1,9 @@
-import asyncio
-import datetime
-import json
-import time
-from dataclasses import asdict
-from typing import Any, Optional
+from typing import Any
 
 import requests
-from fastapi import BackgroundTasks, HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile
 
 from kernelbot.env import env
-from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
@@ -19,7 +13,7 @@ from libkernelbot.report import (
     RunResultReport,
     Text,
 )
-from libkernelbot.submission import SubmissionRequest, prepare_submission
+from libkernelbot.submission import SubmissionRequest
 
 
 async def _handle_discord_oauth(
@@ -204,7 +198,7 @@ async def to_submit_info(
     leaderboard_name: str,
     gpu_type: str,
     db_context: LeaderboardDB,
-) -> tuple[SubmissionRequest, SubmissionMode]:
+) -> tuple[SubmissionRequest, SubmissionMode]: # noqa: C901
     user_name = user_info["user_name"]
     user_id = user_info["user_id"]
 
@@ -296,124 +290,3 @@ async def to_submit_info(
         ) from e
 
     return submission_request, submission_mode_enum
-
-
-def json_serializer(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
-        return obj.isoformat()
-    raise TypeError(f"Type {type(obj)} not serializable")
-
-
-async def _run_submission(
-    submission: SubmissionRequest,
-    mode: SubmissionMode,
-    backend: KernelBackend,
-    submission_id: Optional[int] = None,
-):
-    try:
-        req = prepare_submission(submission, backend)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    if len(req.gpus) != 1:
-        raise HTTPException(status_code=400, detail="Invalid GPU type")
-
-    reporter = MultiProgressReporterAPI()
-    sub_id, results = await backend.submit_full(
-        req, mode, reporter, submission_id
-    )
-    return (
-        results,
-        [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs],
-        sub_id,
-    )
-
-
-def start_detached_run(
-    submission_request: SubmissionRequest,
-    submission_mode_enum: SubmissionMode,
-    backend: KernelBackend,
-    background_tasks: BackgroundTasks,
-) -> int:
-
-    with backend.db as db:
-        sub_id = db.create_submission(
-            leaderboard=submission_request.leaderboard,
-            file_name=submission_request.file_name,
-            code=submission_request.code,
-            user_id=submission_request.user_id,
-            time=datetime.datetime.now(),
-            user_name=submission_request.user_name,
-        )
-        db.upsert_submission_status(sub_id, "initial", None)
-
-    background_tasks.add_task(
-        backend.submit_with_status,
-        submission_request,
-        submission_mode_enum,
-        backend,
-        sub_id,
-    )
-    return sub_id
-
-
-async def sse_stream_submission(
-    submission_request: SubmissionRequest,
-    submission_mode_enum: SubmissionMode,
-    backend: KernelBackend,
-):
-    start_time = time.time()
-    task: asyncio.Task | None = None
-    try:
-        task = asyncio.create_task(
-            _run_submission(submission_request, submission_mode_enum, backend)
-        )
-
-        while not task.done():
-            elapsed_time = time.time() - start_time
-            yield (
-                "event: status\n"
-                f"data: {json.dumps({'status': 'processing','elapsed_time': round(elapsed_time, 2)}, default=json_serializer)}\n\n"
-            )
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                yield (
-                    "event: error\n"
-                    f"data: {json.dumps({'status': 'error','detail': 'Submission cancelled'}, default=json_serializer)}\n\n"
-                )
-                return
-
-        result, reports = await task
-        result_data = {
-            "status": "success",
-            "results": [asdict(r) for r in result],
-            "reports": reports,
-        }
-        yield "event: result\n" f"data: {json.dumps(result_data, default=json_serializer)}\n\n"
-
-    except HTTPException as http_exc:
-        error_data = {
-            "status": "error",
-            "detail": http_exc.detail,
-            "status_code": http_exc.status_code,
-        }
-        yield "event: error\n" f"data: {json.dumps(error_data, default=json_serializer)}\n\n"
-    except Exception as e:
-        error_type = type(e).__name__
-        error_data = {
-            "status": "error",
-            "detail": f"An unexpected error occurred: {error_type}",
-            "raw_error": str(e),
-        }
-        yield "event: error\n" f"data: {json.dumps(error_data, default=json_serializer)}\n\n"
-    finally:
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass

@@ -4,7 +4,7 @@ import os
 
 import discord
 import uvicorn
-from api.main import app, init_api
+from api.main import app, init_api, init_background_submission_manager
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
@@ -15,6 +15,7 @@ from env import env, init_environment
 
 from libkernelbot import consts
 from libkernelbot.backend import KernelBackend
+from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.launchers import GitHubLauncher, ModalLauncher
 from libkernelbot.utils import setup_logging
 
@@ -216,6 +217,9 @@ async def start_bot_and_api(debug_mode: bool):
     bot_instance = ClusterBot(debug_mode=debug_mode)
 
     init_api(bot_instance.backend)
+    m = init_background_submission_manager(BackgroundSubmissionManager(bot_instance.backend))
+    # Start manager queue BEFORE serving requests
+    await m.start()
 
     config = uvicorn.Config(
         app,
@@ -225,10 +229,14 @@ async def start_bot_and_api(debug_mode: bool):
         limit_concurrency=10,
     )
     server = uvicorn.Server(config)
-
-    # we need this as discord and fastapi both run on the same event loop
-    await asyncio.gather(bot_instance.start_bot(token), server.serve())
-
+    try:
+        await asyncio.gather(
+            bot_instance.start_bot(token),
+            server.serve(),
+        )
+    finally:
+        # graceful shutdown
+        await m.stop()
 
 def on_unhandled_exception(loop, context):
     logger.exception("Unhandled exception: %s", context["message"], exc_info=context["exception"])

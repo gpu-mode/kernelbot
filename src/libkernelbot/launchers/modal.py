@@ -4,7 +4,7 @@ import modal
 
 from libkernelbot.consts import GPU, ModalGPU
 from libkernelbot.report import RunProgressReporter
-from libkernelbot.run_eval import FullResult
+from libkernelbot.run_eval import FullResult, SystemInfo
 from libkernelbot.utils import setup_logging
 
 from .launcher import Launcher
@@ -27,6 +27,16 @@ class ModalLauncher(Launcher):
         func_name = f"run_{func_type}_script_{gpu_type.value.lower()}"
 
         logger.info(f"Starting Modal run using {func_name}")
+
+
+        #elaine tesitng
+        await asyncio.sleep(10)
+        return FullResult(
+            success=True,
+            error="",
+            system= SystemInfo(),
+            runs={},
+        )
 
         await status.push("⏳ Waiting for Modal run to finish...")
 

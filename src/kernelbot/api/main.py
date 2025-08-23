@@ -1,24 +1,30 @@
 import asyncio
 import base64
+import datetime
 import json
 import os
 import time
+from dataclasses import asdict
 from typing import Annotated, Any, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from libkernelbot.backend import KernelBackend
+from libkernelbot.background_submission_manager import BackgroundSubmissionManager
+from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
+from libkernelbot.submission import (
+    ProcessedSubmissionRequest,
+    prepare_submission,
+)
 from libkernelbot.utils import KernelBotError
-from src.libkernelbot.submission import prepare_submission
 
 from .api_utils import (
+    MultiProgressReporterAPI,
     _handle_discord_oauth,
     _handle_github_oauth,
-    sse_stream_submission,
-    start_detached_run,
     to_submit_info,
 )
 
@@ -27,12 +33,12 @@ from .api_utils import (
 
 app = FastAPI()
 
-
-
 backend_instance: KernelBackend = None
+background_submission_manager: BackgroundSubmissionManager = None
 
 _last_action = time.time()
 _submit_limiter = asyncio.Semaphore(3)
+
 
 async def simple_rate_limit():
     """
@@ -56,6 +62,12 @@ async def simple_rate_limit():
 def init_api(_backend_instance: KernelBackend):
     global backend_instance
     backend_instance = _backend_instance
+
+
+def init_background_submission_manager(_manager: BackgroundSubmissionManager):
+    global background_submission_manager
+    background_submission_manager = _manager
+    return background_submission_manager
 
 
 @app.exception_handler(KernelBotError)
@@ -91,10 +103,14 @@ async def validate_cli_header(
         with db_context as db:
             user_info = db.validate_cli_id(x_popcorn_cli_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error during validation: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Database error during validation: {e}"
+        ) from e
 
     if user_info is None:
-        raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
+        raise HTTPException(
+            status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id"
+        )
 
     return user_info
 
@@ -102,7 +118,7 @@ async def validate_cli_header(
 async def validate_user_header(
     x_web_auth_id: Optional[str] = Header(None, alias="X-Web-Auth-Id"),
     x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
-    db_context: LeaderboardDB =Depends(get_db),
+    db_context: LeaderboardDB = Depends(get_db),
 ) -> Any:
     """
     Validate either X-Web-Auth-Id or X-Popcorn-Cli-Id and return the associated user id.
@@ -143,7 +159,6 @@ async def validate_user_header(
     return user_info
 
 
-
 @app.get("/auth/init")
 async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
     if provider not in ["discord", "github"]:
@@ -171,16 +186,22 @@ async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
             db.init_user_from_cli(state_uuid, provider)
     except AttributeError as e:
         # Catch if leaderboard_db methods don't exist
-        raise HTTPException(status_code=500, detail=f"Database interface error: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Database interface error: {e}"
+        ) from e
     except Exception as e:
         # Catch other potential errors during DB interaction
-        raise HTTPException(status_code=500, detail=f"Failed to initialize auth in DB: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Failed to initialize auth in DB: {e}"
+        ) from e
 
     return {"state": state_uuid}
 
 
 @app.get("/auth/cli/{auth_provider}")
-async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends(get_db)):  # noqa: C901
+async def cli_auth(
+    auth_provider: str, code: str, state: str, db_context=Depends(get_db)
+):  # noqa: C901
     """
     Handle Discord/GitHub OAuth redirect. This endpoint receives the authorization code
     and state parameter from the OAuth flow.
@@ -197,7 +218,9 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         )
 
     if not code or not state:
-        raise HTTPException(status_code=400, detail="Missing authorization code or state")
+        raise HTTPException(
+            status_code=400, detail="Missing authorization code or state"
+        )
 
     try:
         # Pad state if necessary for correct base64 decoding
@@ -207,10 +230,14 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         cli_id = state_data["cli_id"]
         is_reset = state_data.get("is_reset", False)
     except (json.JSONDecodeError, KeyError, Exception) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid state parameter: {e}") from None
+        raise HTTPException(
+            status_code=400, detail=f"Invalid state parameter: {e}"
+        ) from None
 
     # Determine API URL (handle potential None value)
-    api_base_url = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv("POPCORN_API_URL")
+    api_base_url = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv(
+        "POPCORN_API_URL"
+    )
     if not api_base_url:
         raise HTTPException(
             status_code=500,
@@ -240,7 +267,8 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
 
     if not user_id or not user_name:
         raise HTTPException(
-            status_code=500, detail="Failed to retrieve user ID or username from provider."
+            status_code=500,
+            detail="Failed to retrieve user ID or username from provider.",
         )
 
     try:
@@ -255,7 +283,9 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
             status_code=500, detail=f"Database interface error during update: {e}"
         ) from e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Database update failed: {e}") from e
+        raise HTTPException(
+            status_code=400, detail=f"Database update failed: {e}"
+        ) from e
 
     return {
         "status": "success",
@@ -294,20 +324,26 @@ async def run_submission(  # noqa: C901
         StreamingResponse: A streaming response containing the status and results of the submission.
     """
     await simple_rate_limit()
-    submission_request,submission_mode_enum = await to_submit_info(
-        user_info,
-        submission_mode,
-        file,
-        leaderboard_name,
-        gpu_type,
-        db_context)
+    submission_request, submission_mode_enum = await to_submit_info(
+        user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+    )
+
+    # prepare submission request before the submission is started
+    try:
+        req = prepare_submission(submission_request, backend_instance)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if not req.gpus or len(req.gpus) != 1:
+        raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     generator = sse_stream_submission(
-        submission_request=submission_request,
+        req=req,
         submission_mode_enum=submission_mode_enum,
         backend=backend_instance,
     )
     return StreamingResponse(generator, media_type="text/event-stream")
+
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_v2(
@@ -315,30 +351,27 @@ async def run_submission_v2(
     gpu_type: str,
     submission_mode: str,
     file: UploadFile,
-    background_tasks: BackgroundTasks,
     user_info: Annotated[dict, Depends(validate_user_header)],
-    db_context = Depends(get_db),
+    db_context=Depends(get_db),
 ) -> Any:
-
     await simple_rate_limit()
 
-    submission_request,submission_mode_enum = await to_submit_info(
-        user_info,
-        submission_mode,
-        file,
-        leaderboard_name,
-        gpu_type,
-        db_context)
+    submission_request, submission_mode_enum = await to_submit_info(
+        user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+    )
 
     try:
         req = prepare_submission(submission_request, backend_instance)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    if len(req.gpus) != 1:
+    # prepare submission request before the submission is started
+    if not req.gpus or len(req.gpus) != 1:
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
-    sub_id = start_detached_run(submission_request, submission_mode_enum, backend_instance, db_context, background_tasks)
+    sub_id = await start_detached_run(
+        req, submission_mode_enum, backend_instance, background_submission_manager
+    )
     return JSONResponse(
         status_code=202,
         content={"id": sub_id, "status": "accepted"},
@@ -359,7 +392,9 @@ async def get_leaderboards(db_context=Depends(get_db)):
         with db_context as db:
             return db.get_leaderboards()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching leaderboards: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching leaderboards: {e}"
+        ) from e
 
 
 @app.get("/gpus/{leaderboard_name}")
@@ -379,7 +414,9 @@ async def get_gpus(leaderboard_name: str, db_context=Depends(get_db)) -> list[st
             return db.get_leaderboard_gpu_types(leaderboard_name)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching GPU data: {e}"
+        ) from e
 
 
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
@@ -398,18 +435,128 @@ async def get_submissions(
                 leaderboard_name, gpu_name, limit=limit, offset=offset
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching submissions: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching submissions: {e}"
+        ) from e
 
 
 @app.get("/submission_count/{leaderboard_name}/{gpu_name}")
 async def get_submission_count(
-    leaderboard_name: str, gpu_name: str, user_id: str = None, db_context=Depends(get_db)
+    leaderboard_name: str,
+    gpu_name: str,
+    user_id: str = None,
+    db_context=Depends(get_db),
 ) -> dict:
     """Get the total count of submissions for pagination"""
     await simple_rate_limit()
     try:
         with db_context as db:
-            count = db.get_leaderboard_submission_count(leaderboard_name, gpu_name, user_id)
+            count = db.get_leaderboard_submission_count(
+                leaderboard_name, gpu_name, user_id
+            )
             return {"count": count}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching submission count: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching submission count: {e}"
+        ) from e
+
+
+async def _run_submission(
+    req: ProcessedSubmissionRequest,
+    mode: SubmissionMode,
+    backend: KernelBackend,
+    submission_id: Optional[int] = None,
+):
+    reporter = MultiProgressReporterAPI()
+    sub_id, results = await backend.submit_full(req, mode, reporter, submission_id)
+    return (
+        results,
+        [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs],
+        sub_id,
+    )
+
+
+async def start_detached_run(
+    req: ProcessedSubmissionRequest,
+    mode: SubmissionMode,
+    backend: KernelBackend,
+    manager: BackgroundSubmissionManager,
+):
+    with backend.db as db:
+        sub_id = db.create_submission(
+            leaderboard=req.leaderboard,
+            file_name=req.file_name,
+            code=req.code,
+            user_id=req.user_id,
+            time=datetime.datetime.now(),
+            user_name=req.user_name,
+        )
+        db.upsert_submission_job_status(sub_id, "initial", None)
+    await manager.enqueue(req, mode, sub_id)
+    return sub_id
+
+
+async def sse_stream_submission(
+    req: ProcessedSubmissionRequest,
+    submission_mode_enum: SubmissionMode,
+    backend: KernelBackend,
+):
+    start_time = time.time()
+    task: asyncio.Task | None = None
+    try:
+        task = asyncio.create_task(_run_submission(req, submission_mode_enum, backend))
+
+        while not task.done():
+            elapsed_time = time.time() - start_time
+            yield (
+                "event: status\n"
+                f"data: {json.dumps({'status': 'processing','elapsed_time': round(elapsed_time, 2)}, default=json_serializer)}\n\n"
+            )
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                yield (
+                    "event: error\n"
+                    f"data: {json.dumps({'status': 'error','detail': 'Submission cancelled'}, default=json_serializer)}\n\n"
+                )
+                return
+
+        result, reports = await task
+        result_data = {
+            "status": "success",
+            "results": [asdict(r) for r in result],
+            "reports": reports,
+        }
+        yield "event: result\n" f"data: {json.dumps(result_data, default=json_serializer)}\n\n"
+
+    except HTTPException as http_exc:
+        error_data = {
+            "status": "error",
+            "detail": http_exc.detail,
+            "status_code": http_exc.status_code,
+        }
+        yield "event: error\n" f"data: {json.dumps(error_data, default=json_serializer)}\n\n"
+    except Exception as e:
+        error_type = type(e).__name__
+        error_data = {
+            "status": "error",
+            "detail": f"An unexpected error occurred: {error_type}",
+            "raw_error": str(e),
+        }
+        yield "event: error\n" f"data: {json.dumps(error_data, default=json_serializer)}\n\n"
+    finally:
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+
+def json_serializer(obj):
+    """JSON serializer for objects not serializable by default json code"""
+    if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
