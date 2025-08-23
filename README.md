@@ -364,17 +364,16 @@ If you'd like to donate a GPU to our efforts, we can make you a CI admin in Gith
 - Midjourney was a similar inspiration in terms of UX
 
 ## Citation
-
 If you used our software please cite it as
 
 ```
-@misc{kernelbot2025,
-    title={KernelBot: A Discord-based GPU Kernel Evaluation and Competition Platform},
-    author={Sirovatka, Matej and Zhang, Alex and Schultheis, Erik and Horowitz, Ben and Saroufim, Mark},
-    year={2025},
-    month={2},
-    note={Equal contribution},
-    url={https://github.com/gpu-mode/discord-cluster-manager},
-    publisher={GitHub}
+@inproceedings{
+  kernelbot2025,
+  title={KernelBot: A Competition Platform for Writing Heterogeneous {GPU} Code},
+  author={Alex L Zhang and Matej Sirovatka and Erik Schultheis and Benjamin Horowitz and Mark Saroufim},
+  note={Equal Contribution},
+  booktitle={Championing Open-source Development in ML Workshop @ ICML25},
+  year={2025},
+  url={https://openreview.net/forum?id=bq9U4dmuyJ}
 }
 ```
