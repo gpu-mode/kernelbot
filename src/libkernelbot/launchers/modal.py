@@ -28,16 +28,6 @@ class ModalLauncher(Launcher):
 
         logger.info(f"Starting Modal run using {func_name}")
 
-
-        #elaine tesitng
-        await asyncio.sleep(10)
-        return FullResult(
-            success=True,
-            error="",
-            system= SystemInfo(),
-            runs={},
-        )
-
         await status.push("⏳ Waiting for Modal run to finish...")
 
         result = await loop.run_in_executor(
