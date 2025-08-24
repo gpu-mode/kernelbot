@@ -379,7 +379,7 @@ async def run_submission(  # noqa: C901
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
-async def start_detached_run(
+async def enqueue_background_job(
     req: ProcessedSubmissionRequest,
     mode: SubmissionMode,
     backend: KernelBackend,
@@ -443,8 +443,8 @@ async def run_submission_v2(
     if not req.gpus or len(req.gpus) != 1:
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
-    # start the submission
-    sub_id,job_id = await start_detached_run(
+    # put submission request to background manager to run in background
+    sub_id,job_id = await enqueue_background_job(
         req, submission_mode_enum, backend_instance, background_submission_manager
     )
     return JSONResponse(
