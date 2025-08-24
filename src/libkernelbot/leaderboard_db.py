@@ -418,7 +418,7 @@ class LeaderboardDB:
                     status         = COALESCE(EXCLUDED.status, s.status),
                     error          = COALESCE(EXCLUDED.error, s.error),
                     last_heartbeat = COALESCE(EXCLUDED.last_heartbeat, s.last_heartbeat)
-                RETURNING submission_id;
+                RETURNING id;
                 """,
                 (sub_id, status, error, last_heartbeat),
             )

@@ -53,7 +53,7 @@ class BackgroundSubmissionManager:
         self.queue: asyncio.Queue[JobItem] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []  # workers currently running
         self._live_tasks: set[asyncio.Task] = set()  # tasks currently processing
-        self.idle_seconds = idle_seconds
+        self.idle_seconds = idle_seconds # idle_seconds for each worker before scale down
         # state variables
 
         self._state_lock = asyncio.Lock()
