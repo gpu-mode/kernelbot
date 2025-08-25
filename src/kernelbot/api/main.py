@@ -20,7 +20,7 @@ from libkernelbot.submission import (
     SubmissionRequest,
     prepare_submission,
 )
-from libkernelbot.utils import KernelBotError
+from libkernelbot.utils import KernelBotError, setup_logging
 
 from .api_utils import (
     _handle_discord_oauth,
@@ -28,6 +28,7 @@ from .api_utils import (
     to_submit_info,
     _run_submission,
 )
+logger = setup_logging(__name__)
 
 # yes, we do want  ... = Depends() in function signatures
 # ruff: noqa: B008
@@ -426,31 +427,44 @@ async def run_submission_v2(
     Returns:
         JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
     """
-
-    await simple_rate_limit()
-
-    submission_request, submission_mode_enum = await to_submit_info(
-        user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
-    )
-
-    # throw error if submission request is invalid
     try:
-        req = prepare_submission(submission_request, backend_instance)
+
+        await simple_rate_limit()
+
+        submission_request, submission_mode_enum = await to_submit_info(
+            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+        )
+
+        # throw error if submission request is invalid
+        try:
+            req = prepare_submission(submission_request, backend_instance)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        # prepare submission request before the submission is started
+        if not req.gpus or len(req.gpus) != 1:
+            raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+        # put submission request to background manager to run in background
+        sub_id,job_id = await enqueue_background_job(
+            req, submission_mode_enum, backend_instance, background_submission_manager
+        )
+        return JSONResponse(
+            status_code=202,
+            content={"id": sub_id, "job_id": job_id, "status": "accepted"},
+        )
+        # Preserve FastAPI HTTPException as-is
+    except HTTPException:
+        raise
+
+    # Your custom sanitized error
+    except KernelBotError as e:
+        raise HTTPException(status_code=getattr(e, "http_code", 400), detail=str(e)) from e
+    # All other unexpected errors → 500
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    # prepare submission request before the submission is started
-    if not req.gpus or len(req.gpus) != 1:
-        raise HTTPException(status_code=400, detail="Invalid GPU type")
-
-    # put submission request to background manager to run in background
-    sub_id,job_id = await enqueue_background_job(
-        req, submission_mode_enum, backend_instance, background_submission_manager
-    )
-    return JSONResponse(
-        status_code=202,
-        content={"id": sub_id, "job_id": job_id, "status": "accepted"},
-    )
+        # logger.exception("Unexpected error in run_submission_v2")
+        logger.error(f"Unexpected error in api submissoin: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
