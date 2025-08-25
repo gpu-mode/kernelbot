@@ -301,26 +301,24 @@ def run_single_evaluation(
     A single runner run, either in the context of test files, or in the
     context of benchmark files.
     """
-    if mode == "test":
-        with tempfile.NamedTemporaryFile("w") as tests_file:
-            tests_file.write(tests)
-            tests_file.flush()
-            return run_program(
-                call + [mode, tests_file.name], seed=seed, timeout=test_timeout, multi_gpu=multi_gpu
-            )
-    elif mode in ["benchmark", "profile", "leaderboard"]:
-        timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
-        with tempfile.NamedTemporaryFile("w") as bench_file:
+    with tempfile.NamedTemporaryFile("w") as cases:
+        if mode == "test":
+            timeout = test_timeout
+            cases.write(tests)
+        elif mode in ["benchmark", "profile", "leaderboard"]:
+            timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
             if ranking_by == "last":
-                bench_file.write(benchmarks.splitlines(keepends=True)[-1])
+                cases.write(benchmarks.splitlines(keepends=True)[-1])
             else:
-                bench_file.write(benchmarks)
-            bench_file.flush()
-            return run_program(
-                call + [mode, bench_file.name], seed=seed, timeout=timeout, multi_gpu=multi_gpu
-            )
-    else:
-        raise ValueError(f"Invalid mode {mode}")
+                cases.write(benchmarks)
+        else:
+            raise ValueError(f"Invalid mode {mode}")
+
+        cases.flush()
+
+        call += [mode, cases.name]
+
+        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
 
 
 def make_system_info() -> SystemInfo:
