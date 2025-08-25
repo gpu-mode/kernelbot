@@ -430,28 +430,31 @@ async def run_submission_v2(
     try:
 
         await simple_rate_limit()
+        logger.info(f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}")
 
-        submission_request, submission_mode_enum = await to_submit_info(
-            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
-        )
 
         # throw error if submission request is invalid
         try:
+            submission_request, submission_mode_enum = await to_submit_info(
+            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+            )
+
             req = prepare_submission(submission_request, backend_instance)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise HTTPException(status_code=400, detail=f"failed to prepare submission request: {str(e)}")
 
         # prepare submission request before the submission is started
         if not req.gpus or len(req.gpus) != 1:
             raise HTTPException(status_code=400, detail="Invalid GPU type")
 
         # put submission request to background manager to run in background
-        sub_id,job_id = await enqueue_background_job(
+        sub_id,job_status_id = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
+
         return JSONResponse(
             status_code=202,
-            content={"id": sub_id, "job_id": job_id, "status": "accepted"},
+            content={"details":{"id": sub_id, "job_status_id": job_status_id}, "status": "accepted"},
         )
         # Preserve FastAPI HTTPException as-is
     except HTTPException:
