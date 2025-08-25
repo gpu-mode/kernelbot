@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from libkernelbot.consts import ExitCode, SubmissionMode
-from libkernelbot.run_eval import compile_cuda_script, run_cuda_script
+from libkernelbot.run_eval import compile_cuda_script, make_system_info, run_cuda_script
 
 ref = Path("examples/identity_cuda/reference.cuh").read_text()
 task_h = Path("examples/identity_cuda/task.h").read_text()
@@ -19,6 +19,7 @@ def run_cuda_helper(sources: dict, headers: dict = None, arch=None, **kwargs):
         headers = header_files
 
     eval_result = run_cuda_script(
+        make_system_info(),
         sources,
         headers,
         arch=arch,
@@ -194,6 +195,7 @@ def test_include_dirs(tmp_path: Path):
 
     # can also use generic flags argument
     result = run_cuda_script(
+        make_system_info(),
         {"eval.cu": eval_cu, "submission.cu": sub},
         header_files,
         flags=["-I.", f"-I{tmp_path}"],

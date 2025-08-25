@@ -22,7 +22,11 @@ from libkernelbot.run_eval import CompileResult, EvalResult, FullResult, RunResu
 # define helpers and  fixtures that create mock results
 def sample_system_info() -> SystemInfo:
     return SystemInfo(
-        gpu="NVIDIA RTX 4090", cpu="Intel i9-12900K", platform="Linux-5.15.0", torch="2.0.1+cu118"
+        gpu="NVIDIA RTX 4090",
+        cpu="Intel i9-12900K",
+        runtime="CUDA",
+        platform="Linux-5.15.0",
+        torch="2.0.1+cu118",
     )
 
 
@@ -491,6 +495,7 @@ def test_generate_report_test_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -522,6 +527,7 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -556,6 +562,7 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -591,6 +598,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -616,6 +624,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -653,6 +662,7 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
