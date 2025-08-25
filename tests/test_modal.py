@@ -240,6 +240,60 @@ async def test_modal_multi_gpu(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.parametrize("script, good", [("submission.py", True), ("wrong.py", False)])
+async def test_modal_multi_gpu_benchmark(
+    modal_deployment, project_root: Path, script: str, good: bool
+):
+    """
+    This isn't really a modal test, but instead a test using modal to check that multi-gpu submission
+    testing works (on modal...).
+    """
+    launcher = ModalLauncher(add_include_dirs=[])
+    reporter = MockProgressReporter("progress")
+
+    # Load the real identity_py task
+    task_path = project_root / "examples" / "gather"
+    if not task_path.exists():
+        pytest.skip("examples/gather not found - skipping Modal multi-gpu test")
+
+    # Load the task definition
+    task_definition = make_task_definition(task_path)
+
+    # Use the actual working submission from the examples
+    submission_content = (task_path / script).read_text()
+
+    config = build_task_config(
+        task=task_definition.task,
+        submission_content=submission_content,
+        arch=GPU_TO_SM[ModalGPU.L4x4.name],
+        mode=SubmissionMode.BENCHMARK,
+    )
+
+    result = await launcher.run_submission(config, ModalGPU.L4x4, reporter)
+
+    # Basic structure and success
+    assert result.success, f"Expected successful run, got: {result.error}"
+    assert result.error == ""
+    assert isinstance(result.runs, dict)
+
+    # System info - test actual expected values
+    pprint.pprint(result)
+    assert result.system.device_count == 4
+
+    # Test run structure
+    assert "benchmark" in result.runs
+    bench_run = result.runs["benchmark"]
+
+    # For Python runs, compilation is None
+    assert bench_run.compilation is None
+
+    # Run needs to succeed
+    assert bench_run.run.success is True
+    assert bench_run.run.passed is good
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 @pytest.mark.parametrize("script", ["cheat-fd.py", "cheat-input.py", "cheat-rng.py"])
 async def test_modal_launcher_failing_script(modal_deployment, project_root: Path, script: str):
     """
