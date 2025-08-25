@@ -23,6 +23,6 @@ tests:
   - {"seed": 5, "world_size": 4}
 
 benchmarks:
-  - {"seed": 10}
+  - {"seed": 10, "world_size": 4}
 
 ranking_by: "geom"

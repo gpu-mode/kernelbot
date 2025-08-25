@@ -151,6 +151,15 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
     description = raw["description"]
     del raw["description"]
     task = LeaderboardTask.from_dict(raw)
+
+    # basic validation:
+    if task.multi_gpu:
+        for test in task.tests:
+            if "world_size" not in test:
+                raise KernelBotError(f"multi-gpu test {test} does not specify world_size")
+        for benchmark in task.benchmarks:
+            if "world_size" not in benchmark:
+                raise KernelBotError(f"multi-gpu benchmark {benchmark} does not specify world_size")
     return LeaderboardDefinition(task=task, templates=templates, description=description)
 
 
