@@ -1,6 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Tuple
 
 import pytest
 
@@ -109,8 +110,15 @@ def modal_deployment(project_root: Path):
 @pytest.mark.parametrize(
     "gpu_type", [ModalGPU.T4, ModalGPU.L4, ModalGPU.A100, ModalGPU.H100, ModalGPU.B200]
 )
+@pytest.mark.parametrize(
+    "task",
+    [
+        ("vectoradd_py", "submission_cuda_inline.py"),
+        ("vectoradd_py", "submission_triton.py"),
+    ],
+)
 async def test_modal_launcher_python_script(
-    modal_deployment, project_root: Path, gpu_type: ModalGPU
+    modal_deployment, project_root: Path, gpu_type: ModalGPU, task: Tuple[str, str]
 ):
     """
     Test ModalLauncher with a real Python script using examples/identity_py.
@@ -119,7 +127,7 @@ async def test_modal_launcher_python_script(
     reporter = MockProgressReporter("progress")
 
     # Load the real identity_py task
-    task_path = project_root / "examples" / "identity_py"
+    task_path = project_root / "examples" / task[0]
     if not task_path.exists():
         pytest.skip("examples/identity_py not found - skipping Modal integration test")
 
@@ -127,7 +135,7 @@ async def test_modal_launcher_python_script(
     task_definition = make_task_definition(task_path)
 
     # Use the actual working submission from the examples
-    submission_content = (task_path / "submission.py").read_text()
+    submission_content = (task_path / task[1]).read_text()
 
     config = build_task_config(
         task=task_definition.task,
@@ -152,15 +160,10 @@ async def test_modal_launcher_python_script(
     assert "test" in result.runs
     test_run = result.runs["test"]
 
-    # For Python runs, compilation is None
-    assert test_run.compilation is None
-
     # Run needs to succeed
     assert test_run.run.success is True
     assert test_run.run.passed is True
     assert test_run.run.exit_code == 0
-    assert test_run.run.stdout == ""
-    assert test_run.run.stderr == ""
     assert test_run.run.duration > 0
 
     # Test need to succeed
