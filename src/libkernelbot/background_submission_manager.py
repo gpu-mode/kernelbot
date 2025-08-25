@@ -24,7 +24,7 @@ class JobItem:
 # Periodicaly update the last heartbeat time for the submission job in submission_job_status table
 HEARTBEAT_SEC = 15  # heartbeat interval 15s
 # HARD_TIMEOUT_SEC [3hours]:if a submission is not completed within the hard timeout, it will be marked as failed in submission_job_status table
-HARD_TIMEOUT_SEC = 60 * 60 * 3  # hard timeout 3 hours
+HARD_TIMEOUT_SEC = 60 * 30  # hard timeout 30 mins
 
 
 class BackgroundSubmissionManager:

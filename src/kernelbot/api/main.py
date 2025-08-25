@@ -403,7 +403,7 @@ async def enqueue_background_job(
     return sub_id,job_id
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
-async def run_submission_v2(
+async def run_submission_async(
     leaderboard_name: str,
     gpu_type: str,
     submission_mode: str,
@@ -423,7 +423,6 @@ async def run_submission_v2(
         user_id (str): The validated user ID obtained from the X-Popcorn-Cli-Id header.
     Raises:
         HTTPException: If the kernelbot is not initialized, or header/input is invalid.
-
     Returns:
         JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
     """
