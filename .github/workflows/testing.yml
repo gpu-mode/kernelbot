@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
-      - run: uv run pytest --cov-report term --cov-report html --cov-report xml --cov=src/libkernelbot unit-tests -v
+      - run: uv run pytest --cov-report term --cov-report html --cov-report xml --cov=src/libkernelbot -m "not integration" tests -v
       - uses: actions/upload-artifact@v4
         with:
           name: coverage
@@ -25,13 +25,22 @@ jobs:
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ github.token }}
-
       - name: Store Pull Request comment to be posted
         uses: actions/upload-artifact@v4
         if: steps.coverage_comment.outputs.COMMENT_FILE_WRITTEN == 'true'
         with:
-          # If you use a different name, update COMMENT_ARTIFACT_NAME accordingly
           name: python-coverage-comment-action
-          # If you use a different name, update COMMENT_FILENAME accordingly
           path: python-coverage-comment-action.txt
 
+  integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --extra dev
+      - run: uv run modal token set --token-id ${MODAL_TOKEN_ID} --token-secret ${MODAL_TOKEN_SECRET}
+      - run: uv run pytest -m integration tests -v

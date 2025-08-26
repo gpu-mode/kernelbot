@@ -32,7 +32,7 @@ class ModalLauncher(Launcher):
 
         result = await loop.run_in_executor(
             None,
-            lambda: modal.Function.lookup("discord-bot-runner", func_name).remote(config=config),
+            lambda: modal.Function.from_name("discord-bot-runner", func_name).remote(config=config),
         )
 
         await status.update("✅ Waiting for modal run to finish... Done")

@@ -8,14 +8,10 @@ DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
 
 
 @pytest.fixture(scope="module")
-def docker_compose():
-    tgt_path = Path.cwd()
-    if tgt_path.name == "unit-tests":
-        tgt_path = tgt_path.parent
-
+def docker_compose(project_root: Path):
     """Start a test database and run migrations"""
     subprocess.check_call(
-        ["docker", "compose", "-f", "docker-compose.test.yml", "up", "-d"], cwd=tgt_path
+        ["docker", "compose", "-f", "docker-compose.test.yml", "up", "-d"], cwd=project_root
     )
 
     try:
@@ -25,7 +21,7 @@ def docker_compose():
                 ["docker", "compose", "-f", "docker-compose.test.yml", "ps", "-q", "migrate-test"],
                 capture_output=True,
                 text=True,
-                cwd=tgt_path,
+                cwd=project_root,
             )
 
             if not result.stdout.strip():  # Container no longer exists
@@ -37,7 +33,7 @@ def docker_compose():
             ["docker", "compose", "-f", "docker-compose.test.yml", "logs", "migrate-test"],
             capture_output=True,
             text=True,
-            cwd=tgt_path,
+            cwd=project_root,
         )
 
         if "error" in logs.stdout.lower():
@@ -46,7 +42,7 @@ def docker_compose():
         yield
     finally:
         subprocess.run(
-            ["docker", "compose", "-f", "docker-compose.test.yml", "down", "-v"], cwd=tgt_path
+            ["docker", "compose", "-f", "docker-compose.test.yml", "down", "-v"], cwd=project_root
         )
 
 
@@ -122,3 +118,8 @@ def task_directory(tmp_path):
     # Create task.yml
     Path.write_text(tmp_path / "task.yml", TASK_YAML)
     return tmp_path
+
+
+@pytest.fixture(scope="session")
+def project_root():
+    return Path(__file__).parent.parent
