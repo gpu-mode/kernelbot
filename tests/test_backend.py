@@ -99,6 +99,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "lang": "py",
         "main": "kernel.py",
         "mode": "leaderboard",
+        "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
         "seed": None,

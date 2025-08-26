@@ -211,7 +211,7 @@ def run_single_test(pool: multiprocessing.Pool, test: TestCase):
     """
     world_size = test.args.get("world_size", None)
     if world_size is None:
-        return pool.apply(_run_single_test, (test, 0, 0))
+        return pool.apply(_run_single_test, (test,))
     else:
         return run_multi_gpu_test(pool, test, world_size)
 
@@ -255,7 +255,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     durations = []
     # generate input data once
     data = generate_input(**test.args)
-    check_copy = _clone_data(data)
+    check_copy = _clone_data(data, 0)
     #  first, one obligatory correctness check
     output = custom_kernel(data)
     good, message = wrap_check_implementation(check_copy, output)
@@ -275,7 +275,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
                 test.args["seed"] += 13
 
             data = generate_input(**test.args)
-            check_copy = _clone_data(data)
+            check_copy = _clone_data(data, 0)
         torch.cuda.synchronize()
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
@@ -509,7 +509,7 @@ def run_single_profile(test: TestCase) -> str:
     torch.cuda.synchronize()
 
     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
-        submission_output = custom_kernel(_clone_data(data))
+        submission_output = custom_kernel(_clone_data(data, 0))
         torch.cuda.synchronize()
     return prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20)
 

@@ -14,6 +14,7 @@ from libkernelbot.task import (
     build_task_config,
     make_task_definition,
 )
+from libkernelbot.utils import KernelBotError
 
 
 @pytest.fixture()
@@ -148,6 +149,7 @@ def test_build_task_config_python(leaderboard_task):
             {"input_size": 5000, "dtype": "float16"},
         ],
         "mode": mode.value,
+        "multi_gpu": False,
         "test_timeout": 120,
         "benchmark_timeout": 180,
         "ranked_timeout": 180,
@@ -201,6 +203,7 @@ def test_build_task_config_cuda():
             {"input_size": 5000, "dtype": "float16"},
         ],
         "mode": mode.value,
+        "multi_gpu": False,
         "test_timeout": 120,
         "benchmark_timeout": 180,
         "ranked_timeout": 180,
@@ -234,3 +237,16 @@ def test_make_task_definition(task_directory):
     assert task.benchmarks == [{"input_size": 10000, "dtype": "float32"}]
     assert isinstance(task.config, PythonTaskData)
     assert task.config.main == "kernel.py"
+
+
+def test_multi_gpu_task(task_directory):
+    """Test make_task_definition with a multi-GPU task"""
+    orig = (task_directory / "task.yml").read_text()
+    (task_directory / "task.yml").write_text(orig + "\nmulti_gpu: true")
+
+    # no world size specified => Error
+    with pytest.raises(KernelBotError, match="does not specify world_size"):
+        make_task_definition(task_directory / "task.yml")
+
+    result = make_task_definition(task_directory / "multi-task.yml")
+    assert result.task.multi_gpu is True

@@ -106,6 +106,32 @@ templates:
   CUDA: "template.cu"
 """
 
+MULTi_GPU_TASK_YAML = """
+lang: py
+description: "Test task description"
+ranking_by: geom
+multi_gpu: true
+test_timeout: 120
+files:
+  - name: "kernel.py"
+    source: "kernel.py"
+  - name: "submission.py"
+    source: "@SUBMISSION@"
+config:
+  main: "kernel.py"
+tests:
+  - input_size: 1000
+    world_size: 4
+    dtype: "float32"
+benchmarks:
+  - input_size: 10000
+    world_size: 4
+    dtype: "float32"
+templates:
+  Python: "template.py"
+  CUDA: "template.cu"
+"""
+
 
 @pytest.fixture
 def task_directory(tmp_path):
@@ -117,6 +143,7 @@ def task_directory(tmp_path):
 
     # Create task.yml
     Path.write_text(tmp_path / "task.yml", TASK_YAML)
+    Path.write_text(tmp_path / "multi-task.yml", MULTi_GPU_TASK_YAML)
     return tmp_path
 
 
