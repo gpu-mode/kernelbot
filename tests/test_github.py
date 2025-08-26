@@ -193,3 +193,71 @@ async def test_github_launcher_failing_script(project_root: Path, github_config:
     benchmark_passed = result.runs.get("benchmark", {}).run.passed if "benchmark" in result.runs else True
 
     assert not (test_passed and benchmark_passed), "Expected at least one run to fail for cheating script"
+
+
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gpu_type", [GitHubGPU.MI300x8])
+async def test_github_launcher_multi_gpu(project_root: Path, github_config: GitHubConfig, gpu_type: GitHubGPU):
+    """
+    Test GitHubLauncher with a real Python script using real GitHub Actions.
+    Tests all GPU types to verify runners are working.
+    """
+    launcher = GitHubLauncher(repo=github_config.repo, token=github_config.token, branch=github_config.branch)
+    reporter = MockProgressReporter("GitHub Integration Test")
+
+    # Load the real identity_py task
+    task_path = project_root / "examples" / "gather"
+    if not task_path.exists():
+        pytest.skip("examples/gather not found - skipping GitHub integration test")
+
+    task_definition = make_task_definition(task_path)
+    submission_content = (task_path / "submission.py").read_text()
+
+    config = build_task_config(
+        task=task_definition.task,
+        submission_content=submission_content,
+        arch=0,  # Not used for GitHub launcher
+        mode=SubmissionMode.TEST,
+    )
+
+    result = await launcher.run_submission(config, gpu_type, reporter)
+
+    # Basic structure and success
+    assert result.success, f"Expected successful run, got: {result.error}"
+    assert result.error == ""
+    assert isinstance(result.runs, dict)
+
+    assert result.system.device_count == 8
+
+    # Test run structure
+    assert "test" in result.runs
+    test_run = result.runs["test"]
+
+    # For Python runs, compilation is None
+    assert test_run.compilation is None
+
+    # Run needs to succeed
+    assert test_run.run.success is True
+    assert test_run.run.passed is True
+    assert test_run.run.exit_code == 0
+    assert test_run.run.duration > 0
+
+    # Test results need to succeed
+    assert test_run.run.result["check"] == "pass"
+    test_count = int(test_run.run.result["test-count"])
+    assert test_count == 1
+    for i in range(test_count):
+        assert test_run.run.result[f"test.{i}.status"] == "pass"
+        assert "size:" in test_run.run.result[f"test.{i}.spec"]
+        assert "seed:" in test_run.run.result[f"test.{i}.spec"]
+
+    # Sanity check for timings
+    assert test_run.start < test_run.end
+
+    # Check reporter messages
+    assert any("Waiting for workflow" in msg for msg in reporter.messages)
+    assert any("artifacts" in msg.lower() for msg in reporter.messages)
+    assert any("completed" in update for update in reporter.updates)
