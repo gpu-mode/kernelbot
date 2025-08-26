@@ -197,7 +197,8 @@ def run_multi_gpu_test(pool: multiprocessing.Pool, test: TestCase, world_size: i
                 args=(test, i),
             )
         )
-    rets = [el.get() for el in rets]
+    # 60 seconds should be more than enough, we want tests to be fast
+    rets = [el.get(60) for el in rets]
 
     correct = all(ret[0] for ret in rets)
     error_messages = str.join("\n", [f"rank {rank} - {ret[1]}" for rank, ret in enumerate(rets) if not ret[0]])
@@ -422,7 +423,9 @@ def run_multi_gpu_benchmark(pool: multiprocessing.Pool, test: TestCase, recheck:
                 args=(test, i, recheck, max_repeats, max_time_ns),
             )
         )
-    rets = [el.get() for el in rets]
+
+    # 120 seconds for benchmarking + we run a pre-benchmark test and want to leave some slack
+    rets = [el.get(timeout=180) for el in rets]
 
     # For multi-GPU benchmarking, only rank 0 has meaningful stats
     failed_ranks = []
