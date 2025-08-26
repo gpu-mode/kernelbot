@@ -114,7 +114,7 @@ class LeaderboardDefinition:
     templates: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
-def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
+def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noqa: C901
     if Path(yaml_file).is_dir():
         yaml_file = Path(yaml_file) / "task.yml"
 

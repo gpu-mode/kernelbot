@@ -218,7 +218,9 @@ def compile_cuda_script(  # # noqa: C901
     )
 
 
-def run_program(args: list[str], seed: Optional[int], timeout: int, multi_gpu: bool = False) -> RunResult:
+def run_program(
+    args: list[str], seed: Optional[int], timeout: int, multi_gpu: bool = False
+) -> RunResult:
     print("[Running]")
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
@@ -229,6 +231,7 @@ def run_program(args: list[str], seed: Optional[int], timeout: int, multi_gpu: b
 
     if multi_gpu:
         import torch
+
         env["POPCORN_GPUS"] = str(torch.cuda.device_count())
 
     execution_start_time = time.perf_counter()
@@ -302,7 +305,9 @@ def run_single_evaluation(
         with tempfile.NamedTemporaryFile("w") as tests_file:
             tests_file.write(tests)
             tests_file.flush()
-            return run_program(call + [mode, tests_file.name], seed=seed, timeout=test_timeout, multi_gpu=multi_gpu)
+            return run_program(
+                call + [mode, tests_file.name], seed=seed, timeout=test_timeout, multi_gpu=multi_gpu
+            )
     elif mode in ["benchmark", "profile", "leaderboard"]:
         timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
         with tempfile.NamedTemporaryFile("w") as bench_file:
@@ -311,7 +316,9 @@ def run_single_evaluation(
             else:
                 bench_file.write(benchmarks)
             bench_file.flush()
-            return run_program(call + [mode, bench_file.name], seed=seed, timeout=timeout, multi_gpu=multi_gpu)
+            return run_program(
+                call + [mode, bench_file.name], seed=seed, timeout=timeout, multi_gpu=multi_gpu
+            )
     else:
         raise ValueError(f"Invalid mode {mode}")
 

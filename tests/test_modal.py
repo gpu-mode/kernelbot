@@ -187,12 +187,10 @@ async def test_modal_launcher_python_script(
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("script, good", [("submission.py", True), ("wrong.py", False)])
-async def test_modal_multi_gpu(
-    modal_deployment, project_root: Path, script: str, good: bool
-):
+async def test_modal_multi_gpu(modal_deployment, project_root: Path, script: str, good: bool):
     """
-    This isn't really a modal test, but instead a test using modal to check that multi-gpu submission
-    testing works (on modal...).
+    This isn't really a modal test, but instead a test using modal to check
+    that multi-gpu submission testing works (on modal...).
     """
     launcher = ModalLauncher(add_include_dirs=[])
     reporter = MockProgressReporter("progress")
@@ -245,8 +243,8 @@ async def test_modal_multi_gpu_benchmark(
     modal_deployment, project_root: Path, script: str, good: bool
 ):
     """
-    This isn't really a modal test, but instead a test using modal to check that multi-gpu submission
-    testing works (on modal...).
+    This isn't really a modal test, but instead a test using modal
+    to check that multi-gpu submission testing works (on modal...).
     """
     launcher = ModalLauncher(add_include_dirs=[])
     reporter = MockProgressReporter("progress")

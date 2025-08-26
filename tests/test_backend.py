@@ -153,6 +153,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
         "lang": "py",
         "main": "kernel.py",
         "mode": "leaderboard",
+        "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
         "seed": 1337,
@@ -206,6 +207,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                     "start_time": eval_result.start.replace(tzinfo=datetime.timezone.utc),
                     "system": {
                         "cpu": "Intel i9-12900K",
+                        "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
                         "torch": "2.0.1+cu118",
@@ -310,6 +312,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                     "start_time": ANY,
                     "system": {
                         "cpu": "Intel i9-12900K",
+                        "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
                         "torch": "2.0.1+cu118",
@@ -351,6 +354,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                     "start_time": ANY,
                     "system": {
                         "cpu": "Intel i9-12900K",
+                        "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
                         "torch": "2.0.1+cu118",
