@@ -221,7 +221,7 @@ class GitHubRun:
         )
 
         if success:
-            wait_seconds = 5
+            wait_seconds = 10
             logger.info(
                 f"Workflow dispatch successful. Waiting {wait_seconds}s for the run to appear..."
             )
