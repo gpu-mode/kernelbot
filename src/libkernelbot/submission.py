@@ -8,10 +8,11 @@ from typing import Optional, Union
 from better_profanity import profanity
 
 from libkernelbot.consts import RankCriterion
+from libkernelbot.db_types import RunItem, SubmissionItem
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
 from libkernelbot.run_eval import FullResult
 from libkernelbot.task import LeaderboardTask
-from libkernelbot.utils import KernelBotError, setup_logging
+from libkernelbot.utils import KernelBotError, format_time, setup_logging
 
 if typing.TYPE_CHECKING:
     from backend import KernelBackend
@@ -194,3 +195,34 @@ def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int)
             raise KernelBotError(f"Invalid ranking criterion {task.ranking_by}")
 
     return score
+
+
+def generate_run_verdict(backend: "KernelBackend", run: RunItem, sub_data: SubmissionItem):
+    medals = {1: "🥇 First", 2: "🥈 Second", 3: "🥉 Third"}
+
+    # get the competition
+    with backend.db as db:
+        competition = db.get_leaderboard_submissions(sub_data["leaderboard_name"], run["runner"])
+    # compare against the competition
+    other_by_user = False
+    run_time = float(run["score"])
+    score_text = format_time(run_time * 1e9)
+
+    for entry in competition:
+        # can we find our own run? Only if it is the fastest submission by this user
+        if entry["submission_id"] == sub_data["submission_id"]:
+            rank = entry["rank"]
+            if 1 <= rank <= 3:
+                return f"> {medals[rank]} place on {run['runner']}: {score_text}"
+            elif rank <= 10:
+                return f"> {rank}th place on {run['runner']}: {score_text}"
+            else:
+                return f"> Personal best on {run['runner']}: {score_text}"
+        elif entry["user_id"] == sub_data["user_id"]:
+            other_by_user = True
+    if other_by_user:
+        # User already has a submission that is faster
+        return f"> Successful on {run['runner']}: {score_text}"
+    else:
+        # no submission by the user exists
+        return f"> 🍾 First successful submission on {run['runner']}: {score_text}"

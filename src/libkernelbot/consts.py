@@ -28,6 +28,8 @@ class ModalGPU(Enum):
     A100 = "A100"
     H100 = "H100"
     B200 = "B200"
+    # multi-gpu
+    L4x4 = "L4x4"
 
 
 @dataclasses.dataclass
@@ -109,7 +111,8 @@ class RankCriterion(Enum):
 
 GPU_TO_SM = {
     "T4": "75",
-    "L4": "80",
+    "L4": "89",
+    "L4x4": "89",
     "A100": "80",
     "H100": "90a",
     "B200": "100",

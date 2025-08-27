@@ -61,6 +61,7 @@ class LeaderboardTask:
     ranked_timeout: int = 180
     ranking_by: RankCriterion = RankCriterion.LAST
     seed: Optional[int] = None
+    multi_gpu: bool = False
 
     def __post_init__(self):
         if self.lang == Language.Python and not isinstance(self.config, PythonTaskData):
@@ -75,6 +76,7 @@ class LeaderboardTask:
         criterion = RankCriterion(data.get("ranking_by", RankCriterion.LAST))
         data_["lang"] = lang
         data_["ranking_by"] = criterion
+        data_["multi_gpu"] = data.get("multi_gpu", False)
         if lang == Language.Python:
             data_["config"] = PythonTaskData(**data["config"])
         else:
@@ -112,7 +114,7 @@ class LeaderboardDefinition:
     templates: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
-def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
+def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noqa: C901
     if Path(yaml_file).is_dir():
         yaml_file = Path(yaml_file) / "task.yml"
 
@@ -149,6 +151,15 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:
     description = raw["description"]
     del raw["description"]
     task = LeaderboardTask.from_dict(raw)
+
+    # basic validation:
+    if task.multi_gpu:
+        for test in task.tests:
+            if "world_size" not in test:
+                raise KernelBotError(f"multi-gpu test {test} does not specify world_size")
+        for benchmark in task.benchmarks:
+            if "world_size" not in benchmark:
+                raise KernelBotError(f"multi-gpu benchmark {benchmark} does not specify world_size")
     return LeaderboardDefinition(task=task, templates=templates, description=description)
 
 
@@ -176,6 +187,7 @@ def build_task_config(
         "ranked_timeout": task.ranked_timeout,
         "ranking_by": task.ranking_by.value,
         "seed": task.seed,
+        "multi_gpu": task.multi_gpu,
     }
 
     if task.lang == Language.Python:

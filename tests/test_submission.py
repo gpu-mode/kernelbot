@@ -6,7 +6,7 @@ import pytest
 
 from libkernelbot import submission
 from libkernelbot.consts import RankCriterion
-from libkernelbot.db_types import LeaderboardItem
+from libkernelbot.db_types import LeaderboardItem, RunItem, SubmissionItem
 from libkernelbot.utils import KernelBotError
 
 
@@ -344,3 +344,56 @@ def test_compute_score():
     mock_task.ranking_by = "WRONG"
     with pytest.raises(KernelBotError, match="Invalid ranking criterion WRONG"):
         submission.compute_score(mock_result, mock_task, 1)
+
+
+def test_generate_run_verdict(mock_backend):
+    """Test generate_run_verdict function with various ranking scenarios."""
+    from libkernelbot.submission import generate_run_verdict
+
+    # Mock run and submission data
+    run_item: RunItem = {"score": 1.5, "runner": "A100"}
+
+    sub_data: SubmissionItem = {
+        "submission_id": 123,
+        "leaderboard_name": "test_board",
+        "user_id": 42,
+    }
+
+    # Test first place
+    mock_backend.db.get_leaderboard_submissions.return_value = [
+        {"submission_id": 123, "user_id": 42, "rank": 1},
+        {"submission_id": 542, "user_id": 44, "rank": 2},
+    ]
+    result = generate_run_verdict(mock_backend, run_item, sub_data)
+    assert result == "> 🥇 First place on A100: 1500 ms"
+
+    # Test 5th place
+    mock_backend.db.get_leaderboard_submissions.return_value = [
+        {"submission_id": 652, "user_id": 41, "rank": 4},
+        {"submission_id": 123, "user_id": 42, "rank": 5},
+    ]
+    result = generate_run_verdict(mock_backend, run_item, sub_data)
+    assert result == "> 5th place on A100: 1500 ms"
+
+    # Test personal best (rank > 10)
+    mock_backend.db.get_leaderboard_submissions.return_value = [
+        {"submission_id": 123, "user_id": 42, "rank": 15}
+    ]
+    result = generate_run_verdict(mock_backend, run_item, sub_data)
+    assert result == "> Personal best on A100: 1500 ms"
+
+    # This user already has a faster submission
+    mock_backend.db.get_leaderboard_submissions.return_value = [
+        {"submission_id": 999, "user_id": 42, "rank": 3},
+        {"submission_id": 256, "user_id": 41, "rank": 2},
+    ]
+    result = generate_run_verdict(mock_backend, run_item, sub_data)
+    assert result == "> Successful on A100: 1500 ms"
+
+    # Test first submission by user
+    mock_backend.db.get_leaderboard_submissions.return_value = [
+        {"submission_id": 256, "user_id": 41, "rank": 2},
+        {"submission_id": 999, "user_id": 999, "rank": 999},
+    ]
+    result = generate_run_verdict(mock_backend, run_item, sub_data)
+    assert result == "> 🍾 First successful submission on A100: 1500 ms"
