@@ -5,7 +5,13 @@ from typing import Dict, List, Optional
 
 import psycopg2
 
-from libkernelbot.db_types import IdentityType, LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem
+from libkernelbot.db_types import (
+    IdentityType,
+    LeaderboardItem,
+    LeaderboardRankedEntry,
+    RunItem,
+    SubmissionItem,
+)
 from libkernelbot.run_eval import CompileResult, RunResult, SystemInfo
 from libkernelbot.task import LeaderboardDefinition, LeaderboardTask
 from libkernelbot.utils import (

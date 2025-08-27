@@ -53,7 +53,7 @@ async def test_enqueue_and_run_job(mock_backend):
     db_context = mock_backend.db
     db_context.upsert_submission_job_status = mock.Mock(
         side_effect=lambda *a, **k: a[0]
-    ) 
+    )
     db_context.update_heartbeat_if_active = mock.Mock()
 
     # mock submit_full

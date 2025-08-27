@@ -1,8 +1,10 @@
 from typing import Optional
+
+import pytest
 from fastapi import HTTPException
+
 from kernelbot.api.main import validate_user_header
 from libkernelbot.db_types import IdentityType
-import pytest
 
 
 class DummyDBCtx:

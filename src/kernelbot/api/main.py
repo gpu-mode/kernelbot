@@ -25,9 +25,10 @@ from libkernelbot.utils import KernelBotError, setup_logging
 from .api_utils import (
     _handle_discord_oauth,
     _handle_github_oauth,
-    to_submit_info,
     _run_submission,
+    to_submit_info,
 )
+
 logger = setup_logging(__name__)
 
 # yes, we do want  ... = Depends() in function signatures
