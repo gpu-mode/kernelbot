@@ -18,7 +18,7 @@ steps = [
             submission_id   INTEGER NOT NULL
                             REFERENCES leaderboard.submission(id)
                             ON DELETE CASCADE,
-            status          VARCHAR(255) DEFAULT NULL,            -- pending | running | succeeded | failed | timed_out
+            status          VARCHAR(255) DEFAULT NULL,           -- status of the job
             error           TEXT DEFAULT NULL,                    -- error details if failed
             created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),   -- creation timestamp
             last_heartbeat  TIMESTAMPTZ DEFAULT NULL,             -- updated periodically by worker

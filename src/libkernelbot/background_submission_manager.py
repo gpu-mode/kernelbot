@@ -23,7 +23,8 @@ class JobItem:
 
 # Periodicaly update the last heartbeat time for the submission job in submission_job_status table
 HEARTBEAT_SEC = 15  # heartbeat interval 15s
-# HARD_TIMEOUT_SEC [3hours]:if a submission is not completed within the hard timeout, it will be marked as failed in submission_job_status table
+# HARD_TIMEOUT_SEC [3hours]:if a submission is not completed within the hard timeout,
+# it will be marked as failed in submission_job_status table
 HARD_TIMEOUT_SEC = 60 * 30  # hard timeout 30 mins
 
 
@@ -52,8 +53,12 @@ class BackgroundSubmissionManager:
         self.backend = backend
         self.queue: asyncio.Queue[JobItem] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []  # workers currently running
-        self._live_tasks: set[asyncio.Task] = set()  # tasks currently processing
-        self.idle_seconds = idle_seconds # idle_seconds for each worker before scale down
+        self._live_tasks: set[
+            asyncio.Task
+        ] = set()  # tasks currently processing
+        self.idle_seconds = (
+            idle_seconds  # idle_seconds for each worker before scale down
+        )
         # state variables
 
         self._state_lock = asyncio.Lock()
@@ -72,7 +77,9 @@ class BackgroundSubmissionManager:
                 self._workers.append(t)
 
     async def stop(self):
-        logger.info("[Background Job] stopping background submission manager...")
+        logger.info(
+            "[Background Job] stopping background submission manager..."
+        )
         async with self._state_lock:
             self._accepting = False
             workers = list(self._workers)
@@ -82,15 +89,21 @@ class BackgroundSubmissionManager:
         for t in workers:
             with contextlib.suppress(asyncio.CancelledError):
                 await t
-        logger.info("[Background Job] ...stopped all background submission manager")
+        logger.info(
+            "[Background Job] ...stopped all background submission manager"
+        )
 
     async def enqueue(
-        self, req: ProcessedSubmissionRequest, mode: SubmissionMode, sub_id: int
+        self,
+        req: ProcessedSubmissionRequest,
+        mode: SubmissionMode,
+        sub_id: int,
     ) -> tuple[int, int]:
         async with self._state_lock:
             if not self._accepting:
                 raise RuntimeError(
-                    "[Background Job] Background Submission Manager is not accepting new jobs right now"
+                    "[Background Job] Background Submission Manager is not"
+                    "accepting new jobs right now"
                 )
         logger.info("enqueueing submission %s", sub_id)
         now = dt.datetime.now(dt.timezone.utc)
@@ -100,7 +113,9 @@ class BackgroundSubmissionManager:
                 status="pending",
                 last_heartbeat=now,
             )
-        await self.queue.put(JobItem(job_id=job_id, sub_id=sub_id, req=req, mode=mode))
+        await self.queue.put(
+            JobItem(job_id=job_id, sub_id=sub_id, req=req, mode=mode)
+        )
         # if we have no workers and it does not hit maximum, start one
         await self._autoscale_up()
         return job_id, sub_id
@@ -118,7 +133,9 @@ class BackgroundSubmissionManager:
                         self.queue.get(), timeout=self.idle_seconds
                     )
                     logger.info(
-                        "[Background Job][worker %r] pick the submission job `%s`", id(asyncio.current_task()), item.sub_id
+                        "[Background Job][worker %r] pick the submission job `%s`",
+                        id(asyncio.current_task()),
+                        item.sub_id,
                     )
                 except asyncio.TimeoutError:
                     async with self._state_lock:
@@ -130,7 +147,8 @@ class BackgroundSubmissionManager:
                             try:
                                 self._workers.remove(me)
                                 logger.info(
-                                    "[Background Job][worker %r] idle too long, scale down; existing workers=%d",
+                                    "[Background Job][worker %r] idle too long,"
+                                    "scale down; existing workers=%d",
                                     me.get_name()
                                     if hasattr(me, "get_name")
                                     else id(me),
@@ -142,7 +160,9 @@ class BackgroundSubmissionManager:
 
                     continue
 
-                t = asyncio.create_task(self._run_one(item), name=f"submision-job-{item.sub_id}")
+                t = asyncio.create_task(
+                    self._run_one(item), name=f"submision-job-{item.sub_id}"
+                )
 
                 async with self._state_lock:
                     self._live_tasks.add(t)
@@ -150,7 +170,9 @@ class BackgroundSubmissionManager:
                     await t  # wait submission job to finish
                 finally:
                     logger.info(
-                        "[Background Job][worker %r] finishes the submission job `%s`", id(asyncio.current_task()), item.sub_id
+                        "[Background Job][worker %r] finishes the submission job `%s`",
+                        id(asyncio.current_task()),
+                        item.sub_id,
                     )
                     async with self._state_lock:
                         self._live_tasks.discard(t)
@@ -191,7 +213,9 @@ class BackgroundSubmissionManager:
         try:
             reporter = MultiProgressReporterAPI()
             await asyncio.wait_for(
-                self.backend.submit_full(item.req, item.mode, reporter, sub_id),
+                self.backend.submit_full(
+                    item.req, item.mode, reporter, sub_id
+                ),
                 timeout=HARD_TIMEOUT_SEC,
             )
             ts = dt.datetime.now(dt.timezone.utc)
@@ -211,14 +235,24 @@ class BackgroundSubmissionManager:
                 )
         except Exception as e:
             ts = dt.datetime.now(dt.timezone.utc)
-            logger.error("[Background Job] submission job %s failed", sub_id, exc_info=True)
+            logger.error(
+                "[Background Job] submission job %s failed",
+                sub_id,
+                exc_info=True,
+            )
             try:
                 with self.backend.db as db:
                     db.upsert_submission_job_status(
-                        sub_id, status="failed", last_heartbeat=ts, error=str(e)
+                        sub_id,
+                        status="failed",
+                        last_heartbeat=ts,
+                        error=str(e),
                     )
             except Exception:
-                logger.error("[Background Job] Failed to write failed status for submission %s", sub_id)
+                logger.error(
+                    "[Background Job] Failed to write failed status for submission %s",
+                    sub_id,
+                )
         finally:
             stop_heartbeat.set()
             hb_task.cancel()
@@ -231,15 +265,23 @@ class BackgroundSubmissionManager:
             workers = len(self._workers)
             qsize = self.queue.qsize()
 
-            desired = min(self.max_workers, max(self.min_workers, running + qsize))
+            desired = min(
+                self.max_workers, max(self.min_workers, running + qsize)
+            )
             need = desired - workers
             to_add = max(0, need)
             logger.info(
                 "[Background Job] autoscale plan: add %d workers "
                 "(max=%d, busy=%d, active=%s, enqueue=%d)",
-                to_add, self.max_workers, running, workers, qsize,
+                to_add,
+                self.max_workers,
+                running,
+                workers,
+                qsize,
             )
             for _ in range(to_add):
-                logging.info("[Background Job] scale up: starting a new worker")
+                logging.info(
+                    "[Background Job] scale up: starting a new worker"
+                )
                 t = asyncio.create_task(self._worker_loop(), name="bg-worker")
                 self._workers.append(t)
