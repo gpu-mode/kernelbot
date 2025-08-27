@@ -189,7 +189,7 @@ class RunProgressReporterAPI(RunProgressReporter):
             elif isinstance(part, Log):
                 self.long_report += f"\n\n## {part.header}:\n"
                 self.long_report += f"```\n{part.content}```"
-
+# ruff: noqa: C901
 async def to_submit_info(
     user_info: Any,
     submission_mode: str,

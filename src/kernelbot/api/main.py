@@ -440,8 +440,9 @@ async def run_submission_async(
             )
 
             req = prepare_submission(submission_request, backend_instance)
+
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"failed to prepare submission request: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"failed to prepare submission request: {str(e)}") from e
 
         # prepare submission request before the submission is started
         if not req.gpus or len(req.gpus) != 1:
