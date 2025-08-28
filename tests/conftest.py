@@ -7,11 +7,11 @@ import pytest
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
 
 @pytest.fixture
-def with_required_env(monkeypatch):
+def with_dummy_env(monkeypatch):
     REQUIRED = {
-        "DISCORD_TOKEN": "dummy",
-        "GITHUB_TOKEN": "dummy",
-        "GITHUB_REPO": "dummy",
+        "DISCORD_TOKEN": "dummy1",
+        "GITHUB_TOKEN": "dummy1",
+        "GITHUB_REPO": "dummy1",
     }
 
     for k, v in REQUIRED.items():

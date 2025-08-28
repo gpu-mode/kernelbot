@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from kernelbot.api.main import validate_user_header
 from libkernelbot.db_types import IdentityType
 
-pytestmark = pytest.mark.usefixtures("with_required_env")
+pytestmark = pytest.mark.usefixtures("with_dummy_env")
 
 class DummyDBCtx:
     def __init__(self, to_return=None, to_raise: Optional[Exception] = None):
