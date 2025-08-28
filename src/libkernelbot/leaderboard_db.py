@@ -382,7 +382,7 @@ class LeaderboardDB:
                 WHERE submission_id = %s
                 AND status IN ('pending','running')
                 """,
-            (ts, sub_id),
+                (ts, sub_id),
             )
             self.connection.commit()
         except psycopg2.Error as e:
