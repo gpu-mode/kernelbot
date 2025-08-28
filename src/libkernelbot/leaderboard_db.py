@@ -379,7 +379,6 @@ class LeaderboardDB:
                 """
                 UPDATE leaderboard.submission_job_status
                 SET last_heartbeat = %s,
-                    updated_at = %s
                 WHERE submission_id = %s
                 AND status IN ('pending','running')
                 """,
