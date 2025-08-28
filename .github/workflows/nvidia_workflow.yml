@@ -42,10 +42,10 @@ jobs:
         # Extract the payload content without printing it
         apt-get update && apt-get install -y jq
         PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
-        
+
         # Apply mask to the extracted content
         echo "::add-mask::$PAYLOAD"
-        
+
         # Now write to file (won't be logged since it's masked)
         echo "$PAYLOAD" > payload.json
 
@@ -73,15 +73,20 @@ jobs:
       shell: bash
       run: |
         python src/runners/github-runner.py
-        cat result.json  # Debug: show output
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: run-result
-        path: |
-          result.json
+        path: result.json
 
+    - name: Upload profiling artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: profile-data
+        path: profile_data/*
+        retention-days: 1
     env:
       CUDA_VISIBLE_DEVICES: 0
