@@ -20,6 +20,7 @@ class GitHubGPU(Enum):
     NVIDIA = "NVIDIA"
     MI300 = "MI300"
     MI250 = "MI250"
+    MI300x8 = "MI300x8"
 
 
 class ModalGPU(Enum):
@@ -118,6 +119,7 @@ GPU_TO_SM = {
     "B200": "100",
     "NVIDIA": None,
     "MI300": None,
+    "MI300x8": None,
     "MI250": None,
 }
 

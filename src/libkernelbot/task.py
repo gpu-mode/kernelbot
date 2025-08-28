@@ -147,7 +147,8 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
         assert lang in ["CUDA", "Python", "Triton", "HIP"]
         templates[lang] = (root / source).read_text()
 
-    del raw["templates"]
+    if templates:
+        del raw["templates"]
     description = raw["description"]
     del raw["description"]
     task = LeaderboardTask.from_dict(raw)
