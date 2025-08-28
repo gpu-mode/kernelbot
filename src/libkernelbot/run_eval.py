@@ -297,6 +297,64 @@ def run_program(
     )
 
 
+def profile_program(
+    system: SystemInfo,
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    # The runner-specific configuration should implement logic
+    # to fetch the data in this directory and return it as
+    # ProfileResult.download_url.
+    output_dir = Path('profile_data')
+
+    if system.runtime == "ROCm":
+        # Wrap program in rocprof
+        output_dir.mkdir()
+        call = [
+            "rocprofv3",
+            "--log-level",
+            "fatal",
+            "--hip-trace",
+            "--kernel-trace",
+            "--rccl-trace",
+            "--marker-trace",
+            "--hip-trace",
+            "--memory-copy-trace",
+            # New? Doesn't work in the runner
+            # "--memory-allocation-trace",
+            "--scratch-memory-trace",
+            # The HSA trace output is very large, so skip it for now
+            # "--hsa-trace",
+            "--output-format",
+            "pftrace",
+            "csv",
+            "-d",
+            str(output_dir),
+            # Just store the files as %pid%_tracename.ext instead of putting them in an
+            # additional directory named after the hostname.
+            "-o",
+            # Insert an extra path here so that the resulting zip has all files
+            # in the profile_data/ directory rather than the root.
+            "profile_data/%pid%",
+            "--",
+        ] + call
+
+        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
+        profile_result = None
+
+        if run_result.success:
+            profile_result = ProfileResult(
+                profiler='rocPROF',
+                download_url=None,
+            )
+
+        return run_result, profile_result
+    else:
+        # TODO: Implement profiling for other platforms
+        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
+
 def run_single_evaluation(
     system: SystemInfo,
     call: list[str],
@@ -331,6 +389,9 @@ def run_single_evaluation(
         cases.flush()
 
         call += [mode, cases.name]
+
+        if mode == "profile":
+            return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
 
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
