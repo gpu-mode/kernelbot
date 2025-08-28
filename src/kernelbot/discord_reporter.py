@@ -2,6 +2,7 @@ import discord
 from discord_utils import _send_split_log
 
 from libkernelbot.report import (
+    Link,
     Log,
     MultiProgressReporter,
     RunProgressReporter,
@@ -69,6 +70,11 @@ class RunProgressReporterDiscord(RunProgressReporter):
                 message += part.text
             elif isinstance(part, Log):
                 message = await _send_split_log(thread, message, part.header, part.content)
+            elif isinstance(part, Link):
+                if len(message) > 0:
+                    await thread.send(message)
+                    message = ""
+                await thread.send(f"{part.title}: [{part.text}]({part.url})")
 
         if len(message) > 0:
             await thread.send(message)
