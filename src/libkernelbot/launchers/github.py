@@ -1,10 +1,11 @@
 import asyncio
 import base64
+import dataclasses
 import datetime
+import io
 import json
 import math
 import pprint
-import tempfile
 import uuid
 import zipfile
 import zlib
@@ -56,7 +57,7 @@ class GitHubLauncher(Launcher):
         self.token = token
         self.branch = branch
 
-    async def run_submission(
+    async def run_submission(  # noqa: C901
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
     ) -> FullResult:
         gpu_vendor = None
@@ -113,15 +114,17 @@ class GitHubLauncher(Launcher):
         await status.push("Downloading artifacts...")
         logger.info("Downloading artifacts...")
 
-        artifacts = await run.download_artifacts()
-        if "run-result" not in artifacts:
-            logger.error("Could not find `run-result` among artifacts: %s", artifacts.keys())
+        index = run.get_artifact_index()
+
+        if "run-result" not in index:
+            logger.error("Could not find `run-result` among artifacts: %s", index.keys())
             await status.push("Downloading artifacts...  failed")
             return FullResult(
                 success=False, error="Could not download artifacts", runs={}, system=SystemInfo()
             )
 
-        logs = artifacts["run-result"]["result.json"].decode("utf-8")
+        artifact = await run.download_artifact(index["run-result"])
+        logs = artifact["result.json"].decode("utf-8")
 
         await status.update("Downloading artifacts... done")
         logger.info("Downloading artifacts... done")
@@ -153,6 +156,13 @@ class GitHubLauncher(Launcher):
             f"⏳ Workflow [{run.run_id}](<{run.html_url}>): {run.status} "
             f"({run.elapsed_time.total_seconds():.1f}s)"
         )
+
+
+@dataclasses.dataclass
+class GitHubArtifact:
+    name: str
+    archive_download_url: str
+    public_download_url: str
 
 
 class GitHubRun:
@@ -331,34 +341,43 @@ class GitHubRun:
                 logger.error(f"Error waiting for GitHub run {self.run_id}: {e}", exc_info=e)
                 raise  # Re-raise other exceptions
 
-    async def download_artifacts(self) -> dict:
-        logger.info("Attempting to download artifacts for run %s", self.run_id)
+
+    def get_artifact_index(self) -> dict[str, GitHubArtifact]:
+        logger.info("Creating artifact index for run %s", self.run_id)
         artifacts = self.run.get_artifacts()
 
         extracted = {}
 
         for artifact in artifacts:
-            url = artifact.archive_download_url
-            headers = {"Authorization": f"token {self.token}"}
-            response = requests.get(url, headers=headers)
+            extracted[artifact.name] = GitHubArtifact(
+                name=artifact.name,
+                archive_download_url=artifact.archive_download_url,
+                # Non-machine users cannot download from the archive_download_url and
+                # the GitHub API does not give us access to the public download url.
+                public_download_url=f"{self.repo.html_url}/actions/runs/{self.run_id}/artifacts/{artifact.id}",
+            )
 
-            if response.status_code == 200:
-                with tempfile.NamedTemporaryFile("w+b") as temp:
-                    temp.write(response.content)
-                    temp.flush()
-
-                    with zipfile.ZipFile(temp.name) as z:
-                        artifact_dict = {}
-                        for file in z.namelist():
-                            with z.open(file) as f:
-                                artifact_dict[file] = f.read()
-
-                extracted[artifact.name] = artifact_dict
-            else:
-                raise RuntimeError(
-                    f"Failed to download artifact {artifact.name}. "
-                    f"Status code: {response.status_code}"
-                )
-
-        logger.info("Download artifacts for run %s: %s", self.run_id, list(extracted.keys()))
         return extracted
+
+
+    async def download_artifact(self, artifact: GitHubArtifact) -> dict:
+        logger.info("Attempting to download artifact '%s' for run %s", artifact.name, self.run_id)
+
+        url = artifact.archive_download_url
+        headers = {"Authorization": f"token {self.token}"}
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            artifact_dict = {}
+            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                for file in z.namelist():
+                    with z.open(file) as f:
+                        artifact_dict[file] = f.read()
+
+            logger.info("Downloaded artifact '%s' for run %s", artifact.name, self.run_id)
+            return artifact_dict
+        else:
+            raise RuntimeError(
+                f"Failed to download artifact {artifact.name}. "
+                f"Status code: {response.status_code}"
+            )
