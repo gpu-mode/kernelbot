@@ -5,7 +5,13 @@ from typing import Dict, List, Optional
 
 import psycopg2
 
-from libkernelbot.db_types import LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem
+from libkernelbot.db_types import (
+    IdentityType,
+    LeaderboardItem,
+    LeaderboardRankedEntry,
+    RunItem,
+    SubmissionItem,
+)
 from libkernelbot.run_eval import CompileResult, RunResult, SystemInfo
 from libkernelbot.task import LeaderboardDefinition, LeaderboardTask
 from libkernelbot.utils import (
@@ -182,7 +188,7 @@ class LeaderboardDB:
                                 WHERE leaderboard.leaderboard.name = %s
                         )
                     );
-""",
+                    """,
                     (leaderboard_name,),
                 )
                 self.cursor.execute(
@@ -221,6 +227,49 @@ class LeaderboardDB:
 
             logger.exception("Could not delete leaderboard %s.", leaderboard_name, exc_info=e)
             raise KernelBotError(f"Could not delete leaderboard `{leaderboard_name}`.") from e
+
+    def validate_identity(
+        self,
+        identifier: str,
+        id_type: IdentityType,
+    ) -> Optional[dict[str, str]]:
+        """
+        Validate an identity (CLI or Web) and return {user_id, user_name} if found.
+
+        Args:
+            identifier: The identifier value (CLI ID or Web Auth ID).
+            id_type: IdentityType enum (IdentityType.CLI or IdentityType.WEB).
+
+        Returns:
+            Optional[dict[str, str]]: {"user_id": ..., "user_name": ...} if valid; else None.
+        """
+        where_by_type = {
+            IdentityType.CLI: ("cli_id = %s AND cli_valid = TRUE", "CLI ID"),
+            IdentityType.WEB: ("web_auth_id = %s", "WEB AUTH ID"),
+        }
+
+        where_clause, human_label = where_by_type[id_type]
+
+        try:
+            self.cursor.execute(
+                f"""
+                SELECT id, user_name
+                FROM leaderboard.user_info
+                WHERE {where_clause}
+                """,
+                (identifier,),
+            )
+            row = self.cursor.fetchone()
+            return {
+                "user_id": row[0],
+                "user_name": row[1],
+                "id_type":id_type.value
+            } if row else None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
+            raise KernelBotError(f"Error validating {human_label}") from e
+
 
     def create_submission(
         self,
@@ -323,6 +372,56 @@ class LeaderboardDB:
             logger.error("Could not mark submission '%s' as done.", submission, exc_info=e)
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error while finalizing submission") from e
+
+    def update_heartbeat_if_active(self, sub_id: int, ts: datetime.datetime) -> None:
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.submission_job_status
+                SET last_heartbeat = %s,
+                    updated_at = %s
+                WHERE submission_id = %s
+                AND status IN ('pending','running')
+                """,
+                (ts, ts, sub_id),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
+            raise KernelBotError("Error updating job status") from e
+
+
+    def upsert_submission_job_status(
+        self,
+        sub_id: int,
+        status: str | None = None,
+        error: str | None = None,
+        last_heartbeat: datetime.datetime | None = None,
+    ) -> int:
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_job_status AS s
+                    (submission_id, status, error, last_heartbeat)
+                VALUES
+                    (%s, %s, %s, %s)
+                ON CONFLICT (submission_id) DO UPDATE
+                SET
+                    status         = COALESCE(EXCLUDED.status, s.status),
+                    error          = COALESCE(EXCLUDED.error, s.error),
+                    last_heartbeat = COALESCE(EXCLUDED.last_heartbeat, s.last_heartbeat)
+                RETURNING id;
+                """,
+                (sub_id, status, error, last_heartbeat),
+            )
+            job_id = self.cursor.fetchone()[0]
+            self.connection.commit()
+            return int(job_id)
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
+            raise KernelBotError("Error updating job status") from e
 
     def create_submission_run(
         self,

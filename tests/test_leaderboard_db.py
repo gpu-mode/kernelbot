@@ -6,6 +6,7 @@ import pytest
 from test_report import sample_compile_result, sample_run_result, sample_system_info
 
 from libkernelbot import leaderboard_db
+from libkernelbot.db_types import IdentityType
 from libkernelbot.utils import KernelBotError
 
 
@@ -366,6 +367,44 @@ def test_leaderboard_submission_ranked(database, submit_leaderboard):
                 "user_name": "user",
             },
         ]
+
+def test_validate_identity_web_auth_happy_path(database, submit_leaderboard):
+    with database as db:
+        db.cursor.execute(
+                """
+                INSERT INTO leaderboard.user_info (id, user_name, web_auth_id)
+                VALUES (%s, %s, %s)
+                """,
+                ("1234", "sara_jojo","2345" ),
+            )
+        user_info = db.validate_identity("2345",IdentityType.WEB)
+        assert user_info["user_id"] =="1234"
+        assert user_info["user_name"] =="sara_jojo"
+        assert user_info["id_type"] ==IdentityType.WEB.value
+
+def  test_validate_identity_web_auth_not_found(database, submit_leaderboard):
+    with database as db:
+        db.cursor.execute(
+                """
+                INSERT INTO leaderboard.user_info (id, user_name)
+                VALUES (%s, %s)
+                """,
+                ("1234", "sara_jojo"),
+            )
+        user_info = db.validate_identity("2345",IdentityType.WEB)
+        assert user_info is None
+
+def test_validate_identity_web_auth_missing(database, submit_leaderboard):
+    with database as db:
+        db.cursor.execute(
+                """
+                INSERT INTO leaderboard.user_info (id, user_name)
+                VALUES (%s, %s)
+                """,
+                ("1234", "sara_jojo"),
+            )
+        res = db.validate_identity("2345",IdentityType.WEB)
+        assert res is None
 
 
 def test_leaderboard_submission_deduplication(database, submit_leaderboard):

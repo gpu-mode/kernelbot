@@ -106,7 +106,7 @@ print("code")
     assert result == {"gpus": ["a100", "v100"], "leaderboard": "My_Board"}
 
     # Extra whitespace
-    code_whitespace = """#!POPCORN  gpu   A100    V100  
+    code_whitespace = """#!POPCORN  gpu   A100    V100
 #!POPCORN   leaderboard    my_board   """  # noqa: W291
     result = submission._get_popcorn_directives(code_whitespace)
     assert result == {"gpus": ["A100", "V100"], "leaderboard": "my_board"}

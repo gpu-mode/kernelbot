@@ -12,3 +12,4 @@ PyYAML
 fastapi[all]
 uvicorn
 jinja2
+pytest-asyncio==1.1.0

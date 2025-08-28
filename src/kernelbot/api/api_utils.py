@@ -1,9 +1,12 @@
+from typing import Any
+
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     Log,
     MultiProgressReporter,
@@ -11,7 +14,10 @@ from libkernelbot.report import (
     RunResultReport,
     Text,
 )
-from libkernelbot.submission import SubmissionRequest, prepare_submission
+from libkernelbot.submission import (
+    SubmissionRequest,
+    prepare_submission,
+)
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
@@ -183,3 +189,103 @@ class RunProgressReporterAPI(RunProgressReporter):
             elif isinstance(part, Log):
                 self.long_report += f"\n\n## {part.header}:\n"
                 self.long_report += f"```\n{part.content}```"
+# ruff: noqa: C901
+async def to_submit_info(
+    user_info: Any,
+    submission_mode: str,
+    file: UploadFile,
+    leaderboard_name: str,
+    gpu_type: str,
+    db_context: LeaderboardDB,
+) -> tuple[SubmissionRequest, SubmissionMode]: # noqa: C901
+    user_name = user_info["user_name"]
+    user_id = user_info["user_id"]
+
+    try:
+        submission_mode_enum: SubmissionMode = SubmissionMode(
+            submission_mode.lower()
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid submission mode value: '{submission_mode}'",
+        ) from None
+
+    if submission_mode_enum in [SubmissionMode.PROFILE]:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile submissions are not currently supported via API",
+        )
+
+    allowed_modes = [
+        SubmissionMode.TEST,
+        SubmissionMode.BENCHMARK,
+        SubmissionMode.LEADERBOARD,
+    ]
+    if submission_mode_enum not in allowed_modes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Submission mode '{submission_mode}' is not supported for this endpoint",
+        )
+
+    try:
+        with db_context as db:
+            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            gpus = leaderboard_item.get("gpu_types", [])
+            if gpu_type not in gpus:
+                supported_gpus = ", ".join(gpus) if gpus else "None"
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"GPU type '{gpu_type}' is not supported for "
+                    f"leaderboard '{leaderboard_name}'. Supported GPUs: {supported_gpus}",
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error while validating leaderboard/GPU: {e}",
+        ) from e
+
+    try:
+        submission_content = await file.read()
+        if not submission_content:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty file submitted. Please provide a file with code.",
+            )
+        if len(submission_content) > 1_000_000:
+            raise HTTPException(
+                status_code=413,
+                detail="Submission file is too large (limit: 1MB).",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Error reading submission file: {e}"
+        ) from e
+
+    try:
+        submission_code = submission_content.decode("utf-8")
+        submission_request = SubmissionRequest(
+            code=submission_code,
+            file_name=file.filename or "submission.py",
+            user_id=user_id,
+            user_name=user_name,
+            gpus=[gpu_type],
+            leaderboard=leaderboard_name,
+        )
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to decode submission file content as UTF-8.",
+        ) from None
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error creating submission request: {e}",
+        ) from e
+
+    return submission_request, submission_mode_enum

@@ -48,20 +48,26 @@ class KernelBackend:
             self.launcher_map[gpu.value] = launcher
 
     async def submit_full(
-        self, req: ProcessedSubmissionRequest, mode: SubmissionMode, reporter: MultiProgressReporter
+        self, req: ProcessedSubmissionRequest, mode: SubmissionMode, reporter: MultiProgressReporter,
+        pre_sub_id: Optional[int] = None
     ):
-        with self.db as db:
-            sub_id = db.create_submission(
-                leaderboard=req.leaderboard,
-                file_name=req.file_name,
-                code=req.code,
-                user_id=req.user_id,
-                time=datetime.now(),
-                user_name=req.user_name,
-            )
+        """
+        pre_sub_id is used to pass the submission id which is created beforehand.
 
+        """
+        if pre_sub_id is not None:
+            sub_id = pre_sub_id
+        else:
+            with self.db as db:
+                sub_id = db.create_submission(
+                    leaderboard=req.leaderboard,
+                    file_name=req.file_name,
+                    code=req.code,
+                    user_id=req.user_id,
+                    time=datetime.now(),
+                    user_name=req.user_name,
+                )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
-
         try:
             tasks = [
                 self.submit_leaderboard(
@@ -98,7 +104,6 @@ class KernelBackend:
         finally:
             with self.db as db:
                 db.mark_submission_done(sub_id)
-
         return sub_id, results
 
     async def submit_leaderboard(  # noqa: C901
