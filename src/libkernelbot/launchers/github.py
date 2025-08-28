@@ -32,7 +32,7 @@ from libkernelbot.run_eval import (
     RunResult,
     SystemInfo,
 )
-from libkernelbot.utils import setup_logging
+from libkernelbot.utils import KernelBotError, setup_logging
 
 from .launcher import Launcher
 
@@ -174,7 +174,10 @@ class GitHubArtifact:
 class GitHubRun:
     def __init__(self, repo: str, token: str, branch: str, workflow_file: str):
         gh = Github(token)
-        self.repo = gh.get_repo(repo)
+        try:
+            self.repo = gh.get_repo(repo)
+        except UnknownObjectException as e:
+            raise KernelBotError(f"Could not find GitHub repository {repo}: 404") from e
         self.token = token
         self.branch = branch
         self.workflow_file = workflow_file
