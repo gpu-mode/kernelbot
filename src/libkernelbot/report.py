@@ -337,6 +337,13 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             make_profile_log(prof_run.run),
         )
 
+        if prof_run.profile is not None and prof_run.profile.download_url is not None:
+            report.add_link(
+                f"{prof_run.profile.profiler} profiling output",
+                "Download from GitHub",
+                prof_run.profile.download_url,
+            )
+
     if "leaderboard" in runs:
         bench_run = runs["leaderboard"]
         if _handle_crash_report(report, bench_run):
