@@ -15,6 +15,16 @@ from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
 
 
 @dataclasses.dataclass
+class ProfileResult:
+    # fmt: off
+    profiler: str      # The profiler used to gather this data
+    # Public download URL of all files created by the profiler
+    # This may also be configured later
+    download_url: Optional[str]
+    #fmt: on
+
+
+@dataclasses.dataclass
 class CompileResult:
     # fmt: off
     nvcc_found: bool    # did we find nvcc?
@@ -60,6 +70,7 @@ class EvalResult:
     end: datetime.datetime              # and when did it finish
     compilation: CompileResult | None   # results of compilation
     run: RunResult | None               # result of actually running the executable/script
+    profile: ProfileResult | None       # result of profiling the executable
     # fmt: on
 
 
@@ -299,7 +310,7 @@ def run_single_evaluation(
     ranked_timeout: int = Timeout.RANKED,
     ranking_by: str = "last",
     seed: Optional[int] = None,
-) -> RunResult:
+) -> tuple[RunResult, Optional[ProfileResult]]:
     """
     A single runner run, either in the context of test files, or in the
     context of benchmark files.
@@ -321,7 +332,7 @@ def run_single_evaluation(
 
         call += [mode, cases.name]
 
-        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
+        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 
 def make_system_info() -> SystemInfo: # noqa: C901
@@ -436,6 +447,7 @@ def run_cuda_script(  # # noqa: C901
                 end=datetime.datetime.now(),
                 compilation=compile_result,
                 run=None,
+                profile=None,
             )
 
     # cleaning up all source files _before_ we let the user code run, just in
@@ -446,12 +458,13 @@ def run_cuda_script(  # # noqa: C901
             if os.path.exists(f):
                 os.remove(f)
 
-    run_result = run_single_evaluation(system, ["./eval.out"], **kwargs)
+    run_result, profile_result = run_single_evaluation(system, ["./eval.out"], **kwargs)
     return EvalResult(
         start=start,
         end=datetime.datetime.now(),
         compilation=compile_result,
         run=run_result,
+        profile=profile_result,
     )
 
 
@@ -508,13 +521,14 @@ def run_pytorch_script(  # noqa: C901
                 exit_code=e.returncode,
             )
 
-        run = run_single_evaluation(system, ["python", main], **kwargs)
+        run, profile = run_single_evaluation(system, ["python", main], **kwargs)
 
         return EvalResult(
             start=start,
             end=datetime.datetime.now(),
             compilation=comp,
             run=run,
+            profile=profile,
         )
     finally:
         for f in sources.keys():

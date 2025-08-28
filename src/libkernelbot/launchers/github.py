@@ -23,7 +23,14 @@ from libkernelbot.consts import (
     SubmissionMode,
 )
 from libkernelbot.report import RunProgressReporter
-from libkernelbot.run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+from libkernelbot.run_eval import (
+    CompileResult,
+    EvalResult,
+    FullResult,
+    ProfileResult,
+    RunResult,
+    SystemInfo,
+)
 from libkernelbot.utils import setup_logging
 
 from .launcher import Launcher
@@ -123,17 +130,18 @@ class GitHubLauncher(Launcher):
         runs = {}
         # convert json back to EvalResult structures, which requires
         # special handling for datetime and our dataclasses.
+
         for k, v in data["runs"].items():
-            if "compilation" in v and v["compilation"] is not None:
-                comp = CompileResult(**v["compilation"])
-            else:
-                comp = None
-            run = RunResult(**v["run"])
+            comp_res = None if v.get("compilation") is None else CompileResult(**v["compilation"])
+            run_res = None if v.get("run") is None else RunResult(**v["run"])
+            profile_res = None if v.get("profile") is None else ProfileResult(**v["profile"])
+
             res = EvalResult(
                 start=datetime.datetime.fromisoformat(v["start"]),
                 end=datetime.datetime.fromisoformat(v["end"]),
-                compilation=comp,
-                run=run,
+                compilation=comp_res,
+                run=run_res,
+                profile=profile_res,
             )
             runs[k] = res
 

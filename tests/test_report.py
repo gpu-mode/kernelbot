@@ -16,7 +16,14 @@ from libkernelbot.report import (
     make_short_report,
     make_test_log,
 )
-from libkernelbot.run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+from libkernelbot.run_eval import (
+    CompileResult,
+    EvalResult,
+    FullResult,
+    ProfileResult,
+    RunResult,
+    SystemInfo,
+)
 
 
 # define helpers and  fixtures that create mock results
@@ -86,6 +93,7 @@ def create_eval_result(mode="test") -> EvalResult:
         end=datetime.datetime.now(),
         compilation=sample_compile_result(),
         run=sample_run_result(mode),
+        profile=None,
     )
 
 
@@ -298,6 +306,7 @@ def test_make_short_report_full_success():
                 stderr="",
                 result={},
             ),
+            profile=None,
         )
 
     result = make_short_report(runs, full=True)
@@ -653,8 +662,12 @@ def test_generate_report_profile(sample_full_result: FullResult):
         "benchmark.0.spec": "Benchmark",
         "benchmark.0.report": base64.b64encode(b"Profile report", b"+*").decode("utf-8"),
     }
+    sample_full_result.runs["profile"].profile = ProfileResult(
+        profiler="NSight",
+        download_url="https://example.com",
+    )
     report = generate_report(sample_full_result)
-    from libkernelbot.report import Log, Text
+    from libkernelbot.report import Link, Log, Text
 
     assert report.data == [
         Text(
@@ -675,6 +688,7 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "> Division by zero",
         ),
         Log(header="Profiling", content="Benchmark\n\n  Profile report\n"),
+        Link("NSight profiling output", "Download from GitHub", "https://example.com"),
     ]
 
 
