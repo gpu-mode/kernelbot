@@ -376,13 +376,13 @@ class LeaderboardDB:
     def update_heartbeat_if_active(self, sub_id: int, ts: datetime.datetime) -> None:
         try:
             self.cursor.execute(
-                """
-                UPDATE leaderboard.submission_job_status
-                SET last_heartbeat = %s,
-                WHERE submission_id = %s
-                AND status IN ('pending','running')
-                """,
-                (ts, ts, sub_id),
+            """
+            UPDATE leaderboard.submission_job_status
+            SET last_heartbeat = %s
+            WHERE submission_id = %s
+            AND status IN ('pending','running')
+            """,
+            (ts, sub_id),
             )
             self.connection.commit()
         except psycopg2.Error as e:
