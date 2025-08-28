@@ -335,7 +335,9 @@ def profile_program(
             # Just store the files as %pid%_tracename.ext instead of putting them in an
             # additional directory named after the hostname.
             "-o",
-            "%pid%",
+            # Insert an extra path here so that the resulting zip has all files
+            # in the profile_data/ directory rather than the root.
+            "profile_data/%pid%",
             "--",
         ] + call
 
