@@ -13,9 +13,9 @@ from discord import app_commands
 from discord.ext import commands
 from env import env, init_environment
 
+from kernelbot.api.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot import consts
 from libkernelbot.backend import KernelBackend
-from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.launchers import GitHubLauncher, ModalLauncher
 from libkernelbot.utils import setup_logging
 

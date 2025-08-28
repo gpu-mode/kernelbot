@@ -9,6 +9,8 @@ from libkernelbot import leaderboard_db
 from libkernelbot.db_types import IdentityType
 from libkernelbot.utils import KernelBotError
 
+# only replace env vars in this test file
+pytestmark = pytest.mark.usefixtures("with_required_env")
 
 def _submit_leaderboard(database, task_directory):
     """

@@ -10,8 +10,8 @@ from typing import Annotated, Any, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from kernelbot.api.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.backend import KernelBackend
-from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry

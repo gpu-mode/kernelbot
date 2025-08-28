@@ -4,10 +4,12 @@ from unittest import mock
 
 import pytest
 
-from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.submission import ProcessedSubmissionRequest
+from kernelbot.api.background_submission_manager import BackgroundSubmissionManager
 
+# only replace env vars in this test file
+pytestmark = pytest.mark.usefixtures("with_required_env")
 
 @pytest.fixture
 def mock_backend():
