@@ -4,9 +4,9 @@ import datetime as dt
 import logging
 from dataclasses import dataclass
 
-from kernelbot.api.api_utils import MultiProgressReporterAPI
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.report import MultiProgressReporter, RunProgressReporter, RunResultReport
 from libkernelbot.submission import ProcessedSubmissionRequest
 from libkernelbot.utils import setup_logging
 
@@ -26,6 +26,25 @@ HEARTBEAT_SEC = 15  # heartbeat interval 15s
 # HARD_TIMEOUT_SEC [3hours]:if a submission is not completed within the hard timeout,
 # it will be marked as failed in submission_job_status table
 HARD_TIMEOUT_SEC = 60 * 30  # hard timeout 30 mins
+
+
+# Reporter used in background submission manager, it is a dummy reporter that does nothing
+class BackgroundSubmissionManagerReporter(MultiProgressReporter):
+    def __init__(self):
+        self.runs = []
+    async def show(self, title: str):
+        return
+    def add_run(self, title: str) ->"BackgroundSubmissionManagerReporterRunProgressReporter":
+        rep = BackgroundSubmissionManagerReporterRunProgressReporter(title)
+        self.runs.append(rep)
+        return rep
+    def make_message(self):
+        return
+class BackgroundSubmissionManagerReporterRunProgressReporter(RunProgressReporter):
+    async def _update_message(self):
+        pass
+    async def display_report(self, title: str, report: RunResultReport):
+        pass
 
 
 class BackgroundSubmissionManager:
@@ -211,7 +230,7 @@ class BackgroundSubmissionManager:
 
         hb_task = asyncio.create_task(heartbeat(), name=f"hb-{sub_id}")
         try:
-            reporter = MultiProgressReporterAPI()
+            reporter = BackgroundSubmissionManagerReporter()
             await asyncio.wait_for(
                 self.backend.submit_full(
                     item.req, item.mode, reporter, sub_id

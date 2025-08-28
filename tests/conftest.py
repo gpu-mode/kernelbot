@@ -5,26 +5,22 @@ from pathlib import Path
 
 import pytest
 
+# dummy env var used in pytest
 REQUIRED = {
-    "DISCORD_TOKEN": "dummy",
-    "GITHUB_TOKEN": "dummy",
-    "GITHUB_REPO": "dummy",
+    "DISCORD_TOKEN": "dummy1",
+    "GITHUB_TOKEN": "dummy1",
+    "GITHUB_REPO": "dummy1",
 }
 
-for k, v in REQUIRED.items():
-    os.environ.setdefault(k, v)
+@pytest.fixture(autouse=True)
+def _restore_env_per_test(monkeypatch):
+    for k in REQUIRED:
+        if k in os.environ:
+            monkeypatch.setenv(k, os.environ[k])
+        else:
+            monkeypatch.delenv(k, raising=False)
+    yield
 
-@pytest.fixture(scope="session", autouse=True)
-def _restore_env():
-    old = {k: os.environ.get(k) for k in REQUIRED}
-    try:
-        yield
-    finally:
-        for k, v in old.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
 
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
 
