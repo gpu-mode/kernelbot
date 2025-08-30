@@ -378,12 +378,11 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 UPDATE leaderboard.submission_job_status
-                SET last_heartbeat = %s,
-                    updated_at = %s
+                SET last_heartbeat = %s
                 WHERE submission_id = %s
                 AND status IN ('pending','running')
                 """,
-                (ts, ts, sub_id),
+                (ts, sub_id),
             )
             self.connection.commit()
         except psycopg2.Error as e:
