@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import time
@@ -307,11 +308,13 @@ def profile_program(
     # The runner-specific configuration should implement logic
     # to fetch the data in this directory and return it as
     # ProfileResult.download_url.
-    output_dir = Path('profile_data')
+    # Insert an extra nested nested path here so that the resulting zip has all files
+    # in the profile_data/ directory rather than directly in the root.
+    output_dir = Path(".") / "profile_data" / "profile_data"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     if system.runtime == "ROCm":
         # Wrap program in rocprof
-        output_dir.mkdir()
         call = [
             "rocprofv3",
             "--log-level",
@@ -337,7 +340,7 @@ def profile_program(
             "-o",
             # Insert an extra path here so that the resulting zip has all files
             # in the profile_data/ directory rather than the root.
-            "profile_data/%pid%",
+            "%pid%",
             "--",
         ] + call
 
@@ -345,6 +348,20 @@ def profile_program(
         profile_result = None
 
         if run_result.success:
+            # Post-process trace data.
+            # rocPROF generates one trace for every process, but its more useful to
+            # have all traces be in the same file. Fortunately we can do that by
+            # concatenating.
+            traces = list(output_dir.glob("*.pftrace"))
+            with (output_dir / "combined.pftrace").open("wb") as combined:
+                for trace_path in traces:
+                    with trace_path.open("rb") as trace:
+                        shutil.copyfileobj(trace, combined)
+
+                    # After we've created the combined trace, there is no point in
+                    # keeping the individual traces around.
+                    trace_path.unlink()
+
             profile_result = ProfileResult(
                 profiler='rocPROF',
                 download_url=None,
