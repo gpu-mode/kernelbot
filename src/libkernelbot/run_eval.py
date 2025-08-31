@@ -233,11 +233,18 @@ def compile_cuda_script(  # # noqa: C901
 
 
 def run_program(
-    args: list[str], seed: Optional[int], timeout: int, multi_gpu: bool = False
+    args: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool = False,
+    extra_env: Optional[dict[str, str]] = None,
 ) -> RunResult:
     print("[Running]")
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
+    if extra_env is not None:
+        env.update(extra_env)
+
     pipe_read, pipe_write = os.pipe()
     env["POPCORN_FD"] = str(pipe_write)
     if seed is not None:
@@ -344,7 +351,10 @@ def profile_program(
             "--",
         ] + call
 
-        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
+        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
+            "GPU_DUMP_CODE_OBJECT": "1",
+        })
+
         profile_result = None
 
         if run_result.success:
@@ -361,6 +371,10 @@ def profile_program(
                     # After we've created the combined trace, there is no point in
                     # keeping the individual traces around.
                     trace_path.unlink()
+
+            # Also move the code objects to the profiling output directory.
+            for code_obj in list(Path.cwd().glob("_code_object*.o")):
+                code_obj.rename(output_dir / code_obj.name)
 
             profile_result = ProfileResult(
                 profiler='rocPROF',
