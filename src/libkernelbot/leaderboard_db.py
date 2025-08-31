@@ -81,7 +81,6 @@ class LeaderboardDB:
         gpu_types: list | str,
     ) -> int:
         # to prevent surprises, ensure we have specified a timezone
-        assert deadline.tzinfo is not None
         try:
             task = definition.task
             self.cursor.execute(
@@ -260,16 +259,13 @@ class LeaderboardDB:
                 (identifier,),
             )
             row = self.cursor.fetchone()
-            return {
-                "user_id": row[0],
-                "user_name": row[1],
-                "id_type":id_type.value
-            } if row else None
+            return (
+                {"user_id": row[0], "user_name": row[1], "id_type": id_type.value} if row else None
+            )
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
             raise KernelBotError(f"Error validating {human_label}") from e
-
 
     def create_submission(
         self,
@@ -389,7 +385,6 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
             raise KernelBotError("Error updating job status") from e
-
 
     def upsert_submission_job_status(
         self,
