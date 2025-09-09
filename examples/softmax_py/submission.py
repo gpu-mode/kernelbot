@@ -1,4 +1,4 @@
-#!POPCORN leaderboard softmax_py
+#!POPCORN leaderboard softmax_py-dev
 
 import torch
 from task import input_t, output_t

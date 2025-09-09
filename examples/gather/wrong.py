@@ -1,4 +1,4 @@
-#!POPCORN leaderboard identity_py-dev
+#!POPCORN leaderboard gather-dev
 
 from task import input_t, output_t
 import torch

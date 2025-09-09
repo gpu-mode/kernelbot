@@ -1,4 +1,4 @@
-#!POPCORN leaderboard vectoradd_py
+#!POPCORN leaderboard vectoradd_py-dev
 
 import torch
 from torch.utils.cpp_extension import load_inline
