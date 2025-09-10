@@ -32,15 +32,29 @@ class Log:
     content: str
 
 
+@dataclasses.dataclass
+class Link:
+    """
+    Link represents a link in the profiling report, to result data
+    which can be downloaded by clicking it.
+    """
+    title: str
+    text: str
+    url: str
+
+
 class RunResultReport:
     def __init__(self, data=None):
-        self.data: List[Text | Log] = data or []
+        self.data: List[Text | Log | Link] = data or []
 
     def add_text(self, section: str):
         self.data.append(Text(section))
 
     def add_log(self, header: str, log: str):
         self.data.append(Log(header, log))
+
+    def add_link(self, title: str, text: str, url: str):
+        self.data.append(Link(title, text, url))
 
     def __repr__(self):
         return f"RunResultReport(data={self.data})"
@@ -267,6 +281,7 @@ def generate_system_info(system: SystemInfo):
 Running on:
 * GPU: `{system.gpu}`
 * CPU: `{system.cpu}`
+* Runtime: `{system.runtime}`
 * Platform: `{system.platform}`
 * Torch: `{system.torch}`
 """
@@ -321,6 +336,13 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             "Profiling",
             make_profile_log(prof_run.run),
         )
+
+        if prof_run.profile is not None and prof_run.profile.download_url is not None:
+            report.add_link(
+                f"{prof_run.profile.profiler} profiling output",
+                "Download from GitHub",
+                prof_run.profile.download_url,
+            )
 
     if "leaderboard" in runs:
         bench_run = runs["leaderboard"]

@@ -16,13 +16,24 @@ from libkernelbot.report import (
     make_short_report,
     make_test_log,
 )
-from libkernelbot.run_eval import CompileResult, EvalResult, FullResult, RunResult, SystemInfo
+from libkernelbot.run_eval import (
+    CompileResult,
+    EvalResult,
+    FullResult,
+    ProfileResult,
+    RunResult,
+    SystemInfo,
+)
 
 
 # define helpers and  fixtures that create mock results
 def sample_system_info() -> SystemInfo:
     return SystemInfo(
-        gpu="NVIDIA RTX 4090", cpu="Intel i9-12900K", platform="Linux-5.15.0", torch="2.0.1+cu118"
+        gpu="NVIDIA RTX 4090",
+        cpu="Intel i9-12900K",
+        runtime="CUDA",
+        platform="Linux-5.15.0",
+        torch="2.0.1+cu118",
     )
 
 
@@ -82,6 +93,7 @@ def create_eval_result(mode="test") -> EvalResult:
         end=datetime.datetime.now(),
         compilation=sample_compile_result(),
         run=sample_run_result(mode),
+        profile=None,
     )
 
 
@@ -294,6 +306,7 @@ def test_make_short_report_full_success():
                 stderr="",
                 result={},
             ),
+            profile=None,
         )
 
     result = make_short_report(runs, full=True)
@@ -491,6 +504,7 @@ def test_generate_report_test_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -522,6 +536,7 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -556,6 +571,7 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -591,6 +607,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -616,6 +633,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -644,8 +662,12 @@ def test_generate_report_profile(sample_full_result: FullResult):
         "benchmark.0.spec": "Benchmark",
         "benchmark.0.report": base64.b64encode(b"Profile report", b"+*").decode("utf-8"),
     }
+    sample_full_result.runs["profile"].profile = ProfileResult(
+        profiler="NSight",
+        download_url="https://example.com",
+    )
     report = generate_report(sample_full_result)
-    from libkernelbot.report import Log, Text
+    from libkernelbot.report import Link, Log, Text
 
     assert report.data == [
         Text(
@@ -653,6 +675,7 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -665,6 +688,7 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "> Division by zero",
         ),
         Log(header="Profiling", content="Benchmark\n\n  Profile report\n"),
+        Link("NSight profiling output", "Download from GitHub", "https://example.com"),
     ]
 
 

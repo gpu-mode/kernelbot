@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from libkernelbot.consts import ExitCode, SubmissionMode
-from libkernelbot.run_eval import run_pytorch_script
+from libkernelbot.run_eval import make_system_info, run_pytorch_script
 
 ref = Path("examples/identity_py/reference.py").read_text()
 task = Path("examples/identity_py/task.py").read_text()
@@ -12,6 +12,7 @@ files = {"eval.py": py_eval, "reference.py": ref, "utils.py": utils, "task.py": 
 
 def run_pytorch_helper(sources: dict, tests=None, **kwargs):
     result = run_pytorch_script(
+        make_system_info(),
         sources,
         "eval.py",
         mode=SubmissionMode.TEST.value,

@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import functools
+import json
 import os
 import shlex
 import subprocess
@@ -11,6 +12,16 @@ from types import NoneType
 from typing import Optional, Protocol, Union
 
 from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
+
+
+@dataclasses.dataclass
+class ProfileResult:
+    # fmt: off
+    profiler: str      # The profiler used to gather this data
+    # Public download URL of all files created by the profiler
+    # This may also be configured later
+    download_url: Optional[str]
+    #fmt: on
 
 
 @dataclasses.dataclass
@@ -46,6 +57,7 @@ class SystemInfo:
     gpu: str = ''           # Model name of the GPU
     device_count: int = 1   # Number of GPUs
     cpu: str = ''           # Model name of the CPU
+    runtime: str = ''       # Whether CUDA or ROCm
     platform: str = ''      # Platform string of the machine
     torch: str = ''         # Torch version
     # fmt: on
@@ -58,6 +70,7 @@ class EvalResult:
     end: datetime.datetime              # and when did it finish
     compilation: CompileResult | None   # results of compilation
     run: RunResult | None               # result of actually running the executable/script
+    profile: ProfileResult | None       # result of profiling the executable
     # fmt: on
 
 
@@ -285,6 +298,7 @@ def run_program(
 
 
 def run_single_evaluation(
+    system: SystemInfo,
     call: list[str],
     mode: str,
     *,
@@ -296,34 +310,32 @@ def run_single_evaluation(
     ranked_timeout: int = Timeout.RANKED,
     ranking_by: str = "last",
     seed: Optional[int] = None,
-) -> RunResult:
+) -> tuple[RunResult, Optional[ProfileResult]]:
     """
     A single runner run, either in the context of test files, or in the
     context of benchmark files.
     """
-    if mode == "test":
-        with tempfile.NamedTemporaryFile("w") as tests_file:
-            tests_file.write(tests)
-            tests_file.flush()
-            return run_program(
-                call + [mode, tests_file.name], seed=seed, timeout=test_timeout, multi_gpu=multi_gpu
-            )
-    elif mode in ["benchmark", "profile", "leaderboard"]:
-        timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
-        with tempfile.NamedTemporaryFile("w") as bench_file:
+    with tempfile.NamedTemporaryFile("w") as cases:
+        if mode == "test":
+            timeout = test_timeout
+            cases.write(tests)
+        elif mode in ["benchmark", "profile", "leaderboard"]:
+            timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
             if ranking_by == "last":
-                bench_file.write(benchmarks.splitlines(keepends=True)[-1])
+                cases.write(benchmarks.splitlines(keepends=True)[-1])
             else:
-                bench_file.write(benchmarks)
-            bench_file.flush()
-            return run_program(
-                call + [mode, bench_file.name], seed=seed, timeout=timeout, multi_gpu=multi_gpu
-            )
-    else:
-        raise ValueError(f"Invalid mode {mode}")
+                cases.write(benchmarks)
+        else:
+            raise ValueError(f"Invalid mode {mode}")
+
+        cases.flush()
+
+        call += [mode, cases.name]
+
+        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 
-def make_system_info() -> SystemInfo:
+def make_system_info() -> SystemInfo: # noqa: C901
     info = SystemInfo()
     try:
         import torch
@@ -334,19 +346,29 @@ def make_system_info() -> SystemInfo:
         if torch.cuda.is_available():
             info.gpu = torch.cuda.get_device_name()
             info.device_count = torch.cuda.device_count()
+            if torch.version.hip is not None:
+                info.runtime = "ROCm"
+            elif torch.version.cuda is not None:
+                info.runtime = "CUDA"
     except ImportError:
         # get GPU info manually
         try:
             info.gpu = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], encoding="utf-8"
             )
+            info.device_count = info.gpu.count('\n')
+            info.runtime = "CUDA"
         except subprocess.CalledProcessError:
             # try again for HIP
-            # TODO suggested by Claude, untested
             try:
-                info.gpu = subprocess.check_output(
-                    ["rocm-smi", "--showproductname"], encoding="utf-8"
-                )
+                rocm_info = json.loads(subprocess.check_output(
+                    ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
+                ))
+                if len(rocm_info) > 0:
+                    info.gpu = next(rocm_info.__iter__())["Card Series"]
+
+                info.device_count = len(rocm_info)
+                info.runtime = "ROCm"
             except subprocess.CalledProcessError:
                 # OK, no GPU info available
                 pass
@@ -375,6 +397,7 @@ def make_system_info() -> SystemInfo:
 
 
 def run_cuda_script(  # # noqa: C901
+    system: SystemInfo,
     sources: dict[str, str],
     headers: Optional[dict[str, str]] = None,
     arch: Optional[int] = None,
@@ -424,6 +447,7 @@ def run_cuda_script(  # # noqa: C901
                 end=datetime.datetime.now(),
                 compilation=compile_result,
                 run=None,
+                profile=None,
             )
 
     # cleaning up all source files _before_ we let the user code run, just in
@@ -434,16 +458,18 @@ def run_cuda_script(  # # noqa: C901
             if os.path.exists(f):
                 os.remove(f)
 
-    run_result = run_single_evaluation(["./eval.out"], **kwargs)
+    run_result, profile_result = run_single_evaluation(system, ["./eval.out"], **kwargs)
     return EvalResult(
         start=start,
         end=datetime.datetime.now(),
         compilation=compile_result,
         run=run_result,
+        profile=profile_result,
     )
 
 
 def run_pytorch_script(  # noqa: C901
+    system: SystemInfo,
     sources: dict[str, str],
     main: str,
     **kwargs,
@@ -495,13 +521,14 @@ def run_pytorch_script(  # noqa: C901
                 exit_code=e.returncode,
             )
 
-        run = run_single_evaluation(["python", main], **kwargs)
+        run, profile = run_single_evaluation(system, ["python", main], **kwargs)
 
         return EvalResult(
             start=start,
             end=datetime.datetime.now(),
             compilation=comp,
             run=run,
+            profile=profile,
         )
     finally:
         for f in sources.keys():
@@ -558,7 +585,9 @@ def build_test_string(tests: list[dict]):
 
 
 def run_config(config: dict):
+    system = make_system_info()
     common_args = {
+        "system": system,
         "tests": build_test_string(config.get("tests", [])),
         "benchmarks": build_test_string(config.get("benchmarks", [])),
         "seed": config.get("seed", None),
@@ -591,4 +620,4 @@ def run_config(config: dict):
         raise ValueError(f"Invalid language {config['lang']}")
 
     results = run_evaluation(runner, config["mode"])
-    return FullResult(success=True, error="", runs=results, system=make_system_info())
+    return FullResult(success=True, error="", runs=results, system=system)

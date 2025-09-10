@@ -77,6 +77,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
         ),
@@ -210,6 +211,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                         "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
+                        "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
                     },
                 }
@@ -315,6 +317,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
+                        "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
                     },
                 },
@@ -357,6 +360,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "device_count": 1,
                         "gpu": "NVIDIA RTX 4090",
                         "platform": "Linux-5.15.0",
+                        "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
                     },
                 },
