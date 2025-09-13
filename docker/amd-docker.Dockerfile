@@ -57,3 +57,5 @@ RUN sudo pip install \
     packaging \
     wheel \
     tinygrad
+
+RUN sudo pip install git+https://github.com/ROCm/iris.git
