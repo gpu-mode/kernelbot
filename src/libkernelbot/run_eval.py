@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import time
@@ -232,11 +233,18 @@ def compile_cuda_script(  # # noqa: C901
 
 
 def run_program(
-    args: list[str], seed: Optional[int], timeout: int, multi_gpu: bool = False
+    args: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool = False,
+    extra_env: Optional[dict[str, str]] = None,
 ) -> RunResult:
     print("[Running]")
     # set up a pipe so the tester can communicate its verdict with us
     env = os.environ.copy()
+    if extra_env is not None:
+        env.update(extra_env)
+
     pipe_read, pipe_write = os.pipe()
     env["POPCORN_FD"] = str(pipe_write)
     if seed is not None:
@@ -297,6 +305,87 @@ def run_program(
     )
 
 
+def profile_program(
+    system: SystemInfo,
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    # The runner-specific configuration should implement logic
+    # to fetch the data in this directory and return it as
+    # ProfileResult.download_url.
+    # Insert an extra nested nested path here so that the resulting zip has all files
+    # in the profile_data/ directory rather than directly in the root.
+    output_dir = Path(".") / "profile_data" / "profile_data"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if system.runtime == "ROCm":
+        # Wrap program in rocprof
+        call = [
+            "rocprofv3",
+            "--log-level",
+            "fatal",
+            "--hip-trace",
+            "--kernel-trace",
+            "--rccl-trace",
+            "--marker-trace",
+            "--hip-trace",
+            "--memory-copy-trace",
+            # New? Doesn't work in the runner
+            # "--memory-allocation-trace",
+            "--scratch-memory-trace",
+            # The HSA trace output is very large, so skip it for now
+            # "--hsa-trace",
+            "--output-format",
+            "pftrace",
+            "csv",
+            "-d",
+            str(output_dir),
+            # Just store the files as %pid%_tracename.ext instead of putting them in an
+            # additional directory named after the hostname.
+            "-o",
+            # Insert an extra path here so that the resulting zip has all files
+            # in the profile_data/ directory rather than the root.
+            "%pid%",
+            "--",
+        ] + call
+
+        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
+            "GPU_DUMP_CODE_OBJECT": "1",
+        })
+
+        profile_result = None
+
+        if run_result.success:
+            # Post-process trace data.
+            # rocPROF generates one trace for every process, but its more useful to
+            # have all traces be in the same file. Fortunately we can do that by
+            # concatenating.
+            traces = list(output_dir.glob("*.pftrace"))
+            with (output_dir / "combined.pftrace").open("wb") as combined:
+                for trace_path in traces:
+                    with trace_path.open("rb") as trace:
+                        shutil.copyfileobj(trace, combined)
+
+                    # After we've created the combined trace, there is no point in
+                    # keeping the individual traces around.
+                    trace_path.unlink()
+
+            # Also move the code objects to the profiling output directory.
+            for code_obj in list(Path.cwd().glob("_code_object*.o")):
+                code_obj.rename(output_dir / code_obj.name)
+
+            profile_result = ProfileResult(
+                profiler='rocPROF',
+                download_url=None,
+            )
+
+        return run_result, profile_result
+    else:
+        # TODO: Implement profiling for other platforms
+        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
+
 def run_single_evaluation(
     system: SystemInfo,
     call: list[str],
@@ -331,6 +420,9 @@ def run_single_evaluation(
         cases.flush()
 
         call += [mode, cases.name]
+
+        if mode == "profile":
+            return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
 
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
