@@ -276,7 +276,11 @@ class AdminCog(commands.Cog):
             forum_thread = await forum_channel.create_thread(
                 name=leaderboard_name,
                 content=self._leaderboard_opening_message(
-                    leaderboard_name, date_value, definition.description
+                    leaderboard_name,
+                    date_value,
+                    definition.description[:1500]
+                    if len(definition.description) > 1500
+                    else definition.description,
                 ),
                 auto_archive_duration=10080,  # 7 days
             )
