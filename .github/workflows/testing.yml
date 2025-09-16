@@ -36,7 +36,7 @@ jobs:
           name: python-coverage-comment-action
           path: python-coverage-comment-action.txt
 
-  integration-tests:
+  integration-tests-modal:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -47,4 +47,15 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
       - run: uv run modal token set --token-id ${MODAL_TOKEN_ID} --token-secret ${MODAL_TOKEN_SECRET}
-      - run: uv run pytest -m integration tests -v
+      - run: uv run pytest -m integration tests/test_modal.py -v
+
+  integration-tests-github:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --extra dev
+      - run: uv run pytest -m integration tests/test_github.py -v
