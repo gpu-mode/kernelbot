@@ -42,7 +42,13 @@ RUN sudo apt update -y \
 
 RUN sudo pip install --upgrade pip
 
-RUN sudo pip install --no-cache-dir pytorch-triton-rocm torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3
+RUN sudo pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/nightly/rocm6.3 \
+      torch torchvision torchaudio
+
+RUN sudo pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/nightly/rocm6.3 \
+      pytorch-triton-rocm
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
