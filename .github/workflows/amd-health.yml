@@ -6,7 +6,6 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
   push:
-    branches: [main]
 
 jobs:
   health-check:
@@ -28,64 +27,5 @@ jobs:
     
     - name: Distributed Health Check
       run: |
-        # Check how many GPUs are available
         python -c "import torch; print(f'Available GPUs: {torch.cuda.device_count()}')"
-        
-        # Test process group initialization in a loop to debug hanging issues
-        python -c "
-        import torch
-        import torch.distributed as dist
-        import os
-        import time
-        import signal
-        
-        def timeout_handler(signum, frame):
-            print('✗ Process group initialization timed out after 30 seconds')
-            exit(1)
-        
-        # Set timeout for process group initialization
-        signal.signal(signal.SIGALRM, timeout_handler)
-        
-        num_gpus = torch.cuda.device_count()
-        print(f'Testing process group initialization on {num_gpus} GPUs')
-        
-        for attempt in range(3):  # Try 3 times
-            try:
-                print(f'Attempt {attempt + 1}: Initializing process group...')
-                
-                # Set environment variables
-                os.environ['MASTER_ADDR'] = '127.0.0.1'
-                os.environ['MASTER_PORT'] = str(12345 + attempt)
-                os.environ['WORLD_SIZE'] = '1'
-                os.environ['RANK'] = '0'
-                
-                # Set 30 second timeout
-                signal.alarm(30)
-                
-                # Test single-process initialization first
-                dist.init_process_group('nccl', rank=0, world_size=1)
-                
-                # Cancel timeout
-                signal.alarm(0)
-                
-                print(f'✓ Attempt {attempt + 1}: Process group initialized successfully')
-                
-                # Test basic tensor operations
-                device = torch.device('cuda:0')
-                tensor = torch.ones(10, device=device)
-                print(f'✓ Tensor operations work: {tensor.sum().item()}')
-                
-                dist.destroy_process_group()
-                print(f'✓ Attempt {attempt + 1}: Process group destroyed successfully')
-                break
-                
-            except Exception as e:
-                signal.alarm(0)  # Cancel timeout
-                print(f'✗ Attempt {attempt + 1} failed: {type(e).__name__}: {e}')
-                if attempt == 2:  # Last attempt
-                    print('✗ All initialization attempts failed')
-                    exit(1)
-                time.sleep(2)  # Wait before retry
-        
-        print('✓ Distributed health check passed')
-        "
+        python scripts/test_distributed.py
