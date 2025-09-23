@@ -22,6 +22,7 @@ jobs:
     
     - name: Install PyTorch
       run: |
+        pip install numpy
         pip install torch --index-url https://download.pytorch.org/whl/rocm6.3
     
     - name: GPU Health Check
