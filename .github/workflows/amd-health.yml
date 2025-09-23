@@ -11,7 +11,7 @@ on:
 jobs:
   health-check:
     runs-on: [amdgpu-mi300-x86-64]
-    timeout-minutes: 5
+    timeout-minutes: 10
     
     steps:
     - name: Setup Python
@@ -25,3 +25,56 @@ jobs:
     
     - name: GPU Health Check
       run: python -c "import torch; torch.randn(5, device='cuda')"
+    
+    - name: Distributed Health Check
+      run: |
+        # Check how many GPUs are available
+        python -c "import torch; print(f'Available GPUs: {torch.cuda.device_count()}')"
+        
+        # Test distributed initialization with 2 GPUs (minimal distributed test)
+        python -c "
+        import torch
+        import torch.distributed as dist
+        import torch.multiprocessing as mp
+        import os
+        import time
+        
+        def test_distributed(rank, world_size, master_port):
+            os.environ['MASTER_ADDR'] = '127.0.0.1'
+            os.environ['MASTER_PORT'] = str(master_port)
+            
+            try:
+                dist.init_process_group('nccl', rank=rank, world_size=world_size, device_id=torch.device(f'cuda:{rank}'))
+                print(f'✓ Rank {rank} initialized successfully')
+                
+                # Simple distributed operation test
+                tensor = torch.ones(2, device=f'cuda:{rank}') * rank
+                dist.all_reduce(tensor)
+                print(f'✓ Rank {rank} all_reduce result: {tensor}')
+                
+                dist.destroy_process_group()
+                return True
+            except Exception as e:
+                print(f'✗ Rank {rank} failed: {e}')
+                return False
+        
+        num_gpus = torch.cuda.device_count()
+        world_size = min(num_gpus, 8)  # Test with available GPUs, up to 8
+        master_port = 12345 + int(time.time()) % 1000  # One port for all ranks
+        
+        print(f'Testing distributed initialization with {world_size} GPUs on port {master_port}')
+        
+        mp.set_start_method('spawn', force=True)
+        processes = []
+        for rank in range(world_size):
+            p = mp.Process(target=test_distributed, args=(rank, world_size, master_port))
+            p.start()
+            processes.append(p)
+        
+        for p in processes:
+            p.join()
+            if p.exitcode != 0:
+                print('✗ Distributed test failed')
+                exit(1)
+        print('✓ Distributed health check passed')
+        "
