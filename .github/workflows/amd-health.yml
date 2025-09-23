@@ -19,9 +19,9 @@ jobs:
       with:
         python-version: '3.10'
     
-    # - name: Install PyTorch
-    #   run: |
-    #     pip install torch --index-url https://download.pytorch.org/whl/rocm6.3
+    - name: Install PyTorch
+      run: |
+        pip install torch --index-url https://download.pytorch.org/whl/rocm6.3
     
     - name: GPU Health Check
       run: python -c "import torch; torch.randn(5, device='cuda')"
