@@ -5,4 +5,4 @@
     },
     "main": "rocshmem_test.py",
     "mode": "test"
-  }
+}
