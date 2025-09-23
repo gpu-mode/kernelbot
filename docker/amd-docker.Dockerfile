@@ -60,6 +60,8 @@ RUN sudo pip install \
     wheel \
     tinygrad
 
+RUN sudo pip install git+https://github.com/ROCm/iris.git
+
 RUN sudo apt-get update -y \
     && sudo apt-get install -y --no-install-recommends \
     autoconf \
