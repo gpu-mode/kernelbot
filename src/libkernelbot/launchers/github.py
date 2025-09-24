@@ -105,6 +105,7 @@ class GitHubLauncher(Launcher):
         logger.info("Waiting for workflow to start...")
 
         timeout = get_timeout(config) + TIMEOUT_BUFFER_MINUTES
+
         logger.info(f"Waiting for workflow to complete... (timeout: {timeout} minutes)")
         await run.wait_for_completion(
             lambda x: self.wait_callback(x, status), timeout_minutes=timeout
@@ -350,7 +351,6 @@ class GitHubRun:
                 logger.error(f"Error waiting for GitHub run {self.run_id}: {e}", exc_info=e)
                 raise  # Re-raise other exceptions
 
-
     def get_artifact_index(self) -> dict[str, GitHubArtifact]:
         logger.info("Creating artifact index for run %s", self.run_id)
         artifacts = self.run.get_artifacts()
@@ -367,7 +367,6 @@ class GitHubRun:
             )
 
         return extracted
-
 
     async def download_artifact(self, artifact: GitHubArtifact) -> dict:
         logger.info("Attempting to download artifact '%s' for run %s", artifact.name, self.run_id)
@@ -387,6 +386,5 @@ class GitHubRun:
             return artifact_dict
         else:
             raise RuntimeError(
-                f"Failed to download artifact {artifact.name}. "
-                f"Status code: {response.status_code}"
+                f"Failed to download artifact {artifact.name}. Status code: {response.status_code}"
             )

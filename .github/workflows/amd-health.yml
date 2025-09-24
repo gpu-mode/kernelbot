@@ -10,10 +10,12 @@ on:
 
 jobs:
   health-check:
-    runs-on: [amdgpu-mi300-x86-64]
+    runs-on: [amdgpu-mi300-8-x86-64]
     timeout-minutes: 5
     
     steps:
+    - uses: actions/checkout@v3
+    
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
@@ -21,7 +23,30 @@ jobs:
     
     - name: Install PyTorch
       run: |
+        pip install numpy
         pip install torch --index-url https://download.pytorch.org/whl/rocm6.3
+    
+    - name: System Information
+      run: |
+        echo "=== ROCm Version ==="
+        rocm-smi --version || rocminfo --version || echo "ROCm version check failed"
+        echo ""
+        echo "=== GPU Driver Info ==="
+        rocm-smi -a || rocminfo || echo "ROCm SMI failed"
+        echo ""
+        echo "=== PyTorch Version ==="
+        python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+        python -c "import torch; print(f'CUDA/ROCm: {torch.version.cuda}')"
+        python -c "import torch; print(f'HIP: {torch.version.hip if hasattr(torch.version, \"hip\") else \"N/A\"}')"
+        echo ""
+        echo "=== OS Info ==="
+        uname -a
+        cat /etc/os-release | head -5
     
     - name: GPU Health Check
       run: python -c "import torch; torch.randn(5, device='cuda')"
+    
+    - name: Distributed Health Check
+      run: |
+        python -c "import torch; print(f'Available GPUs: {torch.cuda.device_count()}')"
+        python scripts/test_distributed.py
