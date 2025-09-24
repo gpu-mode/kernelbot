@@ -105,6 +105,10 @@ class GitHubLauncher(Launcher):
         logger.info("Waiting for workflow to start...")
 
         timeout = get_timeout(config) + TIMEOUT_BUFFER_MINUTES
+        # AMD workflows need extra time for PyTorch ROCm installation
+        # Add 10 more minutes
+        if gpu_vendor == "AMD":
+            timeout += 10  
         logger.info(f"Waiting for workflow to complete... (timeout: {timeout} minutes)")
         await run.wait_for_completion(
             lambda x: self.wait_callback(x, status), timeout_minutes=timeout
