@@ -33,14 +33,14 @@ RUN sudo groupadd -g 109 render
 RUN sudo apt update -y \
     && sudo apt install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" \
     && sudo usermod -a -G render,video runner \
-    && wget https://repo.radeon.com/amdgpu-install/6.3.1/ubuntu/jammy/amdgpu-install_6.3.60301-1_all.deb \
-    && sudo apt install -y ./amdgpu-install_6.3.60301-1_all.deb \
+    && wget https://repo.radeon.com/amdgpu-install/6.4.1/ubuntu/jammy/amdgpu-install_6.4.60401-1_all.deb \
+    && sudo apt install -y ./amdgpu-install_6.4.60401-1_all.deb \
     && sudo apt update -y \
     && sudo apt install -y rocm
 
 RUN sudo pip install --upgrade pip
 
-RUN sudo pip install --no-cache-dir torch==2.10.0.dev20250916+rocm6.3 pytorch-triton-rocm --index-url https://download.pytorch.org/whl/nightly/rocm6.3
+RUN sudo pip install --no-cache-dir torch pytorch-triton-rocm --index-url https://download.pytorch.org/whl/nightly/rocm6.4
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
