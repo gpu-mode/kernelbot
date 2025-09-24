@@ -1,6 +1,8 @@
 FROM ghcr.io/actions/actions-runner:latest
 
 ENV CXX=clang++
+ENV UCX_CXX=g++
+ENV UCX_CC=gcc
 
 RUN sudo apt-get update -y \
     && sudo apt-get install -y software-properties-common \
@@ -59,3 +61,61 @@ RUN sudo pip install \
     tinygrad
 
 RUN sudo pip install git+https://github.com/ROCm/iris.git
+
+RUN sudo apt-get update -y \
+    && sudo apt-get install -y --no-install-recommends \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    build-essential \
+    gfortran \
+    flex \
+    bison \
+    libomp-dev \
+    libhwloc-dev \
+    libnuma-dev \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+ENV UCX_INSTALL_DIR=/opt/ucx
+ENV OMPI_INSTALL_DIR=/opt/openmpi
+ENV ROCSHMEM_INSTALL_DIR=/opt/rocshmem
+ENV ROCM_PATH=/opt/rocm
+
+RUN cd /tmp \
+    && git clone https://github.com/openucx/ucx.git -b v1.17.x \
+    && cd ucx \
+    && ./autogen.sh \
+    && CC=gcc CXX=g++ ./configure --prefix=${UCX_INSTALL_DIR} --with-rocm=${ROCM_PATH} --enable-mt --disable-optimizations \
+    && make -j$(nproc) \
+    && sudo make install \
+    && cd / \
+    && sudo rm -rf /tmp/ucx
+
+RUN cd /tmp \
+    && git clone --recursive https://github.com/open-mpi/ompi.git -b v5.0.x \
+    && cd ompi \
+    && ./autogen.pl \
+    && ./configure --prefix=${OMPI_INSTALL_DIR} --with-rocm=${ROCM_PATH} --with-ucx=${UCX_INSTALL_DIR} \
+    && make -j$(nproc) \
+    && sudo make install \
+    && cd / \
+    && sudo rm -rf /tmp/ompi
+
+ENV PATH="${OMPI_INSTALL_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH="${OMPI_INSTALL_DIR}/lib:${UCX_INSTALL_DIR}/lib:/opt/rocm/lib"
+
+
+RUN cd /tmp \
+    && git clone https://github.com/ROCm/rocSHMEM.git \
+    && cd rocSHMEM \
+    && mkdir build \
+    && cd build \
+    && MPI_ROOT=${OMPI_INSTALL_DIR} UCX_ROOT=${UCX_INSTALL_DIR} CMAKE_PREFIX_PATH="${ROCM_PATH}:$CMAKE_PREFIX_PATH" \
+       sudo ../scripts/build_configs/ipc_single -DCMAKE_INSTALL_PREFIX=/opt/rocshmem \
+    && cd / \
+    && sudo rm -rf /tmp/rocSHMEM
+
+
+ENV ROCSHMEM_INSTALL_DIR=${ROCSHMEM_INSTALL_DIR}
+ENV LD_LIBRARY_PATH="${ROCSHMEM_INSTALL_DIR}/lib:${LD_LIBRARY_PATH}"
