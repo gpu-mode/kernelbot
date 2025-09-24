@@ -83,7 +83,7 @@ def github_config():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.parametrize("gpu_type", [GitHubGPU.NVIDIA, GitHubGPU.MI300])
+@pytest.mark.parametrize("gpu_type", [GitHubGPU.NVIDIA, GitHubGPU.MI300x8])
 async def test_github_launcher_python_script(project_root: Path, github_config: GitHubConfig, gpu_type: GitHubGPU):
     """
     Test GitHubLauncher with a real Python script using real GitHub Actions.
