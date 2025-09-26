@@ -233,7 +233,7 @@ class AdminCog(commands.Cog):
     ):
         return f"""
         # New Leaderboard: {leaderboard_name}\n
-        **Deadline**: {deadline.strftime('%Y-%m-%d %H:%M')}\n
+        **Deadline**: {deadline.strftime("%Y-%m-%d %H:%M")}\n
         {description}\n
         Submit your entries using `/leaderboard submit ranked` in the submissions channel.\n
         Good luck to all participants! 🚀 <@&{self.bot.leaderboard_participant_role_id}>"""
@@ -824,6 +824,15 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         submission_id: int,
     ):
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to have Admin permissions to run this command",
+                ephemeral=True,
+            )
+            return
+
         with self.bot.leaderboard_db as db:
             sub: SubmissionItem = db.get_submission_by_id(submission_id)
 
