@@ -6,7 +6,6 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
   push:
-    branches: [main]
 
 jobs:
   health-check:
