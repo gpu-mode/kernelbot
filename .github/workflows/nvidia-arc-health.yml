@@ -11,8 +11,6 @@ jobs:
   health-check:
     runs-on: [Nvidia-A100-8-x86-64]
     timeout-minutes: 5
-    container:
-      image: nvidia/cuda:12.4.0-devel-ubuntu22.04
     
     steps:
     - name: Setup Python
