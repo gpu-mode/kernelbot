@@ -5,7 +5,7 @@ on:
   workflow_dispatch: {}
 jobs:
   smoke:
-    runs-on: [self-hosted, gpu]
+    runs-on: gpu-runners
     steps:
       - uses: actions/checkout@v4
       - run: nvidia-smi || true
