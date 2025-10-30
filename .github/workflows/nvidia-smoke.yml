@@ -4,15 +4,47 @@ on:
     branches: [ nvidia-gpu-runners ]
   workflow_dispatch: {}
 jobs:
-  smoke:
-    runs-on: gpu-runners
+  gpu-test:
+    runs-on: [self-hosted, nvidia-docker-b200-8-x86-64]
+
     steps:
-      - uses: actions/checkout@v4
-      - run: nvidia-smi || true
-      - run: |
-          python - <<'PY'
-          import torch
-          print("cuda?", torch.cuda.is_available(), "count:", torch.cuda.device_count())
-          if torch.cuda.is_available():
-              print("name:", torch.cuda.get_device_name(0))
-          PY
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Show GPU info
+        run: |
+          echo "===== nvidia-smi ====="
+          nvidia-smi || echo "nvidia-smi not available"
+          echo "======================"
+
+      - name: Run CUDA sanity test with PyTorch
+        run: |
+          python - << 'EOF'
+          import torch, time
+
+          print("PyTorch version:", torch.__version__)
+          print("CUDA available:", torch.cuda.is_available())
+          print("CUDA device count:", torch.cuda.device_count())
+
+          if not torch.cuda.is_available():
+              raise SystemExit("ERROR: CUDA not available on this runner ❌")
+
+          # list all visible GPUs
+          for i in range(torch.cuda.device_count()):
+              print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+
+          # simple GPU compute test on cuda:0
+          device = torch.device("cuda:0")
+          a = torch.randn(4096, 4096, device=device)
+          b = torch.randn(4096, 4096, device=device)
+
+          torch.cuda.synchronize()
+          t0 = time.time()
+          c = a @ b
+          torch.cuda.synchronize()
+          t1 = time.time()
+
+          print("Matmul result shape:", tuple(c.shape))
+          print(f"Matmul took {t1 - t0:.3f} sec on GPU")
+          print("All good ✅")
+          EOF
