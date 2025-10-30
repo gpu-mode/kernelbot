@@ -19,7 +19,7 @@ jobs:
 
       - name: Run CUDA sanity test with PyTorch
         run: |
-          python - << 'EOF'
+          python3 - << 'EOF'
           import torch, time
 
           print("PyTorch version:", torch.__version__)
