@@ -37,6 +37,14 @@ jobs:
         # Now write to file (won't be logged since it's masked)
         echo "$PAYLOAD" > payload.json
 
+    - name: Setup Virtual Environment and Install Dependencies
+      shell: bash
+      run: |
+        pip install --upgrade pip
+        pip install -r "requirements.txt"
+        pip install -e .
+
+
     - name: Run script
       shell: bash
       run: |
