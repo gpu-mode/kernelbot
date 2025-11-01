@@ -28,6 +28,11 @@ jobs:
       shell: bash
       run: |
         nvidia-smi || echo "nvidia-smi failed"
+    
+    - name: ncu
+      shell: bash
+      run: |
+        ncu --version || echo "ncu failed"
 
     - name: Create input files
       shell: bash
