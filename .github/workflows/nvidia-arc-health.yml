@@ -18,10 +18,6 @@ jobs:
       with:
         python-version: '3.10'
     
-    - name: Install PyTorch
-      run: |
-        pip install torch
-    
     - name: GPU Health Check
       run: python -c "import torch; torch.randn(5, device='cuda')"
     
