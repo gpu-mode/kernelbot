@@ -9,7 +9,7 @@ on:
 
 jobs:
   health-check:
-    runs-on: [nvidia-docker-b200-8-x86-64, Nvidia-A100-8-x86-64]
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 5
     
     steps:
