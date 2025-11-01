@@ -40,7 +40,7 @@ jobs:
     - name: Run script
       shell: bash
       run: |
-        python src/runners/github-runner.py
+        python3 src/runners/github-runner.py
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4
