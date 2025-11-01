@@ -305,6 +305,112 @@ def run_program(
     )
 
 
+def profile_program_roc(
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+    output_dir: Path,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    # Wrap program in rocprof
+    call = [
+        "rocprofv3",
+        "--log-level",
+        "fatal",
+        "--hip-trace",
+        "--kernel-trace",
+        "--rccl-trace",
+        "--marker-trace",
+        "--hip-trace",
+        "--memory-copy-trace",
+        # New? Doesn't work in the runner
+        # "--memory-allocation-trace",
+        "--scratch-memory-trace",
+        # The HSA trace output is very large, so skip it for now
+        # "--hsa-trace",
+        "--output-format",
+        "pftrace",
+        "csv",
+        "-d",
+        str(output_dir),
+        # Just store the files as %pid%_tracename.ext instead of putting them in an
+        # additional directory named after the hostname.
+        "-o",
+        # Insert an extra path here so that the resulting zip has all files
+        # in the profile_data/ directory rather than the root.
+        "%pid%",
+        "--",
+    ] + call
+
+    run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
+        "GPU_DUMP_CODE_OBJECT": "1",
+    },
+        )
+
+    profile_result = None
+
+    if run_result.success:
+        # Post-process trace data.
+        # rocPROF generates one trace for every process, but its more useful to
+        # have all traces be in the same file. Fortunately we can do that by
+        # concatenating.
+        traces = list(output_dir.glob("*.pftrace"))
+        with (output_dir / "combined.pftrace").open("wb") as combined:
+            for trace_path in traces:
+                with trace_path.open("rb") as trace:
+                    shutil.copyfileobj(trace, combined)
+
+                # After we've created the combined trace, there is no point in
+                # keeping the individual traces around.
+                trace_path.unlink()
+
+        # Also move the code objects to the profiling output directory.
+        for code_obj in list(Path.cwd().glob("_code_object*.o")):
+            code_obj.rename(output_dir / code_obj.name)
+
+        profile_result = ProfileResult(
+            profiler="rocPROF",
+            download_url=None,
+        )
+
+    return run_result, profile_result
+
+
+def profile_program_ncu(
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+    output_dir: Path,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    assert not multi_gpu, "Multi-GPU profiling not supported for ncu."
+
+    # Wrap program in ncu
+    call = [
+        "ncu",
+        "--set", "full",
+        "--nvtx",
+        "--nvtx-include", "custom_kernel/",
+        "--import-source", "1",
+        "-o", f"{str(output_dir / 'profile.ncu-rep')}",
+        "--",
+    ] + call
+
+    run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
+        "POPCORN_NCU": "1"
+    })
+
+    profile_result = None
+
+    if run_result.success:
+        profile_result = ProfileResult(
+            profiler='ncu',
+            download_url=None,
+        )
+
+    return run_result, profile_result
+
+
 def profile_program(
     system: SystemInfo,
     call: list[str],
@@ -315,89 +421,25 @@ def profile_program(
     # The runner-specific configuration should implement logic
     # to fetch the data in this directory and return it as
     # ProfileResult.download_url.
-    # Insert an extra nested nested path here so that the resulting zip has all files
+    # Insert an extra nested path here so that the resulting zip has all files
     # in the profile_data/ directory rather than directly in the root.
     output_dir = Path(".") / "profile_data" / "profile_data"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if system.runtime == "ROCm":
-        # Wrap program in rocprof
-        call = [
-            "rocprofv3",
-            "--log-level",
-            "fatal",
-            "--hip-trace",
-            "--kernel-trace",
-            "--rccl-trace",
-            "--marker-trace",
-            "--hip-trace",
-            "--memory-copy-trace",
-            # New? Doesn't work in the runner
-            # "--memory-allocation-trace",
-            "--scratch-memory-trace",
-            # The HSA trace output is very large, so skip it for now
-            # "--hsa-trace",
-            "--output-format",
-            "pftrace",
-            "csv",
-            "-d",
-            str(output_dir),
-            # Just store the files as %pid%_tracename.ext instead of putting them in an
-            # additional directory named after the hostname.
-            "-o",
-            # Insert an extra path here so that the resulting zip has all files
-            # in the profile_data/ directory rather than the root.
-            "%pid%",
-            "--",
-        ] + call
-
-        run_result = run_program(
-            call,
-            seed=seed,
-            timeout=timeout,
-            multi_gpu=multi_gpu,
-            extra_env={
-                "GPU_DUMP_CODE_OBJECT": "1",
-            },
-        )
-
-        profile_result = None
-
-        if run_result.success:
-            # Post-process trace data.
-            # rocPROF generates one trace for every process, but its more useful to
-            # have all traces be in the same file. Fortunately we can do that by
-            # concatenating.
-            traces = list(output_dir.glob("*.pftrace"))
-            with (output_dir / "combined.pftrace").open("wb") as combined:
-                for trace_path in traces:
-                    with trace_path.open("rb") as trace:
-                        shutil.copyfileobj(trace, combined)
-
-                    # After we've created the combined trace, there is no point in
-                    # keeping the individual traces around.
-                    trace_path.unlink()
-
-            # Also move the code objects to the profiling output directory.
-            for code_obj in list(Path.cwd().glob("_code_object*.o")):
-                code_obj.rename(output_dir / code_obj.name)
-
-            profile_result = ProfileResult(
-                profiler="rocPROF",
-                download_url=None,
-            )
-
-        return run_result, profile_result
+        return profile_program_roc(call, seed, timeout, multi_gpu, output_dir)
+    elif system.runtime == "CUDA":
+        return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir)
     else:
-        # TODO: Implement profiling for other platforms
-        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
+        raise ValueError(f"Unknown runtime {system.runtime}")
+
 
 
 def run_single_evaluation(
-    system: SystemInfo,
     call: list[str],
     mode: str,
     *,
+    system: SystemInfo,
     multi_gpu: bool = False,
     tests: Optional[str] = None,
     benchmarks: Optional[str] = None,
@@ -426,7 +468,7 @@ def run_single_evaluation(
 
         cases.flush()
 
-        call += [mode, cases.name]
+        call = call + [mode, cases.name]
 
         if mode == "profile":
             return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
@@ -498,7 +540,6 @@ def make_system_info() -> SystemInfo:  # noqa: C901
 
 
 def run_cuda_script(  # # noqa: C901
-    system: SystemInfo,
     sources: dict[str, str],
     headers: Optional[dict[str, str]] = None,
     arch: Optional[int] = None,
@@ -559,7 +600,7 @@ def run_cuda_script(  # # noqa: C901
             if os.path.exists(f):
                 os.remove(f)
 
-    run_result, profile_result = run_single_evaluation(system, ["./eval.out"], **kwargs)
+    run_result, profile_result = run_single_evaluation(["./eval.out"], **kwargs)
     return EvalResult(
         start=start,
         end=datetime.datetime.now(),
@@ -570,7 +611,6 @@ def run_cuda_script(  # # noqa: C901
 
 
 def run_pytorch_script(  # noqa: C901
-    system: SystemInfo,
     sources: dict[str, str],
     main: str,
     **kwargs,
@@ -622,7 +662,7 @@ def run_pytorch_script(  # noqa: C901
                 exit_code=e.returncode,
             )
 
-        run, profile = run_single_evaluation(system, ["python3", main], **kwargs)
+        run, profile = run_single_evaluation(["python3", main], **kwargs)
 
         return EvalResult(
             start=start,
