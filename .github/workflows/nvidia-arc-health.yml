@@ -14,7 +14,7 @@ jobs:
     
     steps:
     - name: GPU Health Check
-      run: python -c "import torch; torch.randn(5, device='cuda')"
+      run: python3 -c "import torch; torch.randn(5, device='cuda')"
     
     env:
       CUDA_VISIBLE_DEVICES: 0
