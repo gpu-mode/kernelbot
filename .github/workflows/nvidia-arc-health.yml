@@ -12,14 +12,8 @@ jobs:
     runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 5
     
-    steps:
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    
     - name: GPU Health Check
-      run: python -c "import torch; torch.randn(5, device='cuda')"
+      run: python3 -c "import torch; torch.randn(5, device='cuda')"
     
     env:
       CUDA_VISIBLE_DEVICES: 0
