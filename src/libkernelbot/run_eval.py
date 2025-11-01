@@ -22,7 +22,7 @@ class ProfileResult:
     # Public download URL of all files created by the profiler
     # This may also be configured later
     download_url: Optional[str]
-    #fmt: on
+    # fmt: on
 
 
 @dataclasses.dataclass
@@ -351,9 +351,15 @@ def profile_program(
             "--",
         ] + call
 
-        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
-            "GPU_DUMP_CODE_OBJECT": "1",
-        })
+        run_result = run_program(
+            call,
+            seed=seed,
+            timeout=timeout,
+            multi_gpu=multi_gpu,
+            extra_env={
+                "GPU_DUMP_CODE_OBJECT": "1",
+            },
+        )
 
         profile_result = None
 
@@ -377,7 +383,7 @@ def profile_program(
                 code_obj.rename(output_dir / code_obj.name)
 
             profile_result = ProfileResult(
-                profiler='rocPROF',
+                profiler="rocPROF",
                 download_url=None,
             )
 
@@ -385,6 +391,7 @@ def profile_program(
     else:
         # TODO: Implement profiling for other platforms
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
+
 
 def run_single_evaluation(
     system: SystemInfo,
@@ -427,7 +434,7 @@ def run_single_evaluation(
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 
-def make_system_info() -> SystemInfo: # noqa: C901
+def make_system_info() -> SystemInfo:  # noqa: C901
     info = SystemInfo()
     try:
         import torch
@@ -448,14 +455,16 @@ def make_system_info() -> SystemInfo: # noqa: C901
             info.gpu = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], encoding="utf-8"
             )
-            info.device_count = info.gpu.count('\n')
+            info.device_count = info.gpu.count("\n")
             info.runtime = "CUDA"
         except subprocess.CalledProcessError:
             # try again for HIP
             try:
-                rocm_info = json.loads(subprocess.check_output(
-                    ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
-                ))
+                rocm_info = json.loads(
+                    subprocess.check_output(
+                        ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
+                    )
+                )
                 if len(rocm_info) > 0:
                     info.gpu = next(rocm_info.__iter__())["Card Series"]
 
@@ -587,7 +596,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
+            compile_run = run_program(["python3", "submission.py"], seed=1, timeout=Timeout.COMPILE)
             if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                 comp = CompileResult(
                     nvcc_found=True,
