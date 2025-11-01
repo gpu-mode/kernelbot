@@ -622,7 +622,7 @@ def run_pytorch_script(  # noqa: C901
                 exit_code=e.returncode,
             )
 
-        run, profile = run_single_evaluation(system, ["python", main], **kwargs)
+        run, profile = run_single_evaluation(system, ["python3", main], **kwargs)
 
         return EvalResult(
             start=start,
