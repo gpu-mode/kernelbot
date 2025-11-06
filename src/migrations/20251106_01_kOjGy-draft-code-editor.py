@@ -11,6 +11,7 @@ steps = [
         CREATE TABLE IF NOT EXISTS leaderboard.draft_code (
             id SERIAL PRIMARY KEY,
             leaderboard_id INTEGER NOT NULL REFERENCES leaderboard.leaderboard(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
             type TEXT NOT NULL DEFAULT 'general',
             code BYTEA NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
