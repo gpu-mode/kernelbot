@@ -94,11 +94,15 @@ def verbose_allclose(
     return []
 
 
-def clear_l2_cache():
-    # import cupy as cp
-    # cp.cuda.runtime.deviceSetLimit(cp.cuda.runtime.cudaLimitPersistingL2CacheSize, 0)
-    # create a large dummy tensor
-    dummy = torch.empty((32, 1024, 1024), dtype=torch.int64, device="cuda")
-    # write stuff to it
-    dummy.fill_(42)
-    del dummy
+def clear_l2_cache(device='cuda'):
+    """
+    Clears GPU L2 cache by allocating and zeroing a buffer.
+
+    GB200 has 126 MB L2 cache. Using 512 MB (4x buffer).
+    See: https://docs.nvidia.com/cuda/blackwell-tuning-guide/
+
+    Adapted from triton.testing.do_bench.
+    """
+    cache_size = 512 * 1024 * 1024
+    cache = torch.empty(int(cache_size // 4), dtype=torch.int32, device=device)
+    cache.zero_()
