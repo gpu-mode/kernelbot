@@ -272,12 +272,9 @@ def make_profile_log(run: RunResult) -> str:
     num_bench = int(run.result.get("benchmark-count", 0))
 
     def log_one(base_name):
-        spec = run.result.get(f"{base_name}.spec")
-
         report: str = run.result.get(f"{base_name}.report")
         report = base64.b64decode(report.encode("utf-8"), b"+*").decode("utf-8")
         report = textwrap.indent(report, "  ")
-        bench_log.append(f"{spec}\n")
         bench_log.append(report)
 
     bench_log = []
@@ -312,6 +309,10 @@ def _handle_crash_report(report: RunResultReport, run_result: EvalResult):
         return True
 
     return False
+
+
+def _shortname(spec: str):
+    return spec.replace(": ", "=").replace("; ", "_")
 
 
 def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
@@ -350,7 +351,7 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
 
             if prof_run.profile.trace is not None:
                 report.add_log(
-                    "Profiling",
+                    f"Profiling {prof_run.run.result.get(f'benchmark.0.spec')}",
                     make_profile_log(prof_run.run),
                 )
 
@@ -365,8 +366,8 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             if prof_run.profile is not None:
                 if prof_run.profile.trace is not None:
                     report.add_file(
-                        "profile.zip",
-                        make_profile_log(prof_run.run),
+                        f"profile-{_shortname(prof_run.run.result.get(f'benchmark.0.spec'))}.zip",
+                        f"{prof_run.profile.profiler} report - " + prof_run.run.result.get(f"benchmark.0.spec"),
                         base64.b64decode(prof_run.profile.trace),
                     )
 
