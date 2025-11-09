@@ -140,4 +140,4 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
 
 
 async def _send_file(thread: discord.Thread, message: str, name: str, file: bytes):
-    await thread.send(message, file=discord.File(BytesIO(file), filename=name))
+    await thread.send(message, file=discord.File(BytesIO(file), filename=name), silent=True)
