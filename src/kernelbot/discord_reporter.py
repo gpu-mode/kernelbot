@@ -1,7 +1,8 @@
 import discord
-from discord_utils import _send_split_log
+from discord_utils import _send_split_log, _send_file
 
 from libkernelbot.report import (
+    File,
     Link,
     Log,
     MultiProgressReporter,
@@ -70,6 +71,11 @@ class RunProgressReporterDiscord(RunProgressReporter):
                 message += part.text
             elif isinstance(part, Log):
                 message = await _send_split_log(thread, message, part.header, part.content)
+            elif isinstance(part, File):
+                if len(message) > 0:
+                    await thread.send(message)
+                await _send_file(thread, part.message, part.name, part.content)
+                message = ""
             elif isinstance(part, Link):
                 if len(message) > 0:
                     await thread.send(message)

@@ -43,9 +43,19 @@ class Link:
     url: str
 
 
+@dataclasses.dataclass
+class File:
+    """
+    Link represents a file that gets attached to the report.
+    """
+    name: str
+    message: str
+    content: bytes
+
+
 class RunResultReport:
     def __init__(self, data=None):
-        self.data: List[Text | Log | Link] = data or []
+        self.data: List[Text | Log | Link | File] = data or []
 
     def add_text(self, section: str):
         self.data.append(Text(section))
@@ -55,6 +65,9 @@ class RunResultReport:
 
     def add_link(self, title: str, text: str, url: str):
         self.data.append(Link(title, text, url))
+
+    def add_file(self, name: str, message: str, content: bytes):
+        self.data.append(File(name, message, content))
 
     def __repr__(self):
         return f"RunResultReport(data={self.data})"
@@ -335,17 +348,27 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             if _handle_crash_report(report, prof_run):
                 return report
 
-            report.add_log(
-                "Profiling",
-                make_profile_log(prof_run.run),
-            )
-
-            if prof_run.profile is not None and prof_run.profile.download_url is not None:
-                report.add_link(
-                    f"{prof_run.profile.profiler} profiling output",
-                    "Download from GitHub",
-                    prof_run.profile.download_url,
+            if prof_run.profile.trace is not None:
+                report.add_log(
+                    "Profiling",
+                    make_profile_log(prof_run.run),
                 )
+
+                if prof_run.profile.download_url is not None:
+                    report.add_link(
+                        f"{prof_run.profile.profiler} profiling output",
+                        "Download from GitHub",
+                        prof_run.profile.download_url,
+                    )
+
+        for prof_run in profile_runs:
+            if prof_run.profile is not None:
+                if prof_run.profile.trace is not None:
+                    report.add_file(
+                        "profile.zip",
+                        make_profile_log(prof_run.run),
+                        base64.b64decode(prof_run.profile.trace),
+                    )
 
     if "leaderboard" in runs:
         bench_run = runs["leaderboard"]

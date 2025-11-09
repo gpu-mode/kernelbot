@@ -1,5 +1,6 @@
 import functools
 import logging
+from io import BytesIO
 
 import discord
 
@@ -136,3 +137,7 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
             await thread.send(partial_message)
 
         return ""
+
+
+async def _send_file(thread: discord.Thread, message: str, name: str, file: bytes):
+    await thread.send(message, file=discord.File(BytesIO(file), filename=name))

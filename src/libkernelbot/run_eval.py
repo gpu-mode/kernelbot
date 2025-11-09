@@ -128,10 +128,14 @@ def _create_files(files: Optional[dict[str, str]]):
 
 
 def _directory_to_zip_bytes(directory_path) -> str:
-    """Create a zip archive and return as bas64 encoded bytes."""
-    with tempfile.NamedTemporaryFile() as archive_path:
-        shutil.make_archive(archive_path.name, 'zip', directory_path)
-        data = archive_path.read()
+    """Create a zip archive and return as base64 encoded bytes."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        archive_path = os.path.join(temp_dir, 'archive')
+        shutil.make_archive(archive_path, 'zip', directory_path)
+
+        with open(archive_path + '.zip', 'rb') as f:
+            data = f.read()
+
         return base64.b64encode(data).decode('utf-8')
 
 

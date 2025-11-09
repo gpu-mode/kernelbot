@@ -143,7 +143,7 @@ class GitHubLauncher(Launcher):
             # Update profile artifact to the actual download URL.
             # For the GitHub launcher the profile_artifact currently just contains
             # the name of the artifact.
-            if profile_res is not None:
+            if profile_res is not None and "profile-data" in index:
                 profile_res.download_url = index["profile-data"].public_download_url
 
             res = EvalResult(
