@@ -1,3 +1,4 @@
+import base64
 import copy
 import dataclasses
 import datetime
@@ -20,6 +21,9 @@ from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
 class ProfileResult:
     # fmt: off
     profiler: str      # The profiler used to gather this data
+    # Profiler trace. May be empty, in which case `download_url`
+    # should point to the trace file.
+    trace: str
     # Public download URL of all files created by the profiler
     # This may also be configured later
     download_url: Optional[str]
@@ -121,6 +125,14 @@ def _create_files(files: Optional[dict[str, str]]):
     for name, content in files.items():
         assert Path(name).resolve().is_relative_to(Path.cwd())
         Path(name).write_text(content)
+
+
+def _directory_to_zip_bytes(directory_path) -> str:
+    """Create a zip archive and return as bas64 encoded bytes."""
+    with tempfile.NamedTemporaryFile() as archive_path:
+        shutil.make_archive(archive_path.name, 'zip', directory_path)
+        data = archive_path.read()
+        return base64.b64encode(data).decode('utf-8')
 
 
 def compile_cuda_script(  # # noqa: C901
@@ -371,6 +383,7 @@ def profile_program_roc(
 
         profile_result = ProfileResult(
             profiler="rocPROF",
+            trace=_directory_to_zip_bytes(output_dir),
             download_url=None,
         )
 
@@ -405,7 +418,8 @@ def profile_program_ncu(
 
     if run_result.success:
         profile_result = ProfileResult(
-            profiler='ncu',
+            profiler='Nsight-Compute',
+            trace=_directory_to_zip_bytes(output_dir),
             download_url=None,
         )
 
@@ -424,16 +438,16 @@ def profile_program(
     # ProfileResult.download_url.
     # Insert an extra nested path here so that the resulting zip has all files
     # in the profile_data/ directory rather than directly in the root.
-    output_dir = Path(".") / "profile_data" / "profile_data"
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    if system.runtime == "ROCm":
-        return profile_program_roc(call, seed, timeout, multi_gpu, output_dir)
-    elif system.runtime == "CUDA":
-        return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir)
-    else:
-        raise ValueError(f"Unknown runtime {system.runtime}")
-
+    with tempfile.TemporaryDirectory(dir=".") as tmpdir:
+        output_dir = Path(tmpdir) / "profile_data"
+        output_dir.mkdir()
+        if system.runtime == "ROCm":
+            return profile_program_roc(call, seed, timeout, multi_gpu, output_dir)
+        elif system.runtime == "CUDA":
+            return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir)
+        else:
+            raise ValueError(f"Unknown runtime {system.runtime}")
 
 
 def run_single_evaluation(
