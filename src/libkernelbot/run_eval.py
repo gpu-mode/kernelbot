@@ -139,6 +139,35 @@ def _directory_to_zip_bytes(directory_path) -> str:
         return base64.b64encode(data).decode('utf-8')
 
 
+def _filter_ncu_report(report: str, tables: list):
+    """
+    Extract the Speed-of-light section from the full ncu terminal report.
+
+    For expert users, we just attach the full ncu profile to the result,
+    and they can view whichever metrics they are interested in. But to
+    encourage novice users to try out profiling, we want to have a
+    *simple* set of things to display automatically, short enough to fit
+    in a *single* discord message.
+    """
+    result = ""
+    collect = False
+    for line in report.splitlines():
+        if "Table Name : " in line:
+            table = line[line.find("Table Name :") + len("Table Name :"):].strip()
+            if table in tables:
+                result += "\n"
+                collect = True
+            else:
+                collect = False
+
+        if len(line.strip()) == 0:
+            collect = False
+
+        if collect:
+            result += line + "\n"
+    return result
+
+
 def compile_cuda_script(  # # noqa: C901
     files: list[str],
     arch: Optional[int] = None,
@@ -420,7 +449,8 @@ def profile_program_ncu(
     profile_result = None
 
     try:
-        report = subprocess.check_output(["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}",], text=True)
+        report = subprocess.check_output(["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}", "--print-details", "body"], text=True)
+        report = _filter_ncu_report(report, ["GPU Throughput", "Pipe Utilization (% of active cycles)", "Warp State (All Cycles)"])
         run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode("utf-8")
     except subprocess.CalledProcessError:
         pass
