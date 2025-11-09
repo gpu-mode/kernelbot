@@ -174,16 +174,18 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
     elif full:
         result.append("❌ Benchmarks missing")
 
-    if "profile" in runs:
-        bench_run = runs["profile"].run
-        if not bench_run.success:
-            result.append("❌ Running profile failed" + _short_fail_reason(bench_run))
-            return result
-        elif not bench_run.passed:
-            result.append("❌ Profiling failed")
-            return result
-        else:
-            result.append("✅ Profiling successful")
+    profile_runs = [v for k, v in runs.items() if k.startswith("profile")]
+    if len(profile_runs) > 0:
+        for prof_run in profile_runs:
+            bench_run = prof_run.run
+            if not bench_run.success:
+                result.append("❌ Running profile failed" + _short_fail_reason(bench_run))
+                return result
+            elif not bench_run.passed:
+                result.append("❌ Profiling failed")
+                return result
+            else:
+                result.append("✅ Profiling successful")
 
     if "leaderboard" in runs:
         lb_run = runs["leaderboard"].run
@@ -327,22 +329,23 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             make_benchmark_log(bench_run.run),
         )
 
-    if "profile" in runs:
-        prof_run = runs["profile"]
-        if _handle_crash_report(report, prof_run):
-            return report
+    profile_runs = [v for k, v in runs.items() if k.startswith("profile")]
+    if len(profile_runs) > 0:
+        for prof_run in profile_runs:
+            if _handle_crash_report(report, prof_run):
+                return report
 
-        report.add_log(
-            "Profiling",
-            make_profile_log(prof_run.run),
-        )
-
-        if prof_run.profile is not None and prof_run.profile.download_url is not None:
-            report.add_link(
-                f"{prof_run.profile.profiler} profiling output",
-                "Download from GitHub",
-                prof_run.profile.download_url,
+            report.add_log(
+                "Profiling",
+                make_profile_log(prof_run.run),
             )
+
+            if prof_run.profile is not None and prof_run.profile.download_url is not None:
+                report.add_link(
+                    f"{prof_run.profile.profiler} profiling output",
+                    "Download from GitHub",
+                    prof_run.profile.download_url,
+                )
 
     if "leaderboard" in runs:
         bench_run = runs["leaderboard"]

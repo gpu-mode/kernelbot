@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import datetime
 import functools
@@ -678,12 +679,13 @@ def run_pytorch_script(  # noqa: C901
 
 
 class _EvalRunner(Protocol):
-    def __call__(self, mode: str) -> EvalResult: ...
+    def __call__(self, mode: str, **kwargs) -> EvalResult: ...
 
 
 def run_evaluation(
     call: _EvalRunner,
     mode: str,
+    common_args: dict,
 ) -> dict[str, EvalResult]:
     """
     Given a "runner" function `call`, interprets the mode
@@ -693,22 +695,28 @@ def run_evaluation(
     require multiple runner calls.
     """
     results: dict[str, EvalResult] = {}
-    if mode in ["test", "benchmark", "profile"]:
-        results[mode] = call(mode=mode)
+    if mode == "profile":
+        benchmarks = copy.deepcopy(common_args["benchmarks"])
+        for i, benchmark in enumerate(benchmarks.splitlines()):
+            common_args["benchmarks"] = benchmark
+            results[f"{mode}.{i}"] = call(mode=mode, **common_args)
+
+    elif mode in ["test", "benchmark"]:
+        results[mode] = call(mode=mode, **common_args)
     elif mode in ["private", "leaderboard"]:
         # first, run the tests
-        results["test"] = call(mode="test")
+        results["test"] = call(mode="test", **common_args)
 
         if not results["test"].run or not results["test"].run.passed:
             return results
 
-        results["benchmark"] = call(mode="benchmark")
+        results["benchmark"] = call(mode="benchmark", **common_args)
 
         if not results["benchmark"].run or not results["benchmark"].run.passed:
             return results
 
         # if they pass, run the leaderboard validation
-        results["leaderboard"] = call(mode="leaderboard")
+        results["leaderboard"] = call(mode="leaderboard", **common_args)
     else:
         raise AssertionError("Invalid mode")
 
@@ -742,8 +750,7 @@ def run_config(config: dict):
         runner = functools.partial(
             run_pytorch_script,
             sources=config["sources"],
-            main=config["main"],
-            **common_args,
+            main=config["main"]
         )
     elif config["lang"] == "cu":
         runner = functools.partial(
@@ -755,10 +762,9 @@ def run_config(config: dict):
             include_dirs=config.get("include_dirs", []),
             libraries=config.get("libraries", []),
             flags=CUDA_FLAGS,
-            **common_args,
         )
     else:
         raise ValueError(f"Invalid language {config['lang']}")
 
-    results = run_evaluation(runner, config["mode"])
+    results = run_evaluation(runner, config["mode"], common_args)
     return FullResult(success=True, error="", runs=results, system=system)
