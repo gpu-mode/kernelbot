@@ -417,8 +417,13 @@ def profile_program_ncu(
     run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
         "POPCORN_NCU": "1"
     })
-
     profile_result = None
+
+    try:
+        report = subprocess.check_output(["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}",], text=True)
+        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode("utf-8")
+    except subprocess.CalledProcessError:
+        pass
 
     if run_result.success:
         profile_result = ProfileResult(
