@@ -449,8 +449,10 @@ def profile_program_ncu(
     profile_result = None
 
     try:
-        report = subprocess.check_output(["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}", "--print-details", "body"], text=True)
-        report = _filter_ncu_report(report, ["GPU Throughput", "Pipe Utilization (% of active cycles)", "Warp State (All Cycles)"])
+        get_tables = ["GPU Throughput", "Pipe Utilization (% of active cycles)", "Warp State (All Cycles)"]
+        ncu_cmd = ["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}", "--print-details", "body"]
+        report = subprocess.check_output(ncu_cmd, text=True)
+        report = _filter_ncu_report(report, get_tables)
         run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode("utf-8")
     except subprocess.CalledProcessError:
         pass

@@ -351,7 +351,7 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
 
             if prof_run.profile.trace is not None:
                 report.add_log(
-                    f"Profiling {prof_run.run.result.get(f'benchmark.0.spec')}",
+                    f"Profiling {prof_run.run.result.get('benchmark.0.spec')}",
                     make_profile_log(prof_run.run),
                 )
 
@@ -366,8 +366,8 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             if prof_run.profile is not None:
                 if prof_run.profile.trace is not None:
                     report.add_file(
-                        f"profile-{_shortname(prof_run.run.result.get(f'benchmark.0.spec'))}.zip",
-                        f"{prof_run.profile.profiler} report - " + prof_run.run.result.get(f"benchmark.0.spec"),
+                        f"profile-{_shortname(prof_run.run.result.get('benchmark.0.spec'))}.zip",
+                        f"{prof_run.profile.profiler} report - " + prof_run.run.result.get("benchmark.0.spec"),
                         base64.b64decode(prof_run.profile.trace),
                     )
 

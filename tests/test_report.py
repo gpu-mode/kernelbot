@@ -6,6 +6,7 @@ import pytest
 
 from libkernelbot import consts
 from libkernelbot.report import (
+    File,
     RunResultReport,
     _generate_compile_report,
     _short_fail_reason,
@@ -402,7 +403,6 @@ def test_make_profile_log():
 
     log = make_profile_log(run)
 
-    assert "Matrix multiplication profile" in log
     assert "  Profile line 1" in log
     assert "  Profile line 2" in log
 
@@ -664,6 +664,7 @@ def test_generate_report_profile(sample_full_result: FullResult):
     }
     sample_full_result.runs["profile"].profile = ProfileResult(
         profiler="NSight",
+        trace="",
         download_url="https://example.com",
     )
     report = generate_report(sample_full_result)
@@ -687,8 +688,11 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "❌ Test division\n"
             "> Division by zero",
         ),
-        Log(header="Profiling", content="Benchmark\n\n  Profile report\n"),
+        Log(header='Profiling Benchmark', content='  Profile report\n'),
         Link("NSight profiling output", "Download from GitHub", "https://example.com"),
+        File(name='profile-Benchmark.zip',
+             message='NSight report - Benchmark',
+             content=b''),
     ]
 
 

@@ -1,5 +1,5 @@
 import discord
-from discord_utils import _send_split_log, _send_file
+from discord_utils import _send_file, _send_split_log
 
 from libkernelbot.report import (
     File,
