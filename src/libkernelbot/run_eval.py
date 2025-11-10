@@ -150,8 +150,20 @@ def _filter_ncu_report(report: str, tables: list):
     in a *single* discord message.
     """
     result = ""
+    n_kernels = 0
     collect = False
     for line in report.splitlines():
+        if len(line) >= 3 and line[2] != ' ':
+            if n_kernels != 0:
+                result += "\n"
+            if n_kernels == 2:
+                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"
+            n_kernels += 1
+            result += line + "\n"
+
+        if n_kernels > 2:
+            continue
+
         if "Table Name : " in line:
             table = line[line.find("Table Name :") + len("Table Name :"):].strip()
             if table in tables:
