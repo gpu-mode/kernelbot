@@ -451,6 +451,7 @@ def profile_program_ncu(
         "--nvtx",
         "--nvtx-include", "custom_kernel/",
         "--import-source", "1",
+        "-c", "10",
         "-o", f"{str(output_dir / 'profile.ncu-rep')}",
         "--",
     ] + call
