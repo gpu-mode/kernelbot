@@ -152,6 +152,7 @@ def _filter_ncu_report(report: str, tables: list):
     result = ""
     n_kernels = 0
     collect = False
+    length = 0
     for line in report.splitlines():
         if len(line) >= 5 and line[3] == ' ' and line[4] != ' ':
             if n_kernels != 0:
@@ -177,6 +178,11 @@ def _filter_ncu_report(report: str, tables: list):
 
         if collect:
             result += line + "\n"
+            length += 1
+            # just as a precaution, also limit lines directly
+            if length > 100:
+                result += "\n[...]\nReport has been truncated. Please check the .ncu-rep file for more details.\n"
+                break
     return result
 
 
