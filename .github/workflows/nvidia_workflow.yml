@@ -24,11 +24,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: nvidia-smi
-      shell: bash
-      run: |
-        nvidia-smi || echo "nvidia-smi failed"
-
     - name: Create input files
       shell: bash
       run: |
