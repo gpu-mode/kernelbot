@@ -189,6 +189,8 @@ class RunProgressReporterAPI(RunProgressReporter):
             elif isinstance(part, Log):
                 self.long_report += f"\n\n## {part.header}:\n"
                 self.long_report += f"```\n{part.content}```"
+
+
 # ruff: noqa: C901
 async def to_submit_info(
     user_info: Any,
@@ -197,14 +199,12 @@ async def to_submit_info(
     leaderboard_name: str,
     gpu_type: str,
     db_context: LeaderboardDB,
-) -> tuple[SubmissionRequest, SubmissionMode]: # noqa: C901
+) -> tuple[SubmissionRequest, SubmissionMode]:  # noqa: C901
     user_name = user_info["user_name"]
     user_id = user_info["user_id"]
 
     try:
-        submission_mode_enum: SubmissionMode = SubmissionMode(
-            submission_mode.lower()
-        )
+        submission_mode_enum: SubmissionMode = SubmissionMode(submission_mode.lower())
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -222,6 +222,11 @@ async def to_submit_info(
         SubmissionMode.BENCHMARK,
         SubmissionMode.LEADERBOARD,
     ]
+    if submission_mode_enum == SubmissionMode.PROFILE:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile submissions are not currently supported via API, use Discord instead.",
+        )
     if submission_mode_enum not in allowed_modes:
         raise HTTPException(
             status_code=400,
@@ -263,9 +268,7 @@ async def to_submit_info(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Error reading submission file: {e}"
-        ) from e
+        raise HTTPException(status_code=400, detail=f"Error reading submission file: {e}") from e
 
     try:
         submission_code = submission_content.decode("utf-8")
