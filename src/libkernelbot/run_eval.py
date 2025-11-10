@@ -153,7 +153,7 @@ def _filter_ncu_report(report: str, tables: list):
     n_kernels = 0
     collect = False
     for line in report.splitlines():
-        if len(line) >= 3 and line[2] != ' ':
+        if len(line) >= 5 and line[3] == ' ' and line[4] != ' ':
             if n_kernels != 0:
                 result += "\n"
             if n_kernels == 2:
