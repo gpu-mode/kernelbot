@@ -154,12 +154,12 @@ def _filter_ncu_report(report: str, tables: list):
     collect = False
     length = 0
     for line in report.splitlines():
-        if len(line) >= 5 and line[3] == ' ' and line[4] != ' ':
+        if len(line) >= 3 and line[1] == ' ' and line[2] != ' ':
             if n_kernels != 0:
                 result += "\n"
-            if n_kernels == 2:
-                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"
             n_kernels += 1
+            if n_kernels == 3:
+                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"
             result += line + "\n"
 
         if n_kernels > 2:
