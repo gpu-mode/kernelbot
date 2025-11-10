@@ -500,9 +500,9 @@ def run_benchmarking(logger: PopcornOutput, pool: multiprocessing.Pool, tests: l
         return 112
 
 
-def _run_single_profile(test: TestCase) -> str:
+def _run_single_profile_torch(test: TestCase) -> str:
     """
-    Runs a single test case. Do not call directly
+    Profiles a single benchmark using the torch profiler.
     """
     from submission import custom_kernel
     from torch.profiler import profile, ProfilerActivity
@@ -511,12 +511,34 @@ def _run_single_profile(test: TestCase) -> str:
         data = generate_input(**test.args)
         torch.cuda.synchronize()
 
+    cloned = _clone_data(data, 0)
     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
         with nvtx_range("custom_kernel"):
-            submission_output = custom_kernel(_clone_data(data, 0))
+            submission_output = custom_kernel(cloned)
             torch.cuda.synchronize()
 
     return prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20)
+
+
+def _run_single_profile_ncu(test: TestCase) -> str:
+    """
+    Profiles a single benchmark using ncu. Note: this does not
+    invoke NCU; instead, it is expected that eval is launched
+    under NCU, and this function will rurnthe kernel excactly
+    once in the 'custom_kernel' nvtx range.
+    """
+    from submission import custom_kernel
+
+    with nvtx_range("generate input"):
+        data = generate_input(**test.args)
+        torch.cuda.synchronize()
+
+    cloned = _clone_data(data, 0)
+    with nvtx_range("custom_kernel"):
+        submission_output = custom_kernel(cloned)
+        torch.cuda.synchronize()
+
+    return ""
 
 
 def _run_distributed_profile(test: TestCase, rank: int) -> "EventList":
@@ -610,7 +632,10 @@ def run_single_profile(test: TestCase, pool: multiprocessing.Pool) -> str:
     """
     world_size = test.args.get("world_size", None)
     if world_size is None:
-        return pool.apply(_run_single_profile, (test,))
+        if bool(os.getenv("POPCORN_NCU", "0")):
+            return pool.apply(_run_single_profile_ncu, (test,))
+        else:
+            return pool.apply(_run_single_profile_torch, (test,))
     else:
         return run_multi_gpu_profile(pool, test, world_size)
 

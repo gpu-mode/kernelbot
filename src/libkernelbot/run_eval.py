@@ -1,3 +1,5 @@
+import base64
+import copy
 import dataclasses
 import datetime
 import functools
@@ -19,10 +21,13 @@ from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
 class ProfileResult:
     # fmt: off
     profiler: str      # The profiler used to gather this data
+    # Profiler trace. May be empty, in which case `download_url`
+    # should point to the trace file.
+    trace: str
     # Public download URL of all files created by the profiler
     # This may also be configured later
     download_url: Optional[str]
-    #fmt: on
+    # fmt: on
 
 
 @dataclasses.dataclass
@@ -120,6 +125,65 @@ def _create_files(files: Optional[dict[str, str]]):
     for name, content in files.items():
         assert Path(name).resolve().is_relative_to(Path.cwd())
         Path(name).write_text(content)
+
+
+def _directory_to_zip_bytes(directory_path) -> str:
+    """Create a zip archive and return as base64 encoded bytes."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        archive_path = os.path.join(temp_dir, "archive")
+        shutil.make_archive(archive_path, "zip", directory_path)
+
+        with open(archive_path + ".zip", "rb") as f:
+            data = f.read()
+
+        return base64.b64encode(data).decode("utf-8")
+
+
+def _filter_ncu_report(report: str, tables: list):  # noqa: C901
+    """
+    Extract the Speed-of-light section from the full ncu terminal report.
+
+    For expert users, we just attach the full ncu profile to the result,
+    and they can view whichever metrics they are interested in. But to
+    encourage novice users to try out profiling, we want to have a
+    *simple* set of things to display automatically, short enough to fit
+    in a *single* discord message.
+    """
+    result = ""
+    n_kernels = 0
+    collect = False
+    length = 0
+    for line in report.splitlines():
+        if len(line) >= 3 and line[1] == " " and line[2] != " ":
+            if n_kernels != 0:
+                result += "\n"
+            n_kernels += 1
+            if n_kernels == 3:
+                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"  # noqa: E501
+            result += line + "\n"
+
+        if n_kernels > 2:
+            continue
+
+        if "Table Name : " in line:
+            table = line[line.find("Table Name :") + len("Table Name :") :].strip()
+            if table in tables:
+                result += "\n"
+                collect = True
+            else:
+                collect = False
+
+        if len(line.strip()) == 0:
+            collect = False
+
+        if collect:
+            result += line + "\n"
+            length += 1
+            # just as a precaution, also limit lines directly
+            if length > 100:
+                result += "\n[...]\nReport has been truncated. Please check the .ncu-rep file for more details.\n"  # noqa: E501
+                break
+    return result
 
 
 def compile_cuda_script(  # # noqa: C901
@@ -305,6 +369,145 @@ def run_program(
     )
 
 
+def profile_program_roc(
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+    output_dir: Path,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    # Wrap program in rocprof
+    call = [
+        "rocprofv3",
+        "--log-level",
+        "fatal",
+        "--hip-trace",
+        "--kernel-trace",
+        "--rccl-trace",
+        "--marker-trace",
+        "--hip-trace",
+        "--memory-copy-trace",
+        # New? Doesn't work in the runner
+        # "--memory-allocation-trace",
+        "--scratch-memory-trace",
+        # The HSA trace output is very large, so skip it for now
+        # "--hsa-trace",
+        "--output-format",
+        "pftrace",
+        "csv",
+        "-d",
+        str(output_dir),
+        # Just store the files as %pid%_tracename.ext instead of putting them in an
+        # additional directory named after the hostname.
+        "-o",
+        # Insert an extra path here so that the resulting zip has all files
+        # in the profile_data/ directory rather than the root.
+        "%pid%",
+        "--",
+    ] + call
+
+    run_result = run_program(
+        call,
+        seed=seed,
+        timeout=timeout,
+        multi_gpu=multi_gpu,
+        extra_env={
+            "GPU_DUMP_CODE_OBJECT": "1",
+        },
+    )
+
+    profile_result = None
+
+    if run_result.success:
+        # Post-process trace data.
+        # rocPROF generates one trace for every process, but its more useful to
+        # have all traces be in the same file. Fortunately we can do that by
+        # concatenating.
+        traces = list(output_dir.glob("*.pftrace"))
+        with (output_dir / "combined.pftrace").open("wb") as combined:
+            for trace_path in traces:
+                with trace_path.open("rb") as trace:
+                    shutil.copyfileobj(trace, combined)
+
+                # After we've created the combined trace, there is no point in
+                # keeping the individual traces around.
+                trace_path.unlink()
+
+        # Also move the code objects to the profiling output directory.
+        for code_obj in list(Path.cwd().glob("_code_object*.o")):
+            code_obj.rename(output_dir / code_obj.name)
+
+        profile_result = ProfileResult(
+            profiler="rocPROF",
+            trace=_directory_to_zip_bytes(output_dir),
+            download_url=None,
+        )
+
+    return run_result, profile_result
+
+
+def profile_program_ncu(
+    call: list[str],
+    seed: Optional[int],
+    timeout: int,
+    multi_gpu: bool,
+    output_dir: Path,
+) -> tuple[RunResult, Optional[ProfileResult]]:
+    assert not multi_gpu, "Multi-GPU profiling not supported for ncu."
+
+    # Wrap program in ncu
+    call = [
+        "ncu",
+        "--set",
+        "full",
+        "--nvtx",
+        "--nvtx-include",
+        "custom_kernel/",
+        "--import-source",
+        "1",
+        "-c",
+        "10",
+        "-o",
+        f"{str(output_dir / 'profile.ncu-rep')}",
+        "--",
+    ] + call
+
+    run_result = run_program(
+        call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={"POPCORN_NCU": "1"}
+    )
+    profile_result = None
+
+    try:
+        get_tables = [
+            "GPU Throughput",
+            "Pipe Utilization (% of active cycles)",
+            "Warp State (All Cycles)",
+        ]
+        ncu_cmd = [
+            "ncu",
+            "--import",
+            f"{str(output_dir / 'profile.ncu-rep')}",
+            "--print-details",
+            "body",
+        ]
+        report = subprocess.check_output(ncu_cmd, text=True)
+        report = _filter_ncu_report(report, get_tables)
+        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode(
+            "utf-8"
+        )
+    except subprocess.CalledProcessError:
+        pass
+
+    if run_result.success:
+        profile_result = ProfileResult(
+            profiler="Nsight-Compute",
+            trace=_directory_to_zip_bytes(output_dir),
+            download_url=None,
+        )
+
+    return run_result, profile_result
+
+
 def profile_program(
     system: SystemInfo,
     call: list[str],
@@ -315,82 +518,25 @@ def profile_program(
     # The runner-specific configuration should implement logic
     # to fetch the data in this directory and return it as
     # ProfileResult.download_url.
-    # Insert an extra nested nested path here so that the resulting zip has all files
+    # Insert an extra nested path here so that the resulting zip has all files
     # in the profile_data/ directory rather than directly in the root.
-    output_dir = Path(".") / "profile_data" / "profile_data"
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    if system.runtime == "ROCm":
-        # Wrap program in rocprof
-        call = [
-            "rocprofv3",
-            "--log-level",
-            "fatal",
-            "--hip-trace",
-            "--kernel-trace",
-            "--rccl-trace",
-            "--marker-trace",
-            "--hip-trace",
-            "--memory-copy-trace",
-            # New? Doesn't work in the runner
-            # "--memory-allocation-trace",
-            "--scratch-memory-trace",
-            # The HSA trace output is very large, so skip it for now
-            # "--hsa-trace",
-            "--output-format",
-            "pftrace",
-            "csv",
-            "-d",
-            str(output_dir),
-            # Just store the files as %pid%_tracename.ext instead of putting them in an
-            # additional directory named after the hostname.
-            "-o",
-            # Insert an extra path here so that the resulting zip has all files
-            # in the profile_data/ directory rather than the root.
-            "%pid%",
-            "--",
-        ] + call
+    with tempfile.TemporaryDirectory(dir=".") as tmpdir:
+        output_dir = Path(tmpdir) / "profile_data"
+        output_dir.mkdir()
+        if system.runtime == "ROCm":
+            return profile_program_roc(call, seed, timeout, multi_gpu, output_dir)
+        elif system.runtime == "CUDA":
+            return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir)
+        else:
+            raise ValueError(f"Unknown runtime {system.runtime}")
 
-        run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
-            "GPU_DUMP_CODE_OBJECT": "1",
-        })
-
-        profile_result = None
-
-        if run_result.success:
-            # Post-process trace data.
-            # rocPROF generates one trace for every process, but its more useful to
-            # have all traces be in the same file. Fortunately we can do that by
-            # concatenating.
-            traces = list(output_dir.glob("*.pftrace"))
-            with (output_dir / "combined.pftrace").open("wb") as combined:
-                for trace_path in traces:
-                    with trace_path.open("rb") as trace:
-                        shutil.copyfileobj(trace, combined)
-
-                    # After we've created the combined trace, there is no point in
-                    # keeping the individual traces around.
-                    trace_path.unlink()
-
-            # Also move the code objects to the profiling output directory.
-            for code_obj in list(Path.cwd().glob("_code_object*.o")):
-                code_obj.rename(output_dir / code_obj.name)
-
-            profile_result = ProfileResult(
-                profiler='rocPROF',
-                download_url=None,
-            )
-
-        return run_result, profile_result
-    else:
-        # TODO: Implement profiling for other platforms
-        return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 def run_single_evaluation(
-    system: SystemInfo,
     call: list[str],
     mode: str,
     *,
+    system: SystemInfo,
     multi_gpu: bool = False,
     tests: Optional[str] = None,
     benchmarks: Optional[str] = None,
@@ -419,7 +565,7 @@ def run_single_evaluation(
 
         cases.flush()
 
-        call += [mode, cases.name]
+        call = call + [mode, cases.name]
 
         if mode == "profile":
             return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
@@ -427,7 +573,7 @@ def run_single_evaluation(
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 
-def make_system_info() -> SystemInfo: # noqa: C901
+def make_system_info() -> SystemInfo:  # noqa: C901
     info = SystemInfo()
     try:
         import torch
@@ -448,14 +594,16 @@ def make_system_info() -> SystemInfo: # noqa: C901
             info.gpu = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], encoding="utf-8"
             )
-            info.device_count = info.gpu.count('\n')
+            info.device_count = info.gpu.count("\n")
             info.runtime = "CUDA"
         except subprocess.CalledProcessError:
             # try again for HIP
             try:
-                rocm_info = json.loads(subprocess.check_output(
-                    ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
-                ))
+                rocm_info = json.loads(
+                    subprocess.check_output(
+                        ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
+                    )
+                )
                 if len(rocm_info) > 0:
                     info.gpu = next(rocm_info.__iter__())["Card Series"]
 
@@ -489,7 +637,6 @@ def make_system_info() -> SystemInfo: # noqa: C901
 
 
 def run_cuda_script(  # # noqa: C901
-    system: SystemInfo,
     sources: dict[str, str],
     headers: Optional[dict[str, str]] = None,
     arch: Optional[int] = None,
@@ -550,7 +697,7 @@ def run_cuda_script(  # # noqa: C901
             if os.path.exists(f):
                 os.remove(f)
 
-    run_result, profile_result = run_single_evaluation(system, ["./eval.out"], **kwargs)
+    run_result, profile_result = run_single_evaluation(["./eval.out"], **kwargs)
     return EvalResult(
         start=start,
         end=datetime.datetime.now(),
@@ -561,7 +708,6 @@ def run_cuda_script(  # # noqa: C901
 
 
 def run_pytorch_script(  # noqa: C901
-    system: SystemInfo,
     sources: dict[str, str],
     main: str,
     **kwargs,
@@ -587,7 +733,7 @@ def run_pytorch_script(  # noqa: C901
         # "compile" step: execute the script once. Will populate
         # `load_inline`'s compile cache, so the actual runs will be faster.
         try:
-            compile_run = run_program(["python", "submission.py"], seed=1, timeout=Timeout.COMPILE)
+            compile_run = run_program(["python3", "submission.py"], seed=1, timeout=Timeout.COMPILE)
             if "-DTORCH_EXTENSION_NAME" in compile_run.stdout:
                 comp = CompileResult(
                     nvcc_found=True,
@@ -613,7 +759,7 @@ def run_pytorch_script(  # noqa: C901
                 exit_code=e.returncode,
             )
 
-        run, profile = run_single_evaluation(system, ["python", main], **kwargs)
+        run, profile = run_single_evaluation(["python3", main], **kwargs)
 
         return EvalResult(
             start=start,
@@ -629,12 +775,13 @@ def run_pytorch_script(  # noqa: C901
 
 
 class _EvalRunner(Protocol):
-    def __call__(self, mode: str) -> EvalResult: ...
+    def __call__(self, mode: str, **kwargs) -> EvalResult: ...
 
 
 def run_evaluation(
     call: _EvalRunner,
     mode: str,
+    common_args: dict,
 ) -> dict[str, EvalResult]:
     """
     Given a "runner" function `call`, interprets the mode
@@ -644,22 +791,28 @@ def run_evaluation(
     require multiple runner calls.
     """
     results: dict[str, EvalResult] = {}
-    if mode in ["test", "benchmark", "profile"]:
-        results[mode] = call(mode=mode)
+    if mode == "profile":
+        benchmarks = copy.deepcopy(common_args["benchmarks"])
+        for i, benchmark in enumerate(benchmarks.splitlines()):
+            common_args["benchmarks"] = benchmark
+            results[f"{mode}.{i}"] = call(mode=mode, **common_args)
+
+    elif mode in ["test", "benchmark"]:
+        results[mode] = call(mode=mode, **common_args)
     elif mode in ["private", "leaderboard"]:
         # first, run the tests
-        results["test"] = call(mode="test")
+        results["test"] = call(mode="test", **common_args)
 
         if not results["test"].run or not results["test"].run.passed:
             return results
 
-        results["benchmark"] = call(mode="benchmark")
+        results["benchmark"] = call(mode="benchmark", **common_args)
 
         if not results["benchmark"].run or not results["benchmark"].run.passed:
             return results
 
         # if they pass, run the leaderboard validation
-        results["leaderboard"] = call(mode="leaderboard")
+        results["leaderboard"] = call(mode="leaderboard", **common_args)
     else:
         raise AssertionError("Invalid mode")
 
@@ -691,10 +844,7 @@ def run_config(config: dict):
     }
     if config["lang"] == "py":
         runner = functools.partial(
-            run_pytorch_script,
-            sources=config["sources"],
-            main=config["main"],
-            **common_args,
+            run_pytorch_script, sources=config["sources"], main=config["main"]
         )
     elif config["lang"] == "cu":
         runner = functools.partial(
@@ -706,10 +856,9 @@ def run_config(config: dict):
             include_dirs=config.get("include_dirs", []),
             libraries=config.get("libraries", []),
             flags=CUDA_FLAGS,
-            **common_args,
         )
     else:
         raise ValueError(f"Invalid language {config['lang']}")
 
-    results = run_evaluation(runner, config["mode"])
+    results = run_evaluation(runner, config["mode"], common_args)
     return FullResult(success=True, error="", runs=results, system=system)

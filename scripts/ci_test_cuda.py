@@ -19,12 +19,12 @@ def run_cuda_helper(sources: dict, headers: dict = None, arch=None, **kwargs):
         headers = header_files
 
     eval_result = run_cuda_script(
-        make_system_info(),
         sources,
         headers,
         arch=arch,
         mode=SubmissionMode.TEST.value,
         tests="size: 256; seed: 42\n",
+        system=make_system_info(),
         **kwargs,
     )
     return eval_result.compilation, eval_result.run
@@ -195,12 +195,12 @@ def test_include_dirs(tmp_path: Path):
 
     # can also use generic flags argument
     result = run_cuda_script(
-        make_system_info(),
         {"eval.cu": eval_cu, "submission.cu": sub},
         header_files,
         flags=["-I.", f"-I{tmp_path}"],
         mode=SubmissionMode.TEST.value,
         tests="size: 256; seed: 42\n",
+        system=make_system_info(),
     )
 
     assert result.compilation.success is True

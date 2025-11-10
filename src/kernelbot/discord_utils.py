@@ -1,5 +1,6 @@
 import functools
 import logging
+from io import BytesIO
 
 import discord
 
@@ -124,7 +125,7 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
             else:
                 if partial_message != "":
                     chunks.append(partial_message)
-                partial_message = line
+                partial_message = line + "\n"
 
         if partial_message != "":
             chunks.append(partial_message)
@@ -133,6 +134,10 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
         for i, chunk in enumerate(chunks):
             partial_message = f"\n\n## {header} ({i+1}/{len(chunks)}):\n"
             partial_message += f"```\n{limit_length(chunk, 1900)}```"
-            await thread.send(partial_message)
+            await thread.send(partial_message, silent=True)
 
         return ""
+
+
+async def _send_file(thread: discord.Thread, message: str, name: str, file: bytes):
+    await thread.send(message, file=discord.File(BytesIO(file), filename=name), silent=True)

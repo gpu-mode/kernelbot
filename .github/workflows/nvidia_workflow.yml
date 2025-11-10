@@ -19,22 +19,10 @@ run-name: 'NVIDIA Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
   run:
-    runs-on: [gpumode-nvidia-arc]
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 10
-    container:
-      image: nvidia/cuda:12.4.0-devel-ubuntu22.04
     steps:
     - uses: actions/checkout@v3
-
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
 
     - name: Create input files
       shell: bash
@@ -49,30 +37,18 @@ jobs:
         # Now write to file (won't be logged since it's masked)
         echo "$PAYLOAD" > payload.json
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
-
-    - name: Setup Python environment
+    - name: Setup Virtual Environment and Install Dependencies
       shell: bash
       run: |
-        uv venv .venv
-        echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
-        echo "$PWD/.venv/bin" >> $GITHUB_PATH
+        pip install --upgrade pip
+        pip install -r "requirements.txt"
+        pip install -e .
 
-        if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
-          cat > "requirements.txt" <<'EOL'
-          ${{ github.event.inputs.requirements }}
-        EOL
-        uv pip install -r "requirements.txt"
-        fi
-        uv pip install -e .
 
     - name: Run script
       shell: bash
       run: |
-        python src/runners/github-runner.py
+        python3 src/runners/github-runner.py
 
     - name: Upload training artifacts
       uses: actions/upload-artifact@v4
@@ -88,5 +64,3 @@ jobs:
         name: profile-data
         path: profile_data/*
         retention-days: 1
-    env:
-      CUDA_VISIBLE_DEVICES: 0

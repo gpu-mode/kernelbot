@@ -43,9 +43,19 @@ class Link:
     url: str
 
 
+@dataclasses.dataclass
+class File:
+    """
+    Link represents a file that gets attached to the report.
+    """
+    name: str
+    message: str
+    content: bytes
+
+
 class RunResultReport:
     def __init__(self, data=None):
-        self.data: List[Text | Log | Link] = data or []
+        self.data: List[Text | Log | Link | File] = data or []
 
     def add_text(self, section: str):
         self.data.append(Text(section))
@@ -55,6 +65,9 @@ class RunResultReport:
 
     def add_link(self, title: str, text: str, url: str):
         self.data.append(Link(title, text, url))
+
+    def add_file(self, name: str, message: str, content: bytes):
+        self.data.append(File(name, message, content))
 
     def __repr__(self):
         return f"RunResultReport(data={self.data})"
@@ -174,16 +187,18 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
     elif full:
         result.append("❌ Benchmarks missing")
 
-    if "profile" in runs:
-        bench_run = runs["profile"].run
-        if not bench_run.success:
-            result.append("❌ Running profile failed" + _short_fail_reason(bench_run))
-            return result
-        elif not bench_run.passed:
-            result.append("❌ Profiling failed")
-            return result
-        else:
-            result.append("✅ Profiling successful")
+    profile_runs = [v for k, v in runs.items() if k.startswith("profile")]
+    if len(profile_runs) > 0:
+        for prof_run in profile_runs:
+            bench_run = prof_run.run
+            if not bench_run.success:
+                result.append("❌ Running profile failed" + _short_fail_reason(bench_run))
+                return result
+            elif not bench_run.passed:
+                result.append("❌ Profiling failed")
+                return result
+            else:
+                result.append("✅ Profiling successful")
 
     if "leaderboard" in runs:
         lb_run = runs["leaderboard"].run
@@ -257,12 +272,9 @@ def make_profile_log(run: RunResult) -> str:
     num_bench = int(run.result.get("benchmark-count", 0))
 
     def log_one(base_name):
-        spec = run.result.get(f"{base_name}.spec")
-
         report: str = run.result.get(f"{base_name}.report")
         report = base64.b64decode(report.encode("utf-8"), b"+*").decode("utf-8")
         report = textwrap.indent(report, "  ")
-        bench_log.append(f"{spec}\n")
         bench_log.append(report)
 
     bench_log = []
@@ -299,6 +311,10 @@ def _handle_crash_report(report: RunResultReport, run_result: EvalResult):
     return False
 
 
+def _shortname(spec: str):
+    return spec.replace(": ", "=").replace("; ", "_")
+
+
 def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
     runs = result.runs
     report = RunResultReport()
@@ -327,22 +343,33 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
             make_benchmark_log(bench_run.run),
         )
 
-    if "profile" in runs:
-        prof_run = runs["profile"]
-        if _handle_crash_report(report, prof_run):
-            return report
+    profile_runs = [v for k, v in runs.items() if k.startswith("profile")]
+    if len(profile_runs) > 0:
+        for prof_run in profile_runs:
+            if _handle_crash_report(report, prof_run):
+                return report
 
-        report.add_log(
-            "Profiling",
-            make_profile_log(prof_run.run),
-        )
+            if prof_run.profile.trace is not None:
+                report.add_log(
+                    f"Profiling {prof_run.run.result.get('benchmark.0.spec')}",
+                    make_profile_log(prof_run.run),
+                )
 
-        if prof_run.profile is not None and prof_run.profile.download_url is not None:
-            report.add_link(
-                f"{prof_run.profile.profiler} profiling output",
-                "Download from GitHub",
-                prof_run.profile.download_url,
-            )
+                if prof_run.profile.download_url is not None:
+                    report.add_link(
+                        f"{prof_run.profile.profiler} profiling output",
+                        "Download from GitHub",
+                        prof_run.profile.download_url,
+                    )
+
+        for prof_run in profile_runs:
+            if prof_run.profile is not None:
+                if prof_run.profile.trace is not None:
+                    report.add_file(
+                        f"profile-{_shortname(prof_run.run.result.get('benchmark.0.spec'))}.zip",
+                        f"{prof_run.profile.profiler} report - " + prof_run.run.result.get("benchmark.0.spec"),
+                        base64.b64decode(prof_run.profile.trace),
+                    )
 
     if "leaderboard" in runs:
         bench_run = runs["leaderboard"]

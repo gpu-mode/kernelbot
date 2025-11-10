@@ -12,11 +12,11 @@ files = {"eval.py": py_eval, "reference.py": ref, "utils.py": utils, "task.py": 
 
 def run_pytorch_helper(sources: dict, tests=None, **kwargs):
     result = run_pytorch_script(
-        make_system_info(),
         sources,
         "eval.py",
         mode=SubmissionMode.TEST.value,
         tests=tests or "size: 256; seed: 42\n",
+        system=make_system_info(),
         **kwargs,
     )
     return result.run
@@ -45,7 +45,7 @@ def custom_kernel(input):
     run = run_pytorch_helper({**files, "submission.py": sub})
     assert run.success is True
     assert run.passed is False
-    assert "python eval.py test" in run.command
+    assert "python3 eval.py test" in run.command
     assert run.stdout == ""
     assert run.stderr == ""
 
