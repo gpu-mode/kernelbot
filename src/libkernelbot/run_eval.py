@@ -130,16 +130,16 @@ def _create_files(files: Optional[dict[str, str]]):
 def _directory_to_zip_bytes(directory_path) -> str:
     """Create a zip archive and return as base64 encoded bytes."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        archive_path = os.path.join(temp_dir, 'archive')
-        shutil.make_archive(archive_path, 'zip', directory_path)
+        archive_path = os.path.join(temp_dir, "archive")
+        shutil.make_archive(archive_path, "zip", directory_path)
 
-        with open(archive_path + '.zip', 'rb') as f:
+        with open(archive_path + ".zip", "rb") as f:
             data = f.read()
 
-        return base64.b64encode(data).decode('utf-8')
+        return base64.b64encode(data).decode("utf-8")
 
 
-def _filter_ncu_report(report: str, tables: list):
+def _filter_ncu_report(report: str, tables: list):  # noqa: C901
     """
     Extract the Speed-of-light section from the full ncu terminal report.
 
@@ -154,19 +154,19 @@ def _filter_ncu_report(report: str, tables: list):
     collect = False
     length = 0
     for line in report.splitlines():
-        if len(line) >= 3 and line[1] == ' ' and line[2] != ' ':
+        if len(line) >= 3 and line[1] == " " and line[2] != " ":
             if n_kernels != 0:
                 result += "\n"
             n_kernels += 1
             if n_kernels == 3:
-                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"
+                result += "\nAdditional kernel launches follow. Please check the .ncu-rep file for more details.\n"  # noqa: E501
             result += line + "\n"
 
         if n_kernels > 2:
             continue
 
         if "Table Name : " in line:
-            table = line[line.find("Table Name :") + len("Table Name :"):].strip()
+            table = line[line.find("Table Name :") + len("Table Name :") :].strip()
             if table in tables:
                 result += "\n"
                 collect = True
@@ -181,7 +181,7 @@ def _filter_ncu_report(report: str, tables: list):
             length += 1
             # just as a precaution, also limit lines directly
             if length > 100:
-                result += "\n[...]\nReport has been truncated. Please check the .ncu-rep file for more details.\n"
+                result += "\n[...]\nReport has been truncated. Please check the .ncu-rep file for more details.\n"  # noqa: E501
                 break
     return result
 
@@ -406,10 +406,15 @@ def profile_program_roc(
         "--",
     ] + call
 
-    run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
-        "GPU_DUMP_CODE_OBJECT": "1",
-    },
-        )
+    run_result = run_program(
+        call,
+        seed=seed,
+        timeout=timeout,
+        multi_gpu=multi_gpu,
+        extra_env={
+            "GPU_DUMP_CODE_OBJECT": "1",
+        },
+    )
 
     profile_result = None
 
@@ -453,32 +458,49 @@ def profile_program_ncu(
     # Wrap program in ncu
     call = [
         "ncu",
-        "--set", "full",
+        "--set",
+        "full",
         "--nvtx",
-        "--nvtx-include", "custom_kernel/",
-        "--import-source", "1",
-        "-c", "10",
-        "-o", f"{str(output_dir / 'profile.ncu-rep')}",
+        "--nvtx-include",
+        "custom_kernel/",
+        "--import-source",
+        "1",
+        "-c",
+        "10",
+        "-o",
+        f"{str(output_dir / 'profile.ncu-rep')}",
         "--",
     ] + call
 
-    run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={
-        "POPCORN_NCU": "1"
-    })
+    run_result = run_program(
+        call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={"POPCORN_NCU": "1"}
+    )
     profile_result = None
 
     try:
-        get_tables = ["GPU Throughput", "Pipe Utilization (% of active cycles)", "Warp State (All Cycles)"]
-        ncu_cmd = ["ncu", "--import", f"{str(output_dir / 'profile.ncu-rep')}", "--print-details", "body"]
+        get_tables = [
+            "GPU Throughput",
+            "Pipe Utilization (% of active cycles)",
+            "Warp State (All Cycles)",
+        ]
+        ncu_cmd = [
+            "ncu",
+            "--import",
+            f"{str(output_dir / 'profile.ncu-rep')}",
+            "--print-details",
+            "body",
+        ]
         report = subprocess.check_output(ncu_cmd, text=True)
         report = _filter_ncu_report(report, get_tables)
-        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode("utf-8")
+        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode(
+            "utf-8"
+        )
     except subprocess.CalledProcessError:
         pass
 
     if run_result.success:
         profile_result = ProfileResult(
-            profiler='Nsight-Compute',
+            profiler="Nsight-Compute",
             trace=_directory_to_zip_bytes(output_dir),
             download_url=None,
         )
@@ -822,9 +844,7 @@ def run_config(config: dict):
     }
     if config["lang"] == "py":
         runner = functools.partial(
-            run_pytorch_script,
-            sources=config["sources"],
-            main=config["main"]
+            run_pytorch_script, sources=config["sources"], main=config["main"]
         )
     elif config["lang"] == "cu":
         runner = functools.partial(
