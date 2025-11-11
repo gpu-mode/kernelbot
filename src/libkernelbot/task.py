@@ -144,7 +144,7 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
     # load template files
     templates = {}
     for lang, source in raw.get("templates", {}).items():
-        assert lang in ["CUDA", "Python", "Triton", "HIP"]
+        assert lang in ["CUDA", "Python", "Triton", "HIP", "CuteDSL"]
         templates[lang] = (root / source).read_text()
 
     if templates:
