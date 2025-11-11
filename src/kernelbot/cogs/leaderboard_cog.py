@@ -223,14 +223,14 @@ async def lang_autocomplete(
     bot = interaction.client
 
     with bot.leaderboard_db as db:
-        leaderboard_item = db.get_leaderboard(lb)  # type: LeaderboardItem
+        templates = db.get_leaderboard_templates(lb)
 
-    candidates = leaderboard_item["task"].templates
+    candidates = list(templates.keys())
     return [discord.app_commands.Choice(name=c, value=c) for c in candidates]
 
 
 def add_header_to_template(lang: str, code: str, lb: LeaderboardItem):
-    comment_char = {"CUDA": "//", "Python": "#", "Triton": "#", "HIP": "#"}[lang]
+    comment_char = {"CUDA": "//", "Python": "#", "Triton": "#", "HIP": "#", "CuteDSL": "#"}[lang]
 
     description_comment = [f"{comment_char} > {line}" for line in lb["description"].splitlines()]
     header = f"""
@@ -539,7 +539,7 @@ class LeaderboardCog(commands.Cog):
                 return
 
             template = add_header_to_template(lang, templates[lang], leaderboard_item)
-            ext = {"CUDA": "cu", "Python": "py", "Triton": "py", "HIP": "py"}
+            ext = {"CUDA": "cu", "Python": "py", "Triton": "py", "HIP": "py", "CuteDSL": "py"}
             file_name = f"{leaderboard_name}.{ext[lang]}"
             file = discord.File(fp=StringIO(template), filename=file_name)
             message = f"**Starter code for leaderboard `{leaderboard_name}`**\n"
