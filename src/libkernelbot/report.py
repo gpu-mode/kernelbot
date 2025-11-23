@@ -38,6 +38,7 @@ class Link:
     Link represents a link in the profiling report, to result data
     which can be downloaded by clicking it.
     """
+
     title: str
     text: str
     url: str
@@ -48,6 +49,7 @@ class File:
     """
     Link represents a file that gets attached to the report.
     """
+
     name: str
     message: str
     content: bytes
@@ -315,9 +317,11 @@ def _shortname(spec: str):
     return spec.replace(": ", "=").replace("; ", "_")
 
 
-def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
+def generate_report(result: FullResult, extra_text: str = "") -> RunResultReport:  # noqa: C901
     runs = result.runs
     report = RunResultReport()
+    if extra_text and len(extra_text.strip()) > 0:
+        report.add_text(extra_text)
     report.add_text(generate_system_info(result.system))
 
     if "test" in runs:
@@ -367,7 +371,8 @@ def generate_report(result: FullResult) -> RunResultReport:  # noqa: C901
                 if prof_run.profile.trace is not None:
                     report.add_file(
                         f"profile-{_shortname(prof_run.run.result.get('benchmark.0.spec'))}.zip",
-                        f"{prof_run.profile.profiler} report - " + prof_run.run.result.get("benchmark.0.spec"),
+                        f"{prof_run.profile.profiler} report - "
+                        + prof_run.run.result.get("benchmark.0.spec"),
                         base64.b64decode(prof_run.profile.trace),
                     )
 
