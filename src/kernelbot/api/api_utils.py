@@ -272,6 +272,11 @@ async def to_submit_info(
 
     try:
         submission_code = submission_content.decode("utf-8")
+        if "stream" in submission_code.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="Your code contains work on another stream. This is not allowed and may result in your disqualification. If you think this is a mistake, please contact us.",  # noqa: E501
+            )
         submission_request = SubmissionRequest(
             code=submission_code,
             file_name=file.filename or "submission.py",
@@ -285,6 +290,8 @@ async def to_submit_info(
             status_code=400,
             detail="Failed to decode submission file content as UTF-8.",
         ) from None
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
