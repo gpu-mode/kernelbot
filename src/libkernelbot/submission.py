@@ -90,10 +90,10 @@ def check_deadline(leaderboard: LeaderboardItem):
     now = datetime.now()
     deadline = leaderboard["deadline"]
 
-    if now.date() > deadline.date():
+    if now > deadline:
         raise KernelBotError(
             f"The deadline to submit to {leaderboard['name']} has passed.\n"
-            f"It was {deadline.date()} and today is {now.date()}."
+            f"It was {deadline} and today is {now}."
         )
 
 
