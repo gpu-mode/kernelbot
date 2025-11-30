@@ -1,8 +1,8 @@
 import copy
 import dataclasses
+import datetime
 import math
 import typing
-from datetime import datetime
 from typing import Optional, Union
 
 from better_profanity import profanity
@@ -87,7 +87,7 @@ def prepare_submission(
 
 
 def check_deadline(leaderboard: LeaderboardItem):
-    now = datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
     deadline = leaderboard["deadline"]
 
     if now > deadline:
