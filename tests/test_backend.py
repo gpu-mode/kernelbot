@@ -215,6 +215,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                         "platform": "Linux-5.15.0",
                         "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
+                        "hostname": "test-hostname",
                     },
                 }
             ],
@@ -364,6 +365,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "platform": "Linux-5.15.0",
                         "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
+                        "hostname": "test-hostname",
                     },
                 },
             ],
