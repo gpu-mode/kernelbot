@@ -44,7 +44,7 @@ The key idea is that we're using Github Actions as a job scheduling engine and p
 > [!IMPORTANT]
 > Python 3.11 or higher is required.
 
-After, install the dependencies with `pip install -r requirements.txt`.
+After, install the dependencies with `pip install -r requirements-dev.txt`.
 
 ### Setup Discord Bot
 
