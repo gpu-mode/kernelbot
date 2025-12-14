@@ -180,7 +180,7 @@ def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int)
                 num_benchmarks,
             )
             raise KernelBotError(
-                f"Expected submission to have exactly one benchmark," f"got {num_benchmarks}."
+                f"Expected submission to have exactly one benchmark, got {num_benchmarks}."
             )
         score = float(result.runs["leaderboard"].run.result["benchmark.0.mean"]) / 1e9
     else:

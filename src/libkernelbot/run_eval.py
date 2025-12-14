@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -66,6 +67,7 @@ class SystemInfo:
     runtime: str = ''       # Whether CUDA or ROCm
     platform: str = ''      # Platform string of the machine
     torch: str = ''         # Torch version
+    hostname: str = ''      # Hostname of the machine
     # fmt: on
 
 
@@ -630,6 +632,8 @@ def make_system_info() -> SystemInfo:  # noqa: C901
         # nothing we can do here; we're not getting CPU info
         pass
     import platform
+
+    info.hostname = socket.gethostname()
 
     info.platform = platform.platform()
 

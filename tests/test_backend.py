@@ -77,9 +77,11 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -213,6 +215,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                         "platform": "Linux-5.15.0",
                         "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
+                        "hostname": "test-hostname",
                     },
                 }
             ],
@@ -319,6 +322,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "platform": "Linux-5.15.0",
                         "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
+                        "hostname": "test-hostname",
                     },
                 },
                 {
@@ -362,6 +366,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "platform": "Linux-5.15.0",
                         "runtime": "CUDA",
                         "torch": "2.0.1+cu118",
+                        "hostname": "test-hostname",
                     },
                 },
             ],
