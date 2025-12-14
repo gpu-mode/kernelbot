@@ -91,7 +91,7 @@ postgres=# CREATE DATABASE clusterdev;
 We are using [Yoyo Migrations](https://ollycope.com/software/yoyo/) to manage tables, indexes, etc. in our database. To create tables in your local database, apply the migrations in `src/discord-cluster-manager/migrations` with the following command line:
 
 ```
-yoyo apply src/discord-cluster-manager/migrations \
+yoyo apply src/migrations \
   -d postgresql://user:password@localhost/clusterdev
 ```
 
