@@ -5,9 +5,9 @@ import datetime
 import functools
 import json
 import os
-import re
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -575,23 +575,6 @@ def run_single_evaluation(
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
 
-def container_id_from_cgroup() -> str | None:
-    txt = Path("/proc/self/cgroup").read_text(errors="ignore")
-    # docker: .../docker/<64hex>
-    m = re.search(r"/docker/([0-9a-f]{64})", txt)
-    if m:
-        return m.group(1)
-    # containerd: .../kubepods.../<64hex>
-    m = re.search(r"([0-9a-f]{64})", txt)
-    if m:
-        return m.group(1)
-    # sometimes it's 32hex
-    m = re.search(r"([0-9a-f]{32})", txt)
-    if m:
-        return m.group(1)
-    return None
-
-
 def make_system_info() -> SystemInfo:  # noqa: C901
     info = SystemInfo()
     try:
@@ -649,6 +632,8 @@ def make_system_info() -> SystemInfo:  # noqa: C901
         # nothing we can do here; we're not getting CPU info
         pass
     import platform
+
+    info.hostname = socket.gethostname()
 
     info.platform = platform.platform()
 
