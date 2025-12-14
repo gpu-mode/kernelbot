@@ -35,6 +35,8 @@ def sample_system_info() -> SystemInfo:
         runtime="CUDA",
         platform="Linux-5.15.0",
         torch="2.0.1+cu118",
+        hostname="test-hostname",
+        device_count=1,
     )
 
 
@@ -504,9 +506,11 @@ def test_generate_report_test_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Text(
             text="# Testing failed\n"
@@ -536,9 +540,11 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -571,9 +577,11 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -607,9 +615,11 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -633,9 +643,11 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -646,10 +658,7 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
             "> Division by zero",
         ),
         Text(
-            text="# Running failed\n"
-            "Command ```bash\n"
-            "./test```\n"
-            "**timed out** after 10.00 seconds."
+            text="# Running failed\nCommand ```bash\n./test```\n**timed out** after 10.00 seconds."
         ),
         Log(header="Program stdout", content="log stdout"),
     ]
@@ -676,9 +685,11 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "Running on:\n"
             "* GPU: `NVIDIA RTX 4090`\n"
             "* CPU: `Intel i9-12900K`\n"
+            "* Device count: `1`\n"
             "* Runtime: `CUDA`\n"
             "* Platform: `Linux-5.15.0`\n"
             "* Torch: `2.0.1+cu118`\n"
+            "* Hostname: `test-hostname`\n"
         ),
         Log(
             header="✅ Passed 3/3 tests",
@@ -688,11 +699,9 @@ def test_generate_report_profile(sample_full_result: FullResult):
             "❌ Test division\n"
             "> Division by zero",
         ),
-        Log(header='Profiling Benchmark', content='  Profile report\n'),
+        Log(header="Profiling Benchmark", content="  Profile report\n"),
         Link("NSight profiling output", "Download from GitHub", "https://example.com"),
-        File(name='profile-Benchmark.zip',
-             message='NSight report - Benchmark',
-             content=b''),
+        File(name="profile-Benchmark.zip", message="NSight report - Benchmark", content=b""),
     ]
 
 
