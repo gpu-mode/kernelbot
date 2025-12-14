@@ -5,6 +5,7 @@ import datetime
 import functools
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -66,6 +67,7 @@ class SystemInfo:
     runtime: str = ''       # Whether CUDA or ROCm
     platform: str = ''      # Platform string of the machine
     torch: str = ''         # Torch version
+    hostname: str = ''      # Hostname of the machine
     # fmt: on
 
 
@@ -571,6 +573,23 @@ def run_single_evaluation(
             return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
 
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
+
+
+def container_id_from_cgroup() -> str | None:
+    txt = Path("/proc/self/cgroup").read_text(errors="ignore")
+    # docker: .../docker/<64hex>
+    m = re.search(r"/docker/([0-9a-f]{64})", txt)
+    if m:
+        return m.group(1)
+    # containerd: .../kubepods.../<64hex>
+    m = re.search(r"([0-9a-f]{64})", txt)
+    if m:
+        return m.group(1)
+    # sometimes it's 32hex
+    m = re.search(r"([0-9a-f]{32})", txt)
+    if m:
+        return m.group(1)
+    return None
 
 
 def make_system_info() -> SystemInfo:  # noqa: C901

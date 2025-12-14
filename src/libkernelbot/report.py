@@ -295,9 +295,11 @@ def generate_system_info(system: SystemInfo):
 Running on:
 * GPU: `{system.gpu}`
 * CPU: `{system.cpu}`
+* Device count: `{system.device_count}`
 * Runtime: `{system.runtime}`
 * Platform: `{system.platform}`
 * Torch: `{system.torch}`
+* Hostname: `{system.hostname}`
 """
 
 
