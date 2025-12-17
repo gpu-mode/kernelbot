@@ -344,7 +344,7 @@ class GitHubRun:
                     return
 
                 await callback(self)
-                await asyncio.sleep(15)  # Yield control while waiting
+                await asyncio.sleep(30)  # Yield control while waiting
             except TimeoutError:
                 raise  # Re-raise the specific TimeoutError from the timeout block
             except Exception as e:
