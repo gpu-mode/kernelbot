@@ -12,7 +12,9 @@ import zlib
 from typing import Awaitable, Callable, Optional
 
 import requests
-from github import Github, UnknownObjectException, WorkflowRun
+from github import Github, UnknownObjectException
+from github.Workflow import Workflow
+from github.WorkflowRun import WorkflowRun
 
 from libkernelbot.consts import (
     AMD_REQUIREMENTS,
@@ -172,6 +174,9 @@ class GitHubArtifact:
     public_download_url: str
 
 
+_WORKFLOW_FILE_CACHE: dict[str, Workflow] = {}
+
+
 class GitHubRun:
     def __init__(self, repo: str, token: str, branch: str, workflow_file: str):
         gh = Github(token)
@@ -209,6 +214,15 @@ class GitHubRun:
             return None
         return datetime.datetime.now(datetime.timezone.utc) - self.start_time
 
+    async def get_workflow(self) -> Workflow:
+        if self.workflow_file in _WORKFLOW_FILE_CACHE:
+            logger.info(f"Returning cached workflow {self.workflow_file}")
+            return _WORKFLOW_FILE_CACHE[self.workflow_file]
+        logger.info(f"Fetching workflow {self.workflow_file} from GitHub")
+        workflow = self.repo.get_workflow(self.workflow_file)
+        _WORKFLOW_FILE_CACHE[self.workflow_file] = workflow
+        return workflow
+
     async def trigger(self, inputs: dict) -> bool:
         """
         Trigger this run with the provided inputs.
@@ -229,7 +243,7 @@ class GitHubRun:
 
         trigger_time = datetime.datetime.now(datetime.timezone.utc)
         try:
-            workflow = await asyncio.to_thread(self.repo.get_workflow, self.workflow_file)
+            workflow = await self.get_workflow()
         except UnknownObjectException as e:
             logger.error(f"Could not find workflow {self.workflow_file}", exc_info=e)
             raise ValueError(f"Could not find workflow {self.workflow_file}") from e
