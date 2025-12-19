@@ -205,7 +205,7 @@ def patched_create_dispatch(
     status, _, _ = workflow._requester.requestJson(
         "POST", f"{workflow.url}/dispatches", input={"ref": ref, "inputs": inputs}
     )
-    return status == 200
+    return status == 200 or status == 204
 
 
 class GitHubRun:
