@@ -11,8 +11,10 @@ import zipfile
 import zlib
 from typing import Awaitable, Callable, Optional
 
+import github
 import requests
 from github import Github, UnknownObjectException
+from github.GithubObject import NotSet, Opt
 from github.Workflow import Workflow
 from github.WorkflowRun import WorkflowRun
 
@@ -177,6 +179,35 @@ class GitHubArtifact:
 _WORKFLOW_FILE_CACHE: dict[str, Workflow] = {}
 
 
+def patched_create_dispatch(
+    workflow: Workflow,
+    ref: github.Branch.Branch | github.Tag.Tag | github.Commit.Commit | str,
+    inputs: Opt[dict] = NotSet,
+) -> bool:
+    """
+    :calls: `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches <https://docs.github.com/en/rest/reference/actions#create-a-workflow-dispatch-event>`_
+    """
+    assert (
+        isinstance(ref, github.Branch.Branch)
+        or isinstance(ref, github.Tag.Tag)
+        or isinstance(ref, github.Commit.Commit)
+        or isinstance(ref, str)
+    ), ref
+    assert inputs is NotSet or isinstance(inputs, dict), inputs
+    if isinstance(ref, github.Branch.Branch):
+        ref = ref.name
+    elif isinstance(ref, github.Commit.Commit):
+        ref = ref.sha
+    elif isinstance(ref, github.Tag.Tag):
+        ref = ref.name
+    if inputs is NotSet:
+        inputs = {}
+    status, _, _ = workflow._requester.requestJson(
+        "POST", f"{workflow.url}/dispatches", input={"ref": ref, "inputs": inputs}
+    )
+    return status == 200
+
+
 class GitHubRun:
     def __init__(self, repo: str, token: str, branch: str, workflow_file: str):
         gh = Github(token)
@@ -261,8 +292,8 @@ class GitHubRun:
             pprint.pformat(inputs_with_run_id),
         )
         success = await asyncio.to_thread(
-            workflow.create_dispatch, self.branch, inputs=inputs_with_run_id
-        )
+            patched_create_dispatch, workflow, self.branch, inputs=inputs_with_run_id
+        )  # noqa: E501
 
         if success:
             wait_seconds = 10
