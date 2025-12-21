@@ -15,7 +15,7 @@ from libkernelbot.task import LeaderboardTask
 from libkernelbot.utils import KernelBotError, format_time, setup_logging
 
 if typing.TYPE_CHECKING:
-    from libkernelbot.backend import KernelBackend
+    from backend import KernelBackend
 
 
 logger = setup_logging(__name__)
