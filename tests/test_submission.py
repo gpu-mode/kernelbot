@@ -27,7 +27,7 @@ def mock_backend():
     db_context.get_leaderboard.return_value = {
         "task": mock_task,
         "secret_seed": 12345,
-        "deadline": datetime.datetime.now() + datetime.timedelta(days=1),
+        "deadline": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
         "name": "test_board",
     }
     db_context.get_leaderboard_gpu_types.return_value = ["A100", "V100"]
@@ -38,14 +38,14 @@ def mock_backend():
 def test_check_deadline():
     # Test valid deadline (future)
     future_deadline: LeaderboardItem = {
-        "deadline": datetime.datetime.now() + datetime.timedelta(days=1),
+        "deadline": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
         "name": "test",
     }
     submission.check_deadline(future_deadline)  # Should not raise
 
     # Test expired deadline
     past_deadline: LeaderboardItem = {
-        "deadline": datetime.datetime.now() - datetime.timedelta(days=1),
+        "deadline": datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1),
         "name": "test",
     }
 
