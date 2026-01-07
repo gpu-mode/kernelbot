@@ -23,7 +23,7 @@ cuda_image = (
         "g++-13",
         "clang-18",
     )
-    .pip_install(
+    .uv_pip_install(
         "ninja~=1.11",
         "wheel~=0.45",
         "requests~=2.32.4",
@@ -32,20 +32,20 @@ cuda_image = (
         "pytest",
         "PyYAML",
     )
-    .pip_install(
+    .uv_pip_install(
         "torch>=2.7.0,<2.8.0",
         "torchvision~=0.22",
         "torchaudio>=2.7.0,<2.8.0",
         index_url="https://download.pytorch.org/whl/cu128",
     )
     # other frameworks
-    .pip_install(
+    .uv_pip_install(
         "jax[cuda12]==0.5.3",  # 0.6 want's cudnn 9.8 in conflict with torch 2.7
         "jax2torch==0.0.7",
         "tinygrad~=0.10",
     )
     # nvidia cuda packages
-    .pip_install(
+    .uv_pip_install(
         "nvidia-cupynumeric~=25.3",
         "nvidia-cutlass-dsl~=4.0",
         "cuda-core[cu12]~=0.3",
