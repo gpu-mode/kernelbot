@@ -12,7 +12,7 @@ on:
 
 jobs:
   check-cuda:
-    runs-on: [gpumode-nvidia-arc]
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 10
     container:
       image: nvidia/cuda:12.4.0-devel-ubuntu22.04
@@ -48,7 +48,7 @@ jobs:
       CUDA_VISIBLE_DEVICES: 0
 
   check-pytorch:
-    runs-on: [gpumode-nvidia-arc]
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 10
     container:
       image: nvidia/cuda:12.4.0-devel-ubuntu22.04
