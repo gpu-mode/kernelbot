@@ -16,7 +16,8 @@ tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
 # Move this to another file later:
 cuda_image = (
-    Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.13")
+    Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.12")
+    .with_options(image_builder_version="2025.10")
     .apt_install(
         "git",
         "gcc-13",
