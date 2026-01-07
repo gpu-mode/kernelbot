@@ -1,4 +1,4 @@
-# discord-cluster-manager
+# KernelBot
 
 [![nvidia-on-prem](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nvidia-on-prem-health.yml/badge.svg)](https://github.com/gpu-mode/discord-cluster-manager/actions/workflows/nvidia-on-prem-health.yml)
 
