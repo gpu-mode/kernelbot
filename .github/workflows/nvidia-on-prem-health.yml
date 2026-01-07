@@ -1,4 +1,4 @@
-name: nvidia-arc
+name: nvidia-on-prem
 
 on:
   schedule:
