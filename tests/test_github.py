@@ -83,7 +83,7 @@ def github_config():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.parametrize("gpu_type", [GitHubGPU.NVIDIA, GitHubGPU.MI300x8])
+@pytest.mark.parametrize("gpu_type", [GitHubGPU.NVIDIA])
 async def test_github_launcher_python_script(project_root: Path, github_config: GitHubConfig, gpu_type: GitHubGPU):
     """
     Test GitHubLauncher with a real Python script using real GitHub Actions.
@@ -199,11 +199,14 @@ async def test_github_launcher_failing_script(project_root: Path, github_config:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="MI300x8 machines are no longer available")
 @pytest.mark.parametrize("gpu_type", [GitHubGPU.MI300x8])
 async def test_github_launcher_multi_gpu(project_root: Path, github_config: GitHubConfig, gpu_type: GitHubGPU):
     """
     Test GitHubLauncher with a real Python script using real GitHub Actions.
     Tests all GPU types to verify runners are working.
+
+    Note: This test is skipped because MI300x8 machines are no longer available.
     """
     launcher = GitHubLauncher(repo=github_config.repo, token=github_config.token, branch=github_config.branch)
     reporter = MockProgressReporter("GitHub Integration Test")
