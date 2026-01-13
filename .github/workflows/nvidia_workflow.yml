@@ -15,15 +15,11 @@ on:
         required: false
         type: string
 
-concurrency:
-  group: nvidia-workflow-global
-  cancel-in-progress: false
-
 run-name: 'NVIDIA Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
   run:
-    runs-on: nvidia-docker-b200-8-x86-64
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
