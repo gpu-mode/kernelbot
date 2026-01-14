@@ -19,7 +19,7 @@ run-name: 'NVIDIA Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
   run:
-    runs-on: [custom-b200]
+    runs-on: [nvidia-docker-b200-8-x86-64]
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
