@@ -18,8 +18,23 @@ on:
 run-name: 'NVIDIA Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
+  select-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    steps:
+      - id: pick
+        run: |
+          runners=("b200-02-gpu0" "b200-02-gpu1" "b200-02-gpu2" "b200-02-gpu3" "b200-02-gpu4" "b200-02-gpu5" "b200-02-gpu6" "b200-02-gpu7")
+          index=$(( ${{ github.run_number }} % 8 ))
+          echo "runner=${runners[$index]}" >> $GITHUB_OUTPUT
+
   run:
-    runs-on: [nvidia-docker-b200-8-x86-64]
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
+    concurrency:
+      group: ${{ needs.select-runner.outputs.runner }}
+      cancel-in-progress: false
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
