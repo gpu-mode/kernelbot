@@ -46,7 +46,7 @@ jobs:
       CUDA_VISIBLE_DEVICES: 0
 
   check-pytorch:
-    runs-on: [nvidia-docker-b200-8-x86-64]
+    runs-on:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v3
