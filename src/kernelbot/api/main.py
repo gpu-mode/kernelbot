@@ -36,6 +36,7 @@ logger = setup_logging(__name__)
 
 app = FastAPI()
 
+
 def json_serializer(obj):
     """JSON serializer for objects not serializable by default json code"""
     if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
@@ -255,10 +256,16 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         raise e
     except Exception as e:
         # Catch unexpected errors during OAuth handling
-        raise HTTPException(status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}") from e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error during {auth_provider} OAuth flow: {e}",
+        ) from e
 
     if not user_id or not user_name:
-        raise HTTPException(status_code=500,detail="Failed to retrieve user ID or username from provider.",)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve user ID or username from provider.",
+        )
 
     try:
         with db_context as db:
@@ -268,7 +275,10 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
                 db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
 
     except AttributeError as e:
-        raise HTTPException(status_code=500, detail=f"Database interface error during update: {e}") from e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database interface error during update: {e}",
+        ) from e
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Database update failed: {e}") from e
 
@@ -279,6 +289,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         "user_name": user_name,
         "is_reset": is_reset,
     }
+
 
 async def _stream_submission_response(
     submission_request: SubmissionRequest,
@@ -298,18 +309,22 @@ async def _stream_submission_response(
 
         while not task.done():
             elapsed_time = time.time() - start_time
-            yield f"event: status\ndata: {json.dumps({'status': 'processing',
-                                                      'elapsed_time': round(elapsed_time, 2)},
-                                                      default=json_serializer)}\n\n"
+            status_data = json.dumps(
+                {"status": "processing", "elapsed_time": round(elapsed_time, 2)},
+                default=json_serializer,
+            )
+            yield f"event: status\ndata: {status_data}\n\n"
 
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                yield f"event: error\ndata: {json.dumps(
-                    {'status': 'error', 'detail': 'Submission cancelled'},
-                    default=json_serializer)}\n\n"
+                error_data = json.dumps(
+                    {"status": "error", "detail": "Submission cancelled"},
+                    default=json_serializer,
+                )
+                yield f"event: error\ndata: {error_data}\n\n"
                 return
 
         result, reports = await task
@@ -342,6 +357,7 @@ async def _stream_submission_response(
                 await task
             except asyncio.CancelledError:
                 pass
+
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
@@ -381,13 +397,13 @@ async def run_submission(  # noqa: C901
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
+
 async def enqueue_background_job(
     req: ProcessedSubmissionRequest,
     mode: SubmissionMode,
     backend: KernelBackend,
     manager: BackgroundSubmissionManager,
 ):
-
     # pre-create the submission for api returns
     with backend.db as db:
         sub_id = db.create_submission(
@@ -401,7 +417,8 @@ async def enqueue_background_job(
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
-    return sub_id,job_id
+    return sub_id, job_id
+
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_async(
@@ -425,37 +442,49 @@ async def run_submission_async(
     Raises:
         HTTPException: If the kernelbot is not initialized, or header/input is invalid.
     Returns:
-        JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
+        JSONResponse: A JSON response containing job_id and submission_id.
+            The client can poll for status using these ids.
     """
     try:
-
         await simple_rate_limit()
-        logger.info(f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}")
-
+        logger.info(
+            "Received submission request for %s %s %s",
+            leaderboard_name,
+            gpu_type,
+            submission_mode,
+        )
 
         # throw error if submission request is invalid
         try:
             submission_request, submission_mode_enum = await to_submit_info(
-            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+                user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
             )
 
             req = prepare_submission(submission_request, backend_instance)
 
+        except KernelBotError as e:
+            raise HTTPException(status_code=e.http_code, detail=str(e)) from e
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"failed to prepare submission request: {str(e)}") from e
+            raise HTTPException(
+                status_code=400,
+                detail=f"failed to prepare submission request: {str(e)}",
+            ) from e
 
         # prepare submission request before the submission is started
         if not req.gpus or len(req.gpus) != 1:
             raise HTTPException(status_code=400, detail="Invalid GPU type")
 
         # put submission request to background manager to run in background
-        sub_id,job_status_id = await enqueue_background_job(
+        sub_id, job_status_id = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
 
         return JSONResponse(
             status_code=202,
-            content={"details":{"id": sub_id, "job_status_id": job_status_id}, "status": "accepted"},
+            content={
+                "details": {"id": sub_id, "job_status_id": job_status_id},
+                "status": "accepted",
+            },
         )
         # Preserve FastAPI HTTPException as-is
     except HTTPException:
@@ -469,6 +498,7 @@ async def run_submission_async(
         # logger.exception("Unexpected error in run_submission_v2")
         logger.error(f"Unexpected error in api submissoin: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
+
 
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):

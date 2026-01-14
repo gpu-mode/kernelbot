@@ -62,6 +62,7 @@ def prepare_submission(
 
     with backend.db as db:
         leaderboard = db.get_leaderboard(req.leaderboard)
+        db.enforce_submission_rate_limit(str(req.user_id))
     check_deadline(leaderboard)
 
     task_gpus = get_avail_gpus(req.leaderboard, backend.db)
