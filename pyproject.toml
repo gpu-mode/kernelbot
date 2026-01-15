@@ -23,6 +23,8 @@ dependencies = [
     "fastapi[all]",
     "uvicorn",
     "jinja2",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
 ]
 
 [project.optional-dependencies]
