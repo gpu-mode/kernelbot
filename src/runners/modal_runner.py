@@ -87,7 +87,7 @@ def timeout(seconds: int):
 
 def modal_run_config(  # noqa: C901
     config: dict,
-    timeout_seconds: int = 600,
+    timeout_seconds: int = 1200,
 ) -> FullResult:
     """Modal version of run_pytorch_script, handling timeouts"""
     try:
