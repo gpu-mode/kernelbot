@@ -9,7 +9,7 @@ from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
 app = App("discord-bot-runner")
-cuda_version = "12.8.0"
+cuda_version = "13.1.0"
 flavor = "devel"
 operating_sys = "ubuntu24.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
@@ -33,25 +33,23 @@ cuda_image = (
         "PyYAML",
     )
     .uv_pip_install(
-        "torch>=2.7.0,<2.8.0",
-        "torchvision~=0.22",
-        "torchaudio>=2.7.0,<2.8.0",
-        index_url="https://download.pytorch.org/whl/cu128",
+        "torch==2.9.1",
+        "torchvision",
+        "torchaudio",
+        index_url="https://download.pytorch.org/whl/cu130",
     )
     # other frameworks
     .uv_pip_install(
-        "jax[cuda12]==0.5.3",  # 0.6 want's cudnn 9.8 in conflict with torch 2.7
-        "jax2torch==0.0.7",
         "tinygrad~=0.10",
     )
     # nvidia cuda packages
     .uv_pip_install(
         "nvidia-cupynumeric~=25.3",
-        "nvidia-cutlass-dsl~=4.0",
-        "cuda-core[cu12]~=0.3",
-        "cuda-python[all]==12.8",
-        # "nvmath-python[cu12]~=0.4",
-        # "numba-cuda[cu12]~=0.15",
+        "nvidia-cutlass-dsl==4.3.5",
+        "cuda-core[cu13]",
+        "cuda-python[all]==13.0",
+        # "nvmath-python[cu13]~=0.4",
+        # "numba-cuda[cu13]~=0.15",
     )
 )
 
@@ -87,7 +85,7 @@ def timeout(seconds: int):
 
 def modal_run_config(  # noqa: C901
     config: dict,
-    timeout_seconds: int = 1200,
+    timeout_seconds: int = 600,
 ) -> FullResult:
     """Modal version of run_pytorch_script, handling timeouts"""
     try:
