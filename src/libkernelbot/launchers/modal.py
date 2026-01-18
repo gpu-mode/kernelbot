@@ -30,9 +30,16 @@ class ModalLauncher(Launcher):
 
         await status.push("⏳ Waiting for Modal run to finish...")
 
+        # Use task-specific timeout + 60s buffer for signal-based timeout
+        # This catches most hangs; container timeout is the fallback for hung GPUs
+        task_timeout = config.get("ranked_timeout", 180)
+        signal_timeout = task_timeout + 60
+
         result = await loop.run_in_executor(
             None,
-            lambda: modal.Function.from_name("discord-bot-runner", func_name).remote(config=config),
+            lambda: modal.Function.from_name("discord-bot-runner", func_name).remote(
+                config=config, timeout_seconds=signal_timeout
+            ),
         )
 
         await status.update("✅ Waiting for modal run to finish... Done")
