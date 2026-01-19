@@ -122,6 +122,16 @@ class AdminCog(commands.Cog):
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
 
+        self.set_submission_rate_limit = bot.admin_group.command(
+            name="set-submission-rate-limit",
+            description="Set default or per-user submission rate limit (submissions/minute).",
+        )(self.set_submission_rate_limit)
+
+        self.get_submission_rate_limit = bot.admin_group.command(
+            name="get-submission-rate-limit",
+            description="Get default or per-user submission rate limit (submissions/minute).",
+        )(self.get_submission_rate_limit)
+
         self._scheduled_cleanup_temp_users.start()
 
     # --------------------------------------------------------------------------
@@ -511,6 +521,153 @@ class AdminCog(commands.Cog):
         await send_discord_message(
             interaction, "Bot will accept submissions again!", ephemeral=True
         )
+
+    def _parse_user_id_arg(self, user_id: str) -> str:
+        """Accepts a raw id or a discord mention and returns the id string."""
+        s = (user_id or "").strip()
+        if s.startswith("<@") and s.endswith(">"):
+            s = s[2:-1].strip()
+            if s.startswith("!"):
+                s = s[1:].strip()
+        return s
+
+    def _format_rate(self, rate: float | None) -> str:
+        if rate is None:
+            return "unlimited"
+        r = float(rate)
+        if r == 0:
+            return "blocked"
+        return f"{r:g}/min"
+
+    @app_commands.describe(
+        rate_per_minute="Rate in submissions/minute. Use 'none' for unlimited; 'default' clears a user override.",  # noqa: E501
+        user_id="Optional user id or mention. If omitted, sets the default.",
+    )
+    @with_error_handling
+    async def set_submission_rate_limit(
+        self,
+        interaction: discord.Interaction,
+        rate_per_minute: str,
+        user_id: Optional[str] = None,
+    ):
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to be Admin to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        rate_s = (rate_per_minute or "").strip().lower()
+        if rate_s in {"none", "unlimited", "off"}:
+            parsed_rate: float | None = None
+            clear_override = False
+        elif rate_s == "default":
+            parsed_rate = None
+            clear_override = True
+        else:
+            try:
+                parsed_rate = float(rate_s)
+            except ValueError:
+                await send_discord_message(
+                    interaction,
+                    "Invalid rate. Use a number like `1` or `0.5`, or `none`.",
+                    ephemeral=True,
+                )
+                return
+            if parsed_rate < 0:
+                await send_discord_message(
+                    interaction,
+                    "Invalid rate. Must be >= 0 (or `none`).",
+                    ephemeral=True,
+                )
+                return
+            clear_override = False
+
+        with self.bot.leaderboard_db as db:
+            if user_id is None or user_id.strip() == "":
+                if clear_override:
+                    await send_discord_message(
+                        interaction,
+                        "For default limit, use a number or `none` (not `default`).",
+                        ephemeral=True,
+                    )
+                    return
+                db.set_default_submission_rate_limit(parsed_rate)
+                await send_discord_message(
+                    interaction,
+                    f"Default submission rate limit set to **{self._format_rate(parsed_rate)}**.",
+                    ephemeral=True,
+                )
+                return
+
+            uid = self._parse_user_id_arg(user_id)
+            if uid == "":
+                await send_discord_message(
+                    interaction,
+                    "Invalid user id.",
+                    ephemeral=True,
+                )
+                return
+
+            if clear_override:
+                db.clear_user_submission_rate_limit(uid)
+                await send_discord_message(
+                    interaction,
+                    f"Cleared per-user submission rate limit override for `{uid}` (default now applies).",  # noqa: E501
+                    ephemeral=True,
+                )
+                return
+
+            db.set_user_submission_rate_limit(uid, parsed_rate)
+            await send_discord_message(
+                interaction,
+                f"Submission rate limit for `{uid}` set to **{self._format_rate(parsed_rate)}**.",
+                ephemeral=True,
+            )
+
+    @app_commands.describe(
+        user_id="Optional user id or mention. If omitted, shows the default.",
+    )
+    @with_error_handling
+    async def get_submission_rate_limit(
+        self,
+        interaction: discord.Interaction,
+        user_id: Optional[str] = None,
+    ):
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to be Admin to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            if user_id is None or user_id.strip() == "":
+                default_rate, capacity = db.get_default_submission_rate_limit()
+                msg = (
+                    f"Default submission rate limit: **{self._format_rate(default_rate)}**\n"
+                    f"Bucket capacity: **{capacity:g}**"
+                )
+                await send_discord_message(interaction, msg, ephemeral=True)
+                return
+
+            uid = self._parse_user_id_arg(user_id)
+            effective, has_override, user_rate, default_rate, capacity = (
+                db.get_submission_rate_limits(uid)
+            )
+            override_text = "default" if not has_override else self._format_rate(user_rate)
+            msg = (
+                f"User `{uid}` submission rate limit:\n"
+                f"- Effective: **{self._format_rate(effective)}**\n"
+                f"- User override: **{override_text}**\n"
+                f"- Default: **{self._format_rate(default_rate)}**\n"
+                f"- Bucket capacity: **{capacity:g}**"
+            )
+            await send_discord_message(interaction, msg, ephemeral=True)
 
     @app_commands.describe(
         problem_set="Which problem set to load.",

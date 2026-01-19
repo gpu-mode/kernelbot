@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import psycopg2
 
@@ -266,6 +266,192 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
             raise KernelBotError(f"Error validating {human_label}") from e
+
+    def set_default_submission_rate_limit(self, rate_per_minute: Optional[float]) -> None:
+        """Set the default submission rate limit in submissions/minute (None = unlimited)."""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_rate_limit_settings AS s
+                    (id, default_rate_per_minute, updated_at)
+                VALUES
+                    (TRUE, %s, NOW())
+                ON CONFLICT (id) DO UPDATE
+                SET
+                    default_rate_per_minute = EXCLUDED.default_rate_per_minute,
+                    updated_at              = NOW();
+                """,
+                (rate_per_minute,),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not set default submission rate limit.", exc_info=e)
+            raise KernelBotError("Database error while setting submission rate limit") from e
+
+    def get_default_submission_rate_limit(self) -> Tuple[Optional[float], float]:
+        """Return (default_rate_per_minute, capacity)."""
+        try:
+            self.cursor.execute(
+                """
+                SELECT default_rate_per_minute, capacity
+                FROM leaderboard.submission_rate_limit_settings
+                WHERE id = TRUE
+                """,
+            )
+            row = self.cursor.fetchone()
+            if not row:
+                return None, 1.0
+            return row[0], float(row[1])
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not read default submission rate limit.", exc_info=e)
+            raise KernelBotError("Database error while reading submission rate limit") from e
+
+    def set_user_submission_rate_limit(
+        self, user_id: str, rate_per_minute: Optional[float]
+    ) -> None:
+        """Set a per-user submission rate limit in submissions/minute (None = unlimited)."""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_rate_limit_user AS u
+                    (user_id, rate_per_minute, updated_at)
+                VALUES
+                    (%s, %s, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET
+                    rate_per_minute = EXCLUDED.rate_per_minute,
+                    updated_at      = NOW();
+                """,
+                (str(user_id), rate_per_minute),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not set user submission rate limit.", exc_info=e)
+            raise KernelBotError("Database error while setting submission rate limit") from e
+
+    def clear_user_submission_rate_limit(self, user_id: str) -> None:
+        """Remove a per-user override so the default applies again."""
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.submission_rate_limit_user
+                WHERE user_id = %s;
+                """,
+                (str(user_id),),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not clear user submission rate limit.", exc_info=e)
+            raise KernelBotError("Database error while clearing submission rate limit") from e
+
+    def get_submission_rate_limits(
+        self, user_id: str
+    ) -> Tuple[Optional[float], bool, Optional[float], Optional[float], float]:
+        """Return (effective_rate, has_override, user_rate, default_rate, capacity)."""
+        default_rate, capacity = self.get_default_submission_rate_limit()
+        user_rate: Optional[float] = None
+        has_override = False
+
+        try:
+            self.cursor.execute(
+                """
+                SELECT rate_per_minute
+                FROM leaderboard.submission_rate_limit_user
+                WHERE user_id = %s
+                """,
+                (str(user_id),),
+            )
+            row = self.cursor.fetchone()
+            if row is not None:
+                has_override = True
+                user_rate = row[0]
+
+            effective = user_rate if has_override else default_rate
+            return effective, has_override, user_rate, default_rate, capacity
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Could not read submission rate limit config.", exc_info=e)
+            raise KernelBotError("Database error while reading submission rate limit config") from e
+
+    def enforce_submission_rate_limit(self, user_id: str) -> None:
+        """Enforce per-user submission rate limiting (token bucket, submissions/minute)."""
+        user_id = str(user_id)
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        effective_rate, _, _, _, capacity = self.get_submission_rate_limits(user_id)
+        if effective_rate is None:
+            return
+
+        rate = float(effective_rate)
+        if rate <= 0:
+            raise KernelBotError(
+                "You are currently rate-limited from submitting. Please contact an admin.",
+                code=429,
+            )
+
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_rate_limit_state (user_id, tokens, last_refill)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id) DO NOTHING;
+                """,
+                (user_id, float(capacity), now),
+            )
+
+            self.cursor.execute(
+                """
+                SELECT tokens, last_refill
+                FROM leaderboard.submission_rate_limit_state
+                WHERE user_id = %s
+                FOR UPDATE;
+                """,
+                (user_id,),
+            )
+            tokens, last_refill = self.cursor.fetchone()
+            tokens = float(tokens)
+
+            dt_seconds = max(0.0, (now - last_refill).total_seconds())
+            refill = (dt_seconds / 60.0) * rate
+            tokens = min(float(capacity), tokens + refill)
+
+            if tokens < 1.0:
+                self.cursor.execute(
+                    """
+                    UPDATE leaderboard.submission_rate_limit_state
+                    SET tokens = %s, last_refill = %s
+                    WHERE user_id = %s;
+                    """,
+                    (tokens, now, user_id),
+                )
+                self.connection.commit()
+
+                wait_seconds = int(((1.0 - tokens) * 60.0) / rate) + 1
+                if wait_seconds < 0:
+                    wait_seconds = 0
+                raise KernelBotError(
+                    f"Rate limit exceeded. Please wait {wait_seconds}s before submitting again.",
+                    code=429,
+                )
+
+            tokens -= 1.0
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.submission_rate_limit_state
+                SET tokens = %s, last_refill = %s
+                WHERE user_id = %s;
+                """,
+                (tokens, now, user_id),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error enforcing submission rate limit.", exc_info=e)
+            raise KernelBotError("Database error while enforcing submission rate limit") from e
 
     def create_submission(
         self,
