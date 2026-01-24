@@ -6,7 +6,7 @@ from typing import Type
 class Timeout(IntEnum):
     TEST = 180
     BENCHMARK = 180
-    RANKED = 360
+    RANKED = 180
     COMPILE = 120
 
 
