@@ -108,7 +108,7 @@ async def leaderboard_name_autocomplete(
 
 
 async def _send_split_log(thread: discord.Thread, partial_message: str, header: str, log: str):
-    if len(partial_message) + len(log) + len(header) < 1900:
+    if len(partial_message) + len(log) + len(header) < 1800:
         partial_message += f"\n\n## {header}:\n"
         partial_message += f"```\n{log}```"
         return partial_message
@@ -120,7 +120,7 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
         chunks = []
         partial_message = ""
         for line in lines:
-            if len(partial_message) + len(line) < 1900:
+            if len(partial_message) + len(line) < 1800:
                 partial_message += line + "\n"
             else:
                 if partial_message != "":
@@ -132,7 +132,7 @@ async def _send_split_log(thread: discord.Thread, partial_message: str, header: 
 
         # now, format the chunks
         for i, chunk in enumerate(chunks):
-            partial_message = f"\n\n## {header} ({i+1}/{len(chunks)}):\n"
+            partial_message = f"\n\n## {header} ({i + 1}/{len(chunks)}):\n"
             partial_message += f"```\n{limit_length(chunk, 1900)}```"
             await thread.send(partial_message, silent=True)
 
