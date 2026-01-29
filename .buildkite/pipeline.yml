@@ -1,0 +1,45 @@
+# Buildkite Pipeline for Kernel Submissions
+#
+# This pipeline runs kernel submissions on GPU-bound Buildkite agents.
+# Each agent is configured with:
+#   - CUDA_VISIBLE_DEVICES bound to a single GPU
+#   - CPU/RAM limits via systemd cgroups
+#   - Queue tag for GPU routing (e.g., queue=nvidia-h100-0)
+#
+# Environment variables passed from BuildkiteLauncher:
+#   - SUBMISSION_PAYLOAD: Base64-encoded, zlib-compressed submission config
+#   - GPU_QUEUE: Queue name for agent routing
+
+steps:
+  - label: ":gpu: Run Kernel Submission"
+    command: "python /opt/kernelbot/buildkite-runner.py"
+    env:
+      # Payload is passed via BuildkiteLauncher
+      SUBMISSION_PAYLOAD: "${SUBMISSION_PAYLOAD}"
+    agents:
+      # Route to agent with matching queue tag
+      queue: "${GPU_QUEUE}"
+    timeout_in_minutes: 15
+    artifact_paths:
+      - "result.json"
+      - "profile_data/**/*"
+    plugins:
+      - docker#v5.11.0:
+          image: "ghcr.io/gpu-mode/kernelbot-runner:latest"
+          always-pull: true
+          propagate-environment: true
+          # GPU access - agent already bound to single GPU via CUDA_VISIBLE_DEVICES
+          gpus: all
+          # Resource limits (can be overridden via env vars)
+          memory: "${MEMORY_LIMIT:-32g}"
+          cpus: "${CPU_LIMIT:-16}"
+          # Mount working directory for artifacts
+          volumes:
+            - ".:/workdir"
+          workdir: "/workdir"
+    retry:
+      automatic:
+        - exit_status: -1  # Agent lost connection
+          limit: 1
+        - exit_status: 255  # SSH error
+          limit: 1

@@ -1,0 +1,23 @@
+PyGithub
+aiohttp
+discord.py
+python-dotenv
+requests
+modal
+psycopg2-binary
+yoyo-migrations
+better_profanity
+PyYAML
+fastapi[all]
+uvicorn
+jinja2
+
+[:python_version >= "3.13"]
+audioop-lts
+
+[dev]
+ruff
+pre-commit
+pytest
+pytest-coverage
+pytest-asyncio

@@ -14,6 +14,7 @@ class SchedulerType(Enum):
     GITHUB = "github"
     MODAL = "modal"
     SLURM = "slurm"
+    BUILDKITE = "buildkite"
 
 
 class GitHubGPU(Enum):
@@ -21,6 +22,19 @@ class GitHubGPU(Enum):
     MI300 = "MI300"
     MI250 = "MI250"
     MI300x8 = "MI300x8"
+
+
+class BuildkiteGPU(Enum):
+    # Queue naming: {vendor}-{gpu_type}
+    # Buildkite agents use tags like queue=nvidia-h100-0 for per-GPU routing
+    # The enum value is the queue prefix; agents append -N for specific GPU index
+    NVIDIA_H100 = "nvidia-h100"
+    NVIDIA_B200 = "nvidia-b200"
+    NVIDIA_A100 = "nvidia-a100"
+    AMD_MI300 = "amd-mi300"
+    AMD_MI250 = "amd-mi250"
+    GOOGLE_TPU = "google-tpu"
+    NEBIUS_H100 = "nebius-h100"
 
 
 class ModalGPU(Enum):
@@ -50,7 +64,7 @@ def _make_gpu_lookup(runner_map: dict[str, Type[Enum]]):
     return lookup
 
 
-_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU})
+_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU, "Buildkite": BuildkiteGPU})
 
 
 def get_gpu_by_name(name: str) -> GPU:

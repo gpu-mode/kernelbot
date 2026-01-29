@@ -16,7 +16,7 @@ from env import env, init_environment
 from libkernelbot import consts
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
-from libkernelbot.launchers import GitHubLauncher, ModalLauncher
+from libkernelbot.launchers import BuildkiteLauncher, GitHubLauncher, ModalLauncher
 from libkernelbot.utils import setup_logging
 
 logger = setup_logging(__name__)
@@ -43,6 +43,15 @@ class ClusterBot(commands.Bot):
         self.backend.register_launcher(
             GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
         )
+        # Register Buildkite launcher if configured (optional - for vendor-managed GPU runners)
+        if env.BUILDKITE_API_TOKEN:
+            self.backend.register_launcher(
+                BuildkiteLauncher(
+                    org=env.BUILDKITE_ORG,
+                    pipeline=env.BUILDKITE_PIPELINE,
+                    token=env.BUILDKITE_API_TOKEN,
+                )
+            )
 
     @property
     def leaderboard_db(self):
