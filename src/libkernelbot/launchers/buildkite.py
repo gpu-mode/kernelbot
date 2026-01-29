@@ -221,7 +221,8 @@ class BuildkiteLauncher(Launcher):
                 if state in ("passed", "failed", "canceled", "blocked"):
                     if state != "passed":
                         logger.warning(f"Build #{build_number} finished with state: {state}")
-                    return
+                        raise RuntimeError(f"Build #{build_number} {state}")
+                    return state
 
                 await callback(state, elapsed)
                 await asyncio.sleep(10)  # Poll every 10 seconds

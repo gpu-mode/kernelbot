@@ -135,6 +135,14 @@ GPU_TO_SM = {
     "MI300": None,
     "MI300x8": None,
     "MI250": None,
+    # Buildkite GPU types (vendor-prefixed queue names)
+    "nvidia-h100": "90a",
+    "nvidia-b200": "100",
+    "nvidia-a100": "80",
+    "nebius-h100": "90a",
+    "amd-mi300": None,
+    "amd-mi250": None,
+    "google-tpu": None,
 }
 
 

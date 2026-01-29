@@ -70,7 +70,8 @@ class TestBuildkiteLauncher:
         return {
             "lang": "py",
             "mode": "test",
-            "files": {"main.py": "print('hello')"},
+            "main": "main.py",
+            "sources": {"main.py": "print('hello')"},
             "tests": [],
             "benchmarks": [],
             "test_timeout": 180,
@@ -140,6 +141,9 @@ class TestBuildkiteLauncher:
                     body = call_args[1]["json"]
                     assert "SUBMISSION_PAYLOAD" in body["env"]
                     assert body["env"]["GPU_QUEUE"] == "nvidia-h100"
+
+                    # Verify result
+                    assert result.success is True
 
     @pytest.mark.asyncio
     async def test_run_submission_handles_api_error(self, launcher, mock_config, gpu_type):
