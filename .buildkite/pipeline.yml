@@ -9,6 +9,10 @@
 # Environment variables passed from BuildkiteLauncher:
 #   - SUBMISSION_PAYLOAD: Base64-encoded, zlib-compressed submission config
 #   - GPU_QUEUE: Queue name for agent routing
+#
+# Note: timeout_in_minutes is set high (60) as a safety net.
+# The BuildkiteLauncher handles dynamic timeouts based on submission mode
+# and will cancel jobs that exceed their configured timeout.
 
 steps:
   - label: ":gpu: Run Kernel Submission"
@@ -19,7 +23,8 @@ steps:
     agents:
       # Route to agent with matching queue tag
       queue: "${GPU_QUEUE}"
-    timeout_in_minutes: 15
+    # Safety timeout - BuildkiteLauncher handles actual timeout enforcement
+    timeout_in_minutes: 60
     artifact_paths:
       - "result.json"
       - "profile_data/**/*"
