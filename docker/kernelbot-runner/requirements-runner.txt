@@ -1,0 +1,17 @@
+# Kernelbot Runner Dependencies
+# These should match the Modal runner configuration in modal_runner.py
+
+# Build tools
+ninja~=1.11
+wheel~=0.45
+setuptools
+
+# Core dependencies
+requests~=2.32.4
+packaging~=25.0
+numpy~=2.3
+pytest
+PyYAML
+
+# Triton for GPU kernels
+triton

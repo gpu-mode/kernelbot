@@ -47,3 +47,8 @@ env.PROBLEM_DEV_DIR = os.getenv("PROBLEM_DEV_DIR", "examples")
 # PostgreSQL-specific constants
 env.DATABASE_URL = os.getenv("DATABASE_URL")
 env.DISABLE_SSL = os.getenv("DISABLE_SSL")
+
+# Buildkite-specific constants (optional - for vendor-managed GPU runners)
+env.BUILDKITE_API_TOKEN = os.getenv("BUILDKITE_API_TOKEN")
+env.BUILDKITE_ORG = os.getenv("BUILDKITE_ORG", "gpu-mode")
+env.BUILDKITE_PIPELINE = os.getenv("BUILDKITE_PIPELINE", "kernelbot-runner")
