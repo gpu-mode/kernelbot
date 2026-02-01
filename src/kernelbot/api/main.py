@@ -10,17 +10,24 @@ from typing import Annotated, Any, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
+from libkernelbot.problem_sync import sync_problems
 from libkernelbot.submission import (
     ProcessedSubmissionRequest,
     SubmissionRequest,
     prepare_submission,
 )
-from libkernelbot.utils import KernelBotError, setup_logging
+from libkernelbot.task import make_task_definition
+from libkernelbot.utils import (
+    KernelBotError,
+    resolve_problem_directory,
+    setup_logging,
+)
 
 from .api_utils import (
     _handle_discord_oauth,
@@ -163,6 +170,16 @@ async def validate_user_header(
             detail="Invalid or unauthorized auth header elaine",
         )
     return user_info
+
+
+def require_admin(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+) -> None:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    expected = f"Bearer {env.ADMIN_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
 @app.get("/auth/init")
@@ -469,6 +486,162 @@ async def run_submission_async(
         # logger.exception("Unexpected error in run_submission_v2")
         logger.error(f"Unexpected error in api submissoin: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@app.post("/admin/start")
+async def admin_start(
+    _: Annotated[None, Depends(require_admin)],
+) -> dict:
+    backend_instance.accepts_jobs = True
+    return {"status": "ok", "accepts_jobs": True}
+
+
+@app.post("/admin/stop")
+async def admin_stop(
+    _: Annotated[None, Depends(require_admin)],
+) -> dict:
+    backend_instance.accepts_jobs = False
+    return {"status": "ok", "accepts_jobs": False}
+
+
+@app.post("/admin/leaderboards")
+async def create_dev_leaderboard(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Create a dev leaderboard from a problem directory.
+
+    Mirrors the Discord /admin leaderboard create-local command.
+    - Only requires 'directory' (e.g., "identity_py")
+    - Name is auto-derived as "{directory}-dev"
+    - Deadline defaults to 1 year from now
+    - GPU(s) must be specified in task.yml
+    """
+    directory = payload.get("directory")
+
+    if not directory:
+        raise HTTPException(status_code=400, detail="Missing required field: directory")
+
+    directory_path = resolve_problem_directory(directory, env.PROBLEM_DEV_DIR)
+    if not directory_path:
+        raise HTTPException(status_code=400, detail="Invalid problem directory")
+
+    definition = make_task_definition(directory_path)
+
+    # Auto-derive name and deadline like admin_cog.leaderboard_create_local
+    leaderboard_name = f"{directory}-dev"
+    deadline_value = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
+
+    # GPUs must be specified in task.yml
+    if not definition.gpus:
+        raise HTTPException(
+            status_code=400,
+            detail="No gpus specified in task.yml. Add 'gpus:' field with list of GPU types."
+        )
+
+    with db_context as db:
+        # Delete existing leaderboard if it exists (like create-local does)
+        try:
+            db.delete_leaderboard(leaderboard_name, force=True)
+        except Exception:
+            pass  # Leaderboard doesn't exist, that's fine
+
+        db.create_leaderboard(
+            name=leaderboard_name,
+            deadline=deadline_value,
+            definition=definition,
+            creator_id=0,
+            forum_id=-1,
+            gpu_types=definition.gpus,
+        )
+    return {"status": "ok", "leaderboard": leaderboard_name}
+
+
+@app.delete("/admin/leaderboards/{leaderboard_name}")
+async def admin_delete_leaderboard(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+    force: bool = False,
+) -> dict:
+    with db_context as db:
+        db.delete_leaderboard(leaderboard_name, force=force)
+    return {"status": "ok", "leaderboard": leaderboard_name, "force": force}
+
+
+@app.delete("/admin/submissions/{submission_id}")
+async def admin_delete_submission(
+    submission_id: int,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        db.delete_submission(submission_id)
+    return {"status": "ok", "submission_id": submission_id}
+
+
+@app.get("/admin/stats")
+async def admin_stats(
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+    last_day_only: bool = False,
+) -> dict:
+    with db_context as db:
+        stats = db.generate_stats(last_day_only)
+    return {"status": "ok", "stats": stats}
+
+
+@app.get("/admin/submissions/{submission_id}")
+async def admin_get_submission(
+    submission_id: int,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        submission = db.get_submission_by_id(submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return {"status": "ok", "submission": submission}
+
+
+@app.post("/admin/update-problems")
+async def admin_update_problems(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Update problems from a GitHub repository.
+
+    Mirrors the Discord /admin update-problems command.
+    Downloads the repository, parses competition YAML files, and creates/updates leaderboards.
+    """
+    repository = payload.get("repository", "gpu-mode/reference-kernels")
+    problem_set = payload.get("problem_set")
+    branch = payload.get("branch", "main")
+    force = payload.get("force", False)
+
+    try:
+        result = sync_problems(
+            db_context=db_context,
+            repository=repository,
+            problem_set=problem_set,
+            branch=branch,
+            force=force,
+            creator_id=0,  # API-created
+            forum_id=-1,   # No Discord forum
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {
+        "status": "ok",
+        "created": result.created,
+        "updated": result.updated,
+        "skipped": result.skipped,
+        "errors": result.errors,
+    }
+
 
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
