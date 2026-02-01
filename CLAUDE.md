@@ -38,20 +38,131 @@ When adding new functionality:
 
 3. **Regression tests**: Use the popcorn-cli against a local instance to verify end-to-end functionality
 
-### E2E Regression Testing
+### E2E Regression Testing with popcorn-cli
 
-Start a local development server and test with popcorn-cli:
+Full end-to-end testing requires running the API server locally and testing with popcorn-cli. This tests the complete flow from CLI through API to database.
+
+#### Step 1: Start PostgreSQL
 
 ```bash
-# Run the API server locally
-uv run uvicorn src.kernelbot.api.main:app --reload --port 8000
+# macOS with Homebrew
+brew services start postgresql@14
 
-# Test CLI against local instance
-export POPCORN_API_URL=http://localhost:8000
-popcorn submissions list --leaderboard test-leaderboard
-popcorn submissions show 123
-popcorn submissions delete 123
+# Verify it's running
+pg_isready
 ```
+
+#### Step 2: Create Database and Run Migrations
+
+```bash
+# Create database (first time only)
+createdb kernelbot
+
+# Run migrations
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+uv run yoyo apply --database "$DATABASE_URL" src/migrations/
+```
+
+#### Step 3: Create a Test User
+
+The CLI requires a registered user. Create one in the database:
+
+```bash
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+psql "$DATABASE_URL" -c "INSERT INTO leaderboard.user_info (id, user_name, cli_id, cli_valid)
+VALUES ('999999', 'testuser', 'test-cli-id-123', true)
+ON CONFLICT (id) DO UPDATE SET cli_id = 'test-cli-id-123', cli_valid = true;"
+```
+
+#### Step 4: Start the API Server
+
+```bash
+cd src/kernelbot
+
+# Set required environment variables
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+export ADMIN_TOKEN="your-admin-token-here"  # Check .env for LOCAL_ADMIN_TOKEN
+
+# Start API server (without Discord bot)
+uv run python main.py --api-only
+
+# Server runs on http://localhost:8000
+```
+
+#### Step 5: Sync Leaderboards
+
+Leaderboards must be synced from reference-kernels before testing submissions:
+
+```bash
+curl -X POST "http://localhost:8000/admin/update-problems" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"problem_set": "pmpp_v2"}'
+```
+
+#### Step 6: Configure popcorn-cli for Local Testing
+
+Temporarily update `~/.popcorn.yaml` to use test credentials:
+
+```bash
+# Backup existing config
+cp ~/.popcorn.yaml ~/.popcorn.yaml.bak
+
+# Set test CLI ID
+echo "cli_id: test-cli-id-123" > ~/.popcorn.yaml
+```
+
+#### Step 7: Run CLI Commands
+
+```bash
+cd /path/to/popcorn-cli
+
+# Set API URL to local server
+export POPCORN_API_URL=http://localhost:8000
+
+# Test various commands
+cargo run --release -- submissions list --leaderboard vectoradd_v2
+cargo run --release -- submissions show <ID>
+cargo run --release -- submissions delete <ID>
+
+# Test submission (runs on Modal H100, requires Modal account)
+cargo run --release -- submit solution.py --gpu H100 --leaderboard vectoradd_v2 --mode test
+```
+
+#### Step 8: Restore Original Config
+
+```bash
+cp ~/.popcorn.yaml.bak ~/.popcorn.yaml
+rm ~/.popcorn.yaml.bak
+```
+
+#### Quick Reference: Testing API Endpoints Directly
+
+```bash
+# List user submissions
+curl -s "http://localhost:8000/user/submissions?leaderboard=vectoradd_v2" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123"
+
+# Get submission details
+curl -s "http://localhost:8000/user/submissions/1" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123"
+
+# Delete submission
+curl -s -X DELETE "http://localhost:8000/user/submissions/1" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123"
+
+# Submit a file (multipart form)
+curl -s -X POST "http://localhost:8000/vectoradd_v2/H100/test" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123" \
+  -F "file=@solution.py"
+```
+
+#### Troubleshooting
+
+- **401 Unauthorized**: CLI ID not in database or `cli_valid` is false
+- **404 Not Found**: Leaderboards not synced - run update-problems first
+- **500 Internal Error**: Check server logs in terminal, often a TypedDict vs object access issue
+- **"Device not configured" from CLI**: Usually a TTY issue, try running with explicit env vars
 
 ## Before Adding New Features
 
