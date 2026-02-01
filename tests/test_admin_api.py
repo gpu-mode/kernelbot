@@ -259,3 +259,149 @@ class TestAdminLeaderboards:
         assert response.status_code == 200
         assert response.json()["force"] is True
         mock_backend.db.delete_leaderboard.assert_called_once_with("test-leaderboard", force=True)
+
+
+class TestAdminUpdateProblems:
+    """Test admin update-problems endpoint."""
+
+    def test_update_problems_requires_auth(self, test_client):
+        """POST /admin/update-problems requires authorization."""
+        response = test_client.post("/admin/update-problems", json={})
+        assert response.status_code == 401
+
+    def test_update_problems_success(self, test_client, mock_backend):
+        """POST /admin/update-problems returns sync results."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        mock_result = MagicMock()
+        mock_result.created = ["problem1", "problem2"]
+        mock_result.updated = ["problem3"]
+        mock_result.skipped = [{"name": "problem4", "reason": "no changes"}]
+        mock_result.errors = []
+
+        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert data["created"] == ["problem1", "problem2"]
+            assert data["updated"] == ["problem3"]
+            assert data["skipped"] == [{"name": "problem4", "reason": "no changes"}]
+            assert data["errors"] == []
+
+            # Verify default parameters
+            mock_sync.assert_called_once()
+            call_kwargs = mock_sync.call_args[1]
+            assert call_kwargs["repository"] == "gpu-mode/reference-kernels"
+            assert call_kwargs["branch"] == "main"
+            assert call_kwargs["force"] is False
+            assert call_kwargs["problem_set"] is None
+
+    def test_update_problems_with_problem_set(self, test_client, mock_backend):
+        """POST /admin/update-problems with specific problem_set."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        mock_result = MagicMock()
+        mock_result.created = ["nvidia-problem"]
+        mock_result.updated = []
+        mock_result.skipped = []
+        mock_result.errors = []
+
+        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={"problem_set": "nvidia"}
+            )
+            assert response.status_code == 200
+            call_kwargs = mock_sync.call_args[1]
+            assert call_kwargs["problem_set"] == "nvidia"
+
+    def test_update_problems_with_force(self, test_client, mock_backend):
+        """POST /admin/update-problems with force=True."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        mock_result = MagicMock()
+        mock_result.created = []
+        mock_result.updated = ["updated-problem"]
+        mock_result.skipped = []
+        mock_result.errors = []
+
+        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={"force": True}
+            )
+            assert response.status_code == 200
+            call_kwargs = mock_sync.call_args[1]
+            assert call_kwargs["force"] is True
+
+    def test_update_problems_with_custom_repo_and_branch(self, test_client, mock_backend):
+        """POST /admin/update-problems with custom repository and branch."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        mock_result = MagicMock()
+        mock_result.created = []
+        mock_result.updated = []
+        mock_result.skipped = []
+        mock_result.errors = []
+
+        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={
+                    "repository": "other-org/other-repo",
+                    "branch": "develop"
+                }
+            )
+            assert response.status_code == 200
+            call_kwargs = mock_sync.call_args[1]
+            assert call_kwargs["repository"] == "other-org/other-repo"
+            assert call_kwargs["branch"] == "develop"
+
+    def test_update_problems_value_error(self, test_client, mock_backend):
+        """POST /admin/update-problems returns 400 on ValueError."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        with patch('kernelbot.api.main.sync_problems', side_effect=ValueError("Invalid branch name")):
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={"branch": "invalid/branch"}
+            )
+            assert response.status_code == 400
+            assert "Invalid branch name" in response.json()["detail"]
+
+    def test_update_problems_with_errors(self, test_client, mock_backend):
+        """POST /admin/update-problems includes errors in response."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        mock_result = MagicMock()
+        mock_result.created = []
+        mock_result.updated = []
+        mock_result.skipped = []
+        mock_result.errors = [{"name": "bad-problem", "error": "create failed: DB error"}]
+
+        with patch('kernelbot.api.main.sync_problems', return_value=mock_result):
+            response = test_client.post(
+                "/admin/update-problems",
+                headers={"Authorization": "Bearer test_token"},
+                json={}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert len(data["errors"]) == 1
+            assert data["errors"][0]["name"] == "bad-problem"
