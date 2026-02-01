@@ -184,6 +184,7 @@ async def test_modal_launcher_python_script(
     assert reporter.updates == ["✅ Waiting for modal run to finish... Done"]
 
 
+@pytest.mark.skip(reason="Multi-GPU L4x4 NCCL issues on Modal infrastructure")
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("script, good", [("submission.py", True), ("wrong.py", False)])
@@ -236,6 +237,7 @@ async def test_modal_multi_gpu(modal_deployment, project_root: Path, script: str
     assert test_run.run.passed is good
 
 
+@pytest.mark.skip(reason="Multi-GPU L4x4 NCCL issues on Modal infrastructure")
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize("script, good", [("submission.py", True), ("wrong.py", False)])
