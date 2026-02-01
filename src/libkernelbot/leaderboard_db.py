@@ -861,16 +861,20 @@ class LeaderboardDB:
         Args:
             user_id: The user's ID
             leaderboard_name: Optional filter by leaderboard name
-            limit: Maximum number of submissions to return
+            limit: Maximum number of submissions to return (max 100)
             offset: Offset for pagination
 
         Returns:
             List of submission dictionaries with summary info
         """
+        # Validate and clamp inputs
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
         try:
             if leaderboard_name:
                 query = """
-                    SELECT
+                    SELECT DISTINCT ON (s.id)
                         s.id,
                         lb.name as leaderboard_name,
                         s.file_name,
@@ -883,13 +887,13 @@ class LeaderboardDB:
                     LEFT JOIN leaderboard.runs r ON r.submission_id = s.id
                         AND NOT r.secret AND r.passed
                     WHERE s.user_id = %s AND lb.name = %s
-                    ORDER BY s.submission_time DESC
+                    ORDER BY s.id, s.submission_time DESC
                     LIMIT %s OFFSET %s
                 """
                 self.cursor.execute(query, (user_id, leaderboard_name, limit, offset))
             else:
                 query = """
-                    SELECT
+                    SELECT DISTINCT ON (s.id)
                         s.id,
                         lb.name as leaderboard_name,
                         s.file_name,
@@ -902,7 +906,7 @@ class LeaderboardDB:
                     LEFT JOIN leaderboard.runs r ON r.submission_id = s.id
                         AND NOT r.secret AND r.passed
                     WHERE s.user_id = %s
-                    ORDER BY s.submission_time DESC
+                    ORDER BY s.id, s.submission_time DESC
                     LIMIT %s OFFSET %s
                 """
                 self.cursor.execute(query, (user_id, limit, offset))

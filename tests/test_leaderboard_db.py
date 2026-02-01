@@ -603,3 +603,138 @@ def test_generate_stats(database, submit_leaderboard):
             "sub_waiting": 0,
             "total_runtime.A100": datetime.timedelta(seconds=35),
         }
+
+
+def test_get_user_submissions_empty(database, submit_leaderboard):
+    """Test get_user_submissions returns empty list for user with no submissions"""
+    with database as db:
+        result = db.get_user_submissions(user_id="999")
+        assert result == []
+
+
+def test_get_user_submissions_basic(database, submit_leaderboard):
+    """Test get_user_submissions returns user's submissions"""
+    with database as db:
+        # Create submissions for two different users
+        sub1 = db.create_submission(
+            "submit-leaderboard",
+            "user5_file.py",
+            5,
+            "code for user 5",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+        db.create_submission(
+            "submit-leaderboard",
+            "user5_other.py",
+            5,
+            "more code for user 5",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+        db.create_submission(
+            "submit-leaderboard",
+            "user6_file.py",
+            6,
+            "code for user 6",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user6",
+        )
+
+        # Add a run to sub1
+        _create_submission_run(db, sub1, mode="leaderboard", secret=False, runner="A100", score=1.5)
+        db.mark_submission_done(sub1)
+
+        # Get user 5's submissions
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 2
+
+        # Check that both submissions belong to user 5
+        file_names = {r["file_name"] for r in result}
+        assert "user5_file.py" in file_names
+        assert "user5_other.py" in file_names
+
+        # Verify user 6 is not included
+        assert all(r["file_name"].startswith("user5") for r in result)
+
+
+def test_get_user_submissions_with_leaderboard_filter(database, task_directory):
+    """Test get_user_submissions filters by leaderboard name"""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        # Create two leaderboards
+        db.create_leaderboard(
+            name="leaderboard-a",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+        )
+        db.create_leaderboard(
+            name="leaderboard-b",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=6,
+            gpu_types=["H100"],
+        )
+
+        # Create submissions on different leaderboards
+        db.create_submission(
+            "leaderboard-a",
+            "file_a.py",
+            5,
+            "code a",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+        db.create_submission(
+            "leaderboard-b",
+            "file_b.py",
+            5,
+            "code b",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+
+        # Filter by leaderboard-a
+        result = db.get_user_submissions(user_id="5", leaderboard_name="leaderboard-a")
+        assert len(result) == 1
+        assert result[0]["file_name"] == "file_a.py"
+        assert result[0]["leaderboard_name"] == "leaderboard-a"
+
+        # Filter by leaderboard-b
+        result = db.get_user_submissions(user_id="5", leaderboard_name="leaderboard-b")
+        assert len(result) == 1
+        assert result[0]["file_name"] == "file_b.py"
+
+
+def test_get_user_submissions_pagination(database, submit_leaderboard):
+    """Test get_user_submissions respects limit and offset"""
+    with database as db:
+        # Create 5 submissions
+        for i in range(5):
+            db.create_submission(
+                "submit-leaderboard",
+                f"file_{i}.py",
+                5,
+                f"code {i}",
+                datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=i),
+                user_name="user5",
+            )
+
+        # Test limit
+        result = db.get_user_submissions(user_id="5", limit=2)
+        assert len(result) == 2
+
+        # Test offset
+        result_all = db.get_user_submissions(user_id="5", limit=10)
+        result_offset = db.get_user_submissions(user_id="5", limit=2, offset=2)
+        assert len(result_offset) == 2
+        assert result_offset[0]["id"] == result_all[2]["id"]
+

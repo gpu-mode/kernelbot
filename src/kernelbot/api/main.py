@@ -725,13 +725,20 @@ async def get_user_submissions(
 
     Args:
         leaderboard: Optional filter by leaderboard name
-        limit: Maximum number of submissions to return (default 50)
-        offset: Offset for pagination
+        limit: Maximum number of submissions to return (default 50, max 100)
+        offset: Offset for pagination (must be >= 0)
 
     Returns:
         List of user's submissions with summary info
     """
     await simple_rate_limit()
+
+    # Validate inputs (DB also validates, but fail fast here)
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be >= 0")
+
     try:
         with db_context as db:
             return db.get_user_submissions(
@@ -826,7 +833,7 @@ async def delete_user_submission(
 
             db.delete_submission(submission_id)
 
-            return {"message": f"Submission {submission_id} deleted successfully"}
+            return {"status": "ok", "submission_id": submission_id}
     except HTTPException:
         raise
     except Exception as e:
