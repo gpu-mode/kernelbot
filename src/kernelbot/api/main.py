@@ -711,3 +711,123 @@ async def get_submission_count(
             return {"count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching submission count: {e}") from e
+
+
+@app.get("/user/submissions")
+async def get_user_submissions(
+    user_info: Annotated[dict, Depends(validate_user_header)],
+    leaderboard: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db_context=Depends(get_db),
+) -> list[dict]:
+    """Get the authenticated user's submissions.
+
+    Args:
+        leaderboard: Optional filter by leaderboard name
+        limit: Maximum number of submissions to return (default 50)
+        offset: Offset for pagination
+
+    Returns:
+        List of user's submissions with summary info
+    """
+    await simple_rate_limit()
+    try:
+        with db_context as db:
+            return db.get_user_submissions(
+                user_id=user_info["user_id"],
+                leaderboard_name=leaderboard,
+                limit=limit,
+                offset=offset,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user submissions: {e}") from e
+
+
+@app.get("/user/submissions/{submission_id}")
+async def get_user_submission(
+    submission_id: int,
+    user_info: Annotated[dict, Depends(validate_user_header)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Get a specific submission by ID. Only the owner can view their submission.
+
+    Args:
+        submission_id: The submission ID to retrieve
+
+    Returns:
+        Full submission details including code
+    """
+    await simple_rate_limit()
+    try:
+        with db_context as db:
+            submission = db.get_submission_by_id(submission_id)
+
+            if submission is None:
+                raise HTTPException(status_code=404, detail="Submission not found")
+
+            # Verify ownership
+            if str(submission.user_id) != str(user_info["user_id"]):
+                raise HTTPException(status_code=403, detail="Not authorized to view this submission")
+
+            return {
+                "id": submission.submission_id,
+                "leaderboard_id": submission.leaderboard_id,
+                "leaderboard_name": submission.leaderboard_name,
+                "file_name": submission.file_name,
+                "user_id": submission.user_id,
+                "submission_time": submission.submission_time,
+                "done": submission.done,
+                "code": submission.code,
+                "runs": [
+                    {
+                        "start_time": r.start_time,
+                        "end_time": r.end_time,
+                        "mode": r.mode,
+                        "secret": r.secret,
+                        "runner": r.runner,
+                        "score": r.score,
+                        "passed": r.passed,
+                    }
+                    for r in submission.runs
+                ],
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching submission: {e}") from e
+
+
+@app.delete("/user/submissions/{submission_id}")
+async def delete_user_submission(
+    submission_id: int,
+    user_info: Annotated[dict, Depends(validate_user_header)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Delete a submission by ID. Only the owner can delete their submission.
+
+    Args:
+        submission_id: The submission ID to delete
+
+    Returns:
+        Success message
+    """
+    await simple_rate_limit()
+    try:
+        with db_context as db:
+            submission = db.get_submission_by_id(submission_id)
+
+            if submission is None:
+                raise HTTPException(status_code=404, detail="Submission not found")
+
+            # Verify ownership
+            if str(submission.user_id) != str(user_info["user_id"]):
+                raise HTTPException(status_code=403, detail="Not authorized to delete this submission")
+
+            db.delete_submission(submission_id)
+
+            return {"message": f"Submission {submission_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting submission: {e}") from e
