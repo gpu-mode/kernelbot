@@ -50,7 +50,7 @@ def modal_deployment(project_root: Path):
 
         if result.returncode != 0:
             # if it fails simply because the environment does not exist, we can fix  that
-            if "No such environment" in result.stderr:
+            if "No such environment" in result.stderr or "not found" in result.stderr:
                 result = subprocess.run(
                     ["modal", "environment", "create", modal_env],
                     cwd=project_root / "src" / "runners",
