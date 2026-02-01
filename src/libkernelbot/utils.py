@@ -1,5 +1,7 @@
 import logging
+import os
 import subprocess
+from datetime import datetime
 from typing import Any, Optional
 
 
@@ -46,6 +48,47 @@ def get_github_branch_name():
         return result.stdout.strip().split("/", 1)[1]
     except subprocess.CalledProcessError:
         return "main"
+
+
+def parse_deadline(deadline: str) -> Optional[datetime]:
+    """Parse a deadline string into a datetime object.
+
+    Supports formats: YYYY-MM-DD HH:MM and YYYY-MM-DD
+
+    Args:
+        deadline: The deadline string to parse
+
+    Returns:
+        datetime object if parsing succeeds, None otherwise
+    """
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(deadline, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def resolve_problem_directory(directory: str, root_dir: str) -> Optional[str]:
+    """Resolve and validate a problem directory path.
+
+    Ensures the directory exists and is within the allowed root directory
+    to prevent path traversal attacks.
+
+    Args:
+        directory: The relative directory path
+        root_dir: The root directory that contains problem directories
+
+    Returns:
+        Absolute path to the directory if valid, None otherwise
+    """
+    root = os.path.abspath(root_dir)
+    target = os.path.abspath(os.path.join(root, directory))
+    if os.path.commonpath([root, target]) != root:
+        return None
+    if not os.path.isdir(target):
+        return None
+    return target
 
 
 class LRUCache:

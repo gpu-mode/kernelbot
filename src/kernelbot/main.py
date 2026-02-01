@@ -22,6 +22,41 @@ from libkernelbot.utils import setup_logging
 logger = setup_logging(__name__)
 
 
+def create_backend(debug_mode: bool = False) -> KernelBackend:
+    """Create and configure a KernelBackend with launchers."""
+    backend = KernelBackend(env=env, debug_mode=debug_mode)
+    backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
+    backend.register_launcher(
+        GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
+    )
+    return backend
+
+
+def create_uvicorn_server() -> uvicorn.Server:
+    """Create uvicorn server with standard config."""
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT") or 8000),
+        log_level="info",
+        limit_concurrency=10,
+    )
+    return uvicorn.Server(config)
+
+
+async def run_api_server(backend: KernelBackend):
+    """Initialize API and run server with background manager."""
+    init_api(backend)
+    manager = init_background_submission_manager(BackgroundSubmissionManager(backend))
+    await manager.start()
+
+    server = create_uvicorn_server()
+    try:
+        await server.serve()
+    finally:
+        await manager.stop()
+
+
 class ClusterBot(commands.Bot):
     def __init__(self, debug_mode=False):
         intents = discord.Intents.default()
@@ -38,11 +73,7 @@ class ClusterBot(commands.Bot):
         self.tree.add_command(self.admin_group)
         self.tree.add_command(self.leaderboard_group)
 
-        self.backend = KernelBackend(env=env, debug_mode=debug_mode)
-        self.backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
-        self.backend.register_launcher(
-            GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
-        )
+        self.backend = create_backend(debug_mode=debug_mode)
 
     @property
     def leaderboard_db(self):
@@ -208,6 +239,12 @@ class ClusterBot(commands.Bot):
             raise e
 
 
+async def start_api_only():
+    """Start only the FastAPI server without Discord bot."""
+    backend = create_backend(debug_mode=False)
+    await run_api_server(backend)
+
+
 async def start_bot_and_api(debug_mode: bool):
     token = env.DISCORD_DEBUG_TOKEN if debug_mode else env.DISCORD_TOKEN
 
@@ -217,43 +254,41 @@ async def start_bot_and_api(debug_mode: bool):
     bot_instance = ClusterBot(debug_mode=debug_mode)
 
     init_api(bot_instance.backend)
-    m = init_background_submission_manager(BackgroundSubmissionManager(bot_instance.backend))
-    # Start manager queue BEFORE serving requests
-    await m.start()
+    manager = init_background_submission_manager(BackgroundSubmissionManager(bot_instance.backend))
+    await manager.start()
 
-    config = uvicorn.Config(
-        app,
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT") or 8000),
-        log_level="info",
-        limit_concurrency=10,
-    )
-    server = uvicorn.Server(config)
+    server = create_uvicorn_server()
     try:
         await asyncio.gather(
             bot_instance.start_bot(token),
             server.serve(),
         )
     finally:
-        # graceful shutdown
-        await m.stop()
+        await manager.stop()
 
 def on_unhandled_exception(loop, context):
     logger.exception("Unhandled exception: %s", context["message"], exc_info=context["exception"])
 
 
 def main():
-    init_environment()
-
     parser = argparse.ArgumentParser(description="Run the Discord Cluster Bot")
     parser.add_argument("--debug", action="store_true", help="Run in debug/staging mode")
+    parser.add_argument("--api-only", action="store_true", help="Run API server only (no Discord)")
     args = parser.parse_args()
 
-    logger.info("Starting kernelbot and API server...")
+    # Initialize environment - skip Discord validation if api-only mode
+    init_environment(skip_discord=args.api_only)
 
-    with asyncio.Runner(debug=args.debug) as runner:
-        runner.get_loop().set_exception_handler(on_unhandled_exception)
-        runner.run(start_bot_and_api(args.debug))
+    if args.api_only:
+        logger.info("Starting API server only (no Discord bot)...")
+        with asyncio.Runner() as runner:
+            runner.get_loop().set_exception_handler(on_unhandled_exception)
+            runner.run(start_api_only())
+    else:
+        logger.info("Starting kernelbot and API server...")
+        with asyncio.Runner(debug=args.debug) as runner:
+            runner.get_loop().set_exception_handler(on_unhandled_exception)
+            runner.run(start_bot_and_api(args.debug))
 
 
 if __name__ == "__main__":
