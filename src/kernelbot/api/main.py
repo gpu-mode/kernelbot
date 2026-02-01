@@ -774,29 +774,29 @@ async def get_user_submission(
                 raise HTTPException(status_code=404, detail="Submission not found")
 
             # Verify ownership
-            if str(submission.user_id) != str(user_info["user_id"]):
+            if str(submission["user_id"]) != str(user_info["user_id"]):
                 raise HTTPException(status_code=403, detail="Not authorized to view this submission")
 
             return {
-                "id": submission.submission_id,
-                "leaderboard_id": submission.leaderboard_id,
-                "leaderboard_name": submission.leaderboard_name,
-                "file_name": submission.file_name,
-                "user_id": submission.user_id,
-                "submission_time": submission.submission_time,
-                "done": submission.done,
-                "code": submission.code,
+                "id": submission["submission_id"],
+                "leaderboard_id": submission["leaderboard_id"],
+                "leaderboard_name": submission["leaderboard_name"],
+                "file_name": submission["file_name"],
+                "user_id": submission["user_id"],
+                "submission_time": submission["submission_time"],
+                "done": submission["done"],
+                "code": submission["code"],
                 "runs": [
                     {
-                        "start_time": r.start_time,
-                        "end_time": r.end_time,
-                        "mode": r.mode,
-                        "secret": r.secret,
-                        "runner": r.runner,
-                        "score": r.score,
-                        "passed": r.passed,
+                        "start_time": r["start_time"],
+                        "end_time": r["end_time"],
+                        "mode": r["mode"],
+                        "secret": r["secret"],
+                        "runner": r["runner"],
+                        "score": r["score"],
+                        "passed": r["passed"],
                     }
-                    for r in submission.runs
+                    for r in submission["runs"]
                 ],
             }
     except HTTPException:
@@ -828,7 +828,7 @@ async def delete_user_submission(
                 raise HTTPException(status_code=404, detail="Submission not found")
 
             # Verify ownership
-            if str(submission.user_id) != str(user_info["user_id"]):
+            if str(submission["user_id"]) != str(user_info["user_id"]):
                 raise HTTPException(status_code=403, detail="Not authorized to delete this submission")
 
             db.delete_submission(submission_id)
