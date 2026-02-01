@@ -24,14 +24,6 @@ Run tests with pytest:
 uv run pytest tests/ -v
 ```
 
-Tests require a local PostgreSQL database. The test suite uses docker-compose to spin up a test database:
-
-```bash
-docker compose -f docker-compose.test.yml up -d
-uv run pytest tests/ -v
-docker compose -f docker-compose.test.yml down -v
-```
-
 ### Test Requirements
 
 When adding new functionality:
@@ -46,23 +38,19 @@ When adding new functionality:
 
 3. **Regression tests**: Use the popcorn-cli against a local instance to verify end-to-end functionality
 
-### Local Instance for E2E Testing
+### E2E Regression Testing
 
-Start a local development server:
+Start a local development server and test with popcorn-cli:
 
 ```bash
-# Start database and run migrations
-docker compose up -d
-
-# Run the API server
+# Run the API server locally
 uv run uvicorn src.kernelbot.api.main:app --reload --port 8000
-```
 
-Then test with popcorn-cli:
-
-```bash
+# Test CLI against local instance
 export POPCORN_API_URL=http://localhost:8000
 popcorn submissions list --leaderboard test-leaderboard
+popcorn submissions show 123
+popcorn submissions delete 123
 ```
 
 ## Before Adding New Features
