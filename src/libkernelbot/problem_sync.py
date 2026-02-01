@@ -75,7 +75,7 @@ def download_problem_repo(repository: str, branch: str, temp_dir: str) -> Path:
     # Download
     try:
         subprocess.check_call(
-            ["wget", "-q", "-O", f"{temp_dir}/problems.zip", url],
+            ["curl", "-sL", "-o", f"{temp_dir}/problems.zip", url],
             encoding="utf-8",
             timeout=60,
         )
