@@ -24,6 +24,7 @@ from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem
 from libkernelbot.task import LeaderboardDefinition, make_task_definition
 from libkernelbot.utils import (
     KernelBotError,
+    parse_deadline,
     setup_logging,
 )
 
@@ -217,17 +218,6 @@ class AdminCog(commands.Cog):
                 f"Leaderboard '{leaderboard_name}' created.",
             )
 
-    def _parse_deadline(self, deadline: str):
-        # Try parsing with time first
-        try:
-            return datetime.strptime(deadline, "%Y-%m-%d %H:%M")
-        except ValueError:
-            try:
-                return datetime.strptime(deadline, "%Y-%m-%d")
-            except ValueError as ve:
-                logger.error(f"Value Error: {str(ve)}", exc_info=True)
-        return None
-
     def _leaderboard_opening_message(
         self, leaderboard_name: str, deadline: datetime, description: str
     ):
@@ -254,7 +244,7 @@ class AdminCog(commands.Cog):
             )
             return
 
-        date_value = self._parse_deadline(deadline)
+        date_value = parse_deadline(deadline)
         if date_value is None:
             await send_discord_message(
                 interaction,
@@ -632,7 +622,7 @@ class AdminCog(commands.Cog):
 
                 # from the database, we get datetime with timezone,
                 # so we need to convert here to enable comparison
-                new_dl = self._parse_deadline(problem["deadline"])
+                new_dl = parse_deadline(problem["deadline"])
                 new_dl = new_dl.astimezone(timezone.utc)
                 if old["deadline"] != new_dl:
                     pass
@@ -749,7 +739,7 @@ class AdminCog(commands.Cog):
                 with self.bot.leaderboard_db as db:
                     task = make_task_definition(root / entry["directory"])
                     db.update_leaderboard(
-                        entry["name"], self._parse_deadline(entry["deadline"]), task
+                        entry["name"], parse_deadline(entry["deadline"]), task
                     )
                     new_lb: LeaderboardItem = db.get_leaderboard(entry["name"])
 

@@ -107,11 +107,13 @@ class LeaderboardDefinition:
     description: A description of the task.
     TODO use for a sticky message for the LBs channel
     templates: Template files for participants to download
+    gpus: List of GPU types this leaderboard supports (optional, for local dev)
     """
 
     task: LeaderboardTask
     description: str = ""
     templates: dict[str, str] = dataclasses.field(default_factory=dict)
+    gpus: list[str] = dataclasses.field(default_factory=list)
 
 
 def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noqa: C901
@@ -161,7 +163,11 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
         for benchmark in task.benchmarks:
             if "world_size" not in benchmark:
                 raise KernelBotError(f"multi-gpu benchmark {benchmark} does not specify world_size")
-    return LeaderboardDefinition(task=task, templates=templates, description=description)
+
+    # Read gpus if specified in task.yml
+    gpus = raw.get("gpus", [])
+
+    return LeaderboardDefinition(task=task, templates=templates, description=description, gpus=gpus)
 
 
 def build_task_config(
