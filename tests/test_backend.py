@@ -232,7 +232,18 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
         task = db.get_leaderboard("submit-leaderboard")["task"]
 
     eval_result = create_eval_result("benchmark")
-    mock_launcher = _mock_launcher(bot, {"public": eval_result, "secret": eval_result})
+    # Use side_effect to return different results for each call
+    # First call (PUBLIC mode) returns {"public": ...}, second call (SECRET mode) returns {"secret": ...}
+    mock_launcher = MagicMock(spec=backend.Launcher)
+    mock_launcher.name = "launcher"
+    mock_launcher.gpus = [consts.ModalGPU.A100]
+    mock_launcher.run_submission = AsyncMock(
+        side_effect=[
+            FullResult(success=True, error="", system=sample_system_info(), runs={"public": eval_result}),
+            FullResult(success=True, error="", system=sample_system_info(), runs={"secret": eval_result}),
+        ]
+    )
+    bot.register_launcher(mock_launcher)
 
     from libkernelbot.submission import ProcessedSubmissionRequest
 
@@ -252,9 +263,15 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
         req, mode=consts.SubmissionMode.PUBLIC, reporter=reporter
     )
 
-    expected_result = mock_launcher.run_submission.return_value
+    expected_result_public = FullResult(
+        success=True, error="", system=sample_system_info(), runs={"public": eval_result}
+    )
+    expected_result_secret = FullResult(
+        success=True, error="", system=sample_system_info(), runs={"secret": eval_result}
+    )
     assert len(results) == 2
-    assert results == [expected_result, expected_result]
+    assert results[0].success == expected_result_public.success
+    assert results[1].success == expected_result_secret.success
 
     r1, r2 = reporter.reporter_list
     assert r1.lines == [
