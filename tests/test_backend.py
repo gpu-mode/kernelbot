@@ -101,7 +101,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "benchmarks": [{"dtype": "float32", "input_size": 10000}],
         "lang": "py",
         "main": "kernel.py",
-        "mode": "leaderboard",
+        "mode": "public",
         "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
@@ -232,7 +232,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
         task = db.get_leaderboard("submit-leaderboard")["task"]
 
     eval_result = create_eval_result("benchmark")
-    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
+    mock_launcher = _mock_launcher(bot, {"public": eval_result})
 
     from libkernelbot.submission import ProcessedSubmissionRequest
 
@@ -300,7 +300,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "public",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
@@ -344,7 +344,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "public",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
