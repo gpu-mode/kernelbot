@@ -10,7 +10,7 @@ steps = [
     step(
         """
         ALTER TABLE leaderboard.leaderboard
-          ADD COLUMN status DEFAULT 'active',
+          ADD COLUMN status TEXT DEFAULT 'active',
           ADD COLUMN config JSONB;
         """,
         """
