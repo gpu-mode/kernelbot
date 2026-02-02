@@ -24,7 +24,7 @@ steps = [
     step(
         """
         ALTER TABLE leaderboard.runs
-          ADD COLUMN status TEXT DEFAULT 'active';
+          ADD COLUMN status TEXT DEFAULT 'pending';
         """,
         """
         ALTER TABLE leaderboard.runs
