@@ -12,11 +12,13 @@ steps = [
         ALTER TABLE leaderboard.leaderboard
           ADD COLUMN status TEXT DEFAULT 'active' NOT NULL,
           ADD COLUMN config JSONB,
+          ADD COLUMN start_at TIMESTAMPTZ;
           ADD COLUMN last_modified TIMESTAMPTZ;
         """,
         """
         ALTER TABLE leaderboard.leaderboard
           DROP COLUMN IF EXISTS last_modified,
+          DROP COLUMN IF EXISTS start_at,
           DROP COLUMN IF EXISTS config,
           DROP COLUMN IF EXISTS status;
         """
