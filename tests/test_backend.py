@@ -55,7 +55,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "pass",
         "submit.py",
         task,
-        consts.SubmissionMode.LEADERBOARD,
+        consts.SubmissionMode.PUBLIC,
         -1,
     )
 
@@ -64,7 +64,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "> ✅ Compilation successful",
         "> ✅ Testing successful",
         "> ❌ Benchmarks missing",
-        "> ❌ Leaderboard missing",
+        "> ❌ Ranked submission missing",
     ]
 
     call_args = reporter.display_report.call_args[0]
@@ -130,7 +130,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
             submit_time,
         )
     eval_result = create_eval_result("benchmark")
-    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
+    mock_launcher = _mock_launcher(bot, {"secret": eval_result})
 
     reporter = MockProgressReporter("report")
 
@@ -141,7 +141,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
         consts.ModalGPU.A100,
         reporter,
         task,
-        consts.SubmissionMode.LEADERBOARD,
+        consts.SubmissionMode.SECRET,
         seed=1337,
     )
 
@@ -155,7 +155,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
         "benchmarks": [{"dtype": "float32", "input_size": 10000}],
         "lang": "py",
         "main": "kernel.py",
-        "mode": "leaderboard",
+        "mode": "secret",
         "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
@@ -193,7 +193,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "secret",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
@@ -206,7 +206,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                     },
                     "runner": "A100",
                     "score": Decimal("1.5e-9"),
-                    "secret": False,
+                    "secret": True,
                     "start_time": eval_result.start.replace(tzinfo=datetime.timezone.utc),
                     "system": {
                         "cpu": "Intel i9-12900K",
@@ -249,7 +249,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
     )
     reporter = MockMultReporter()
     s_id, results = await bot.submit_full(
-        req, mode=consts.SubmissionMode.LEADERBOARD, reporter=reporter
+        req, mode=consts.SubmissionMode.PUBLIC, reporter=reporter
     )
 
     expected_result = mock_launcher.run_submission.return_value
@@ -261,13 +261,13 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
         "> ✅ Compilation successful",
         "> ❌ Tests missing",
         "> ❌ Benchmarks missing",
-        "> ✅ Leaderboard run successful",
+        "> ✅ Ranked submission successful",
     ]
     assert r2.lines == [
         "> ✅ Compilation successful",
         "> ❌ Tests missing",
         "> ❌ Benchmarks missing",
-        "> ✅ Leaderboard run successful",
+        "> ✅ Ranked submission successful",
     ]
     assert r1.title == "A100 on Modal ✅ success"
     assert r2.title == "A100 on Modal (secret) ✅ success"

@@ -169,8 +169,8 @@ def _get_popcorn_directives(submission: str) -> dict:  # noqa: C901
     return popcorn_info
 
 
-def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int) -> float:
-    num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
+def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int, mode_key: str = "public") -> float:
+    num_benchmarks = int(result.runs[mode_key].run.result["benchmark-count"])
     if task.ranking_by == RankCriterion.LAST:
         if num_benchmarks != 1:
             logger.error(
@@ -182,11 +182,11 @@ def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int)
             raise KernelBotError(
                 f"Expected submission to have exactly one benchmark, got {num_benchmarks}."
             )
-        score = float(result.runs["leaderboard"].run.result["benchmark.0.mean"]) / 1e9
+        score = float(result.runs[mode_key].run.result["benchmark.0.mean"]) / 1e9
     else:
         scores = []
         for i in range(num_benchmarks):
-            scores.append(float(result.runs["leaderboard"].run.result[f"benchmark.{i}.mean"]) / 1e9)
+            scores.append(float(result.runs[mode_key].run.result[f"benchmark.{i}.mean"]) / 1e9)
         if task.ranking_by == RankCriterion.MEAN:
             score = sum(scores) / len(scores)
         elif task.ranking_by == RankCriterion.GEOM:

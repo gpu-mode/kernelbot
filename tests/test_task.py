@@ -126,7 +126,7 @@ def test_build_task_config_python(leaderboard_task):
     """Test build_task_config with Python task and submission content."""
     submission_content = "print('Hello World')"
     arch = "sm_80"
-    mode = SubmissionMode.BENCHMARK
+    mode = SubmissionMode.PRIVATE
 
     result = build_task_config(
         task=leaderboard_task, submission_content=submission_content, arch=arch, mode=mode
@@ -164,7 +164,7 @@ def test_build_task_config_cuda():
     """Test build_task_config with CUDA task and submission content."""
     submission_content = "print('Hello World')"
     arch = "sm_80"
-    mode = SubmissionMode.BENCHMARK
+    mode = SubmissionMode.PRIVATE
     task = LeaderboardTask(
         lang=Language.CUDA,
         files={"test.cu": "code", "submission.cu": "@SUBMISSION@", "test.cuh": "header"},

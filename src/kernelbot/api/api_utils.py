@@ -213,9 +213,9 @@ async def to_submit_info(
 
     allowed_modes = [
         SubmissionMode.TEST,
-        SubmissionMode.BENCHMARK,
+        SubmissionMode.PRIVATE,
         SubmissionMode.PROFILE,
-        SubmissionMode.LEADERBOARD,
+        SubmissionMode.PUBLIC,
     ]
     if submission_mode_enum not in allowed_modes:
         raise HTTPException(
