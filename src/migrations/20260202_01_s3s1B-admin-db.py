@@ -10,7 +10,7 @@ steps = [
     step(
         """
         ALTER TABLE leaderboard.leaderboard
-          ADD COLUMN status TEXT DEFAULT 'active',
+          ADD COLUMN status TEXT DEFAULT 'active' NOT NULL,
           ADD COLUMN config JSONB,
           ADD COLUMN last_modified TIMESTAMPTZ;
         """,
@@ -24,7 +24,7 @@ steps = [
     step(
         """
         ALTER TABLE leaderboard.runs
-          ADD COLUMN status TEXT DEFAULT 'pending';
+          ADD COLUMN status TEXT DEFAULT 'active' NOT NULL;
         """,
         """
         ALTER TABLE leaderboard.runs
