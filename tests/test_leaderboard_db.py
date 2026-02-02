@@ -738,3 +738,40 @@ def test_get_user_submissions_pagination(database, submit_leaderboard):
         assert len(result_offset) == 2
         assert result_offset[0]["id"] == result_all[2]["id"]
 
+
+def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
+    """Test get_user_submissions returns all runs per submission"""
+    with database as db:
+        # Create a submission
+        sub1 = db.create_submission(
+            "submit-leaderboard",
+            "multi_run.py",
+            5,
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+
+        # Add multiple runs on different GPUs
+        _create_submission_run(db, sub1, runner="A100", score=1.5, secret=False)
+        _create_submission_run(db, sub1, runner="H100", score=2.0, secret=False)
+        db.mark_submission_done(sub1)
+
+        # Get submissions
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 1
+
+        # Verify runs list contains both runs
+        submission = result[0]
+        assert "runs" in submission
+        assert len(submission["runs"]) == 2
+
+        # Verify run data
+        gpu_types = {r["gpu_type"] for r in submission["runs"]}
+        assert "A100" in gpu_types
+        assert "H100" in gpu_types
+
+        scores = {r["score"] for r in submission["runs"]}
+        assert 1.5 in scores
+        assert 2.0 in scores
+
