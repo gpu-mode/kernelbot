@@ -865,62 +865,66 @@ class LeaderboardDB:
             offset: Offset for pagination
 
         Returns:
-            List of submission dictionaries with summary info
+            List of submission dictionaries with summary info and runs
         """
         # Validate and clamp inputs
         limit = max(1, min(limit, 100))
         offset = max(0, offset)
 
         try:
-            if leaderboard_name:
-                query = """
-                    SELECT DISTINCT ON (s.id)
-                        s.id,
-                        lb.name as leaderboard_name,
-                        s.file_name,
-                        s.submission_time,
-                        s.done,
-                        r.runner as gpu_type,
-                        r.score
-                    FROM leaderboard.submission s
-                    JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
-                    LEFT JOIN leaderboard.runs r ON r.submission_id = s.id
-                        AND NOT r.secret AND r.passed
-                    WHERE s.user_id = %s AND lb.name = %s
-                    ORDER BY s.id, s.submission_time DESC
-                    LIMIT %s OFFSET %s
-                """
-                self.cursor.execute(query, (user_id, leaderboard_name, limit, offset))
-            else:
-                query = """
-                    SELECT DISTINCT ON (s.id)
-                        s.id,
-                        lb.name as leaderboard_name,
-                        s.file_name,
-                        s.submission_time,
-                        s.done,
-                        r.runner as gpu_type,
-                        r.score
-                    FROM leaderboard.submission s
-                    JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
-                    LEFT JOIN leaderboard.runs r ON r.submission_id = s.id
-                        AND NOT r.secret AND r.passed
-                    WHERE s.user_id = %s
-                    ORDER BY s.id, s.submission_time DESC
-                    LIMIT %s OFFSET %s
-                """
-                self.cursor.execute(query, (user_id, limit, offset))
+            # Build query with conditional WHERE clause
+            where_clause = "WHERE s.user_id = %s"
+            params: list = [user_id]
 
+            if leaderboard_name:
+                where_clause += " AND lb.name = %s"
+                params.append(leaderboard_name)
+
+            # First, get distinct submissions
+            submission_query = f"""
+                SELECT s.id, lb.name as leaderboard_name, s.file_name,
+                       s.submission_time, s.done
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                {where_clause}
+                ORDER BY s.submission_time DESC
+                LIMIT %s OFFSET %s
+            """
+            self.cursor.execute(submission_query, params + [limit, offset])
+            submissions = self.cursor.fetchall()
+
+            if not submissions:
+                return []
+
+            # Get all runs for these submissions
+            submission_ids = [row[0] for row in submissions]
+            runs_query = """
+                SELECT submission_id, runner as gpu_type, score
+                FROM leaderboard.runs
+                WHERE submission_id = ANY(%s) AND NOT secret AND passed
+            """
+            self.cursor.execute(runs_query, (submission_ids,))
+            runs_by_submission: dict = {}
+            for run_row in self.cursor.fetchall():
+                sub_id = run_row[0]
+                if sub_id not in runs_by_submission:
+                    runs_by_submission[sub_id] = []
+                runs_by_submission[sub_id].append({
+                    "gpu_type": run_row[1],
+                    "score": run_row[2],
+                })
+
+            # Build result with runs grouped by submission
             results = []
-            for row in self.cursor.fetchall():
+            for row in submissions:
+                sub_id = row[0]
                 results.append({
-                    "id": row[0],
+                    "id": sub_id,
                     "leaderboard_name": row[1],
                     "file_name": row[2],
                     "submission_time": row[3],
                     "done": row[4],
-                    "gpu_type": row[5],
-                    "score": row[6],
+                    "runs": runs_by_submission.get(sub_id, []),
                 })
             return results
         except psycopg2.Error as e:
