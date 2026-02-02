@@ -6,6 +6,8 @@ from yoyo import step
 
 __depends__ = {'20260108_01_gzSm3-add-submission-status'}
 
+from yoyo import step
+
 steps = [
     step(
         """
@@ -26,10 +28,12 @@ steps = [
     step(
         """
         ALTER TABLE leaderboard.runs
-          ADD COLUMN status TEXT DEFAULT 'active' NOT NULL;
+          ADD COLUMN status TEXT DEFAULT 'active' NOT NULL,
+          ADD COLUMN group_id TEXT;
         """,
         """
         ALTER TABLE leaderboard.runs
+          DROP COLUMN IF EXISTS group_id,
           DROP COLUMN IF EXISTS status;
         """
     ),
