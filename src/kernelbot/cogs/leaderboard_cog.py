@@ -64,7 +64,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         for run in sub_data["runs"]:
             if (
                 not run["secret"]
-                and run["mode"] == SubmissionMode.LEADERBOARD.value
+                and run["mode"] == SubmissionMode.PUBLIC.value
                 and run["passed"]
             ):
                 result_lines.append(generate_run_verdict(self.bot.backend, run, sub_data))
@@ -134,7 +134,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         reporter = MultiProgressReporterDiscord(interaction)
         sub_id, results = await self.bot.backend.submit_full(req, mode, reporter)
 
-        if mode == SubmissionMode.LEADERBOARD:
+        if mode == SubmissionMode.PUBLIC:
             await self.post_submit_hook(interaction, sub_id)
         return sub_id
 
@@ -157,7 +157,7 @@ class LeaderboardSubmitCog(app_commands.Group):
             interaction, leaderboard_name, script, mode=SubmissionMode.TEST, gpu=gpu
         )
 
-    @app_commands.command(name="benchmark", description="Start a benchmarking run")
+    @app_commands.command(name="private", description="Start a private benchmarking run")
     @app_commands.describe(
         leaderboard_name="Name of the competition / kernel to optimize",
         script="The Python / CUDA script file to run",
@@ -165,7 +165,7 @@ class LeaderboardSubmitCog(app_commands.Group):
     )
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     @with_error_handling
-    async def submit_bench(
+    async def submit_private(
         self,
         interaction: discord.Interaction,
         script: discord.Attachment,
@@ -173,7 +173,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         gpu: Optional[str],
     ):
         return await self.submit(
-            interaction, leaderboard_name, script, mode=SubmissionMode.BENCHMARK, gpu=gpu
+            interaction, leaderboard_name, script, mode=SubmissionMode.PRIVATE, gpu=gpu
         )
 
     @app_commands.command(name="profile", description="Start a profiling run")
@@ -196,7 +196,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         )
 
     @app_commands.command(
-        name="ranked", description="Start a ranked run for an official leaderboard submission"
+        name="public", description="Start a public run for an official leaderboard submission"
     )
     @app_commands.describe(
         leaderboard_name="Name of the competition / kernel to optimize",
@@ -205,7 +205,7 @@ class LeaderboardSubmitCog(app_commands.Group):
     )
     @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     @with_error_handling
-    async def submit_ranked(
+    async def submit_public(
         self,
         interaction: discord.Interaction,
         script: discord.Attachment,
@@ -213,7 +213,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         gpu: Optional[str] = None,
     ):
         return await self.submit(
-            interaction, leaderboard_name, script, mode=SubmissionMode.LEADERBOARD, gpu=gpu
+            interaction, leaderboard_name, script, mode=SubmissionMode.PUBLIC, gpu=gpu
         )
 
 

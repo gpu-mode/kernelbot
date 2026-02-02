@@ -265,7 +265,7 @@ async def test_modal_multi_gpu_benchmark(
         task=task_definition.task,
         submission_content=submission_content,
         arch=GPU_TO_SM[ModalGPU.L4x4.name],
-        mode=SubmissionMode.BENCHMARK,
+        mode=SubmissionMode.PRIVATE,
     )
 
     result = await launcher.run_submission(config, ModalGPU.L4x4, reporter)
@@ -280,8 +280,8 @@ async def test_modal_multi_gpu_benchmark(
     assert result.system.device_count == 4
 
     # Test run structure
-    assert "benchmark" in result.runs
-    bench_run = result.runs["benchmark"]
+    assert "private" in result.runs
+    bench_run = result.runs["private"]
 
     # For Python runs, compilation is None
     assert bench_run.compilation is None
@@ -317,7 +317,7 @@ async def test_modal_launcher_failing_script(modal_deployment, project_root: Pat
         task=task_definition.task,
         submission_content=submission_content,
         arch=GPU_TO_SM[gpu_type.name],
-        mode=SubmissionMode.LEADERBOARD,
+        mode=SubmissionMode.PUBLIC,
     )
 
     result = await launcher.run_submission(config, gpu_type, reporter)
@@ -325,4 +325,4 @@ async def test_modal_launcher_failing_script(modal_deployment, project_root: Pat
     # Basic structure and success
     assert result.success, f"Expected successful run, got: {result.error}"
     assert result.error == ""
-    assert result.runs["test"].run.passed is False or result.runs["benchmark"].run.passed is False
+    assert result.runs["test"].run.passed is False or result.runs["private"].run.passed is False

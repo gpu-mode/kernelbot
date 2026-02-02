@@ -86,7 +86,7 @@ class KernelBackend:
                 for gpu in selected_gpus
             ]
 
-            if mode == SubmissionMode.LEADERBOARD:
+            if mode == SubmissionMode.PUBLIC:
                 tasks += [
                     self.submit_leaderboard(
                         sub_id,
@@ -95,7 +95,7 @@ class KernelBackend:
                         gpu,
                         reporter.add_run(f"{gpu.name} on {gpu.runner} (secret)"),
                         req.task,
-                        SubmissionMode.PRIVATE,
+                        SubmissionMode.SECRET,
                         req.secret_seed,
                     )
                     for gpu in selected_gpus
@@ -142,12 +142,14 @@ class KernelBackend:
 
         if result.success:
             score = None
+            # Check for the mode's result key (public or secret)
+            mode_key = mode.value
             if (
-                "leaderboard" in result.runs
-                and result.runs["leaderboard"].run.success
-                and result.runs["leaderboard"].run.passed
+                mode_key in result.runs
+                and result.runs[mode_key].run.success
+                and result.runs[mode_key].run.passed
             ):
-                score = compute_score(result, task, submission_id)
+                score = compute_score(result, task, submission_id, mode_key)
 
             # verifyruns uses a fake submission id of -1
             if submission_id != -1:
@@ -159,8 +161,8 @@ class KernelBackend:
                             end=value.end,
                             mode=key,
                             runner=gpu_type.name,
-                            score=None if key != "leaderboard" else score,
-                            secret=mode == SubmissionMode.PRIVATE,
+                            score=None if key != mode_key else score,
+                            secret=mode == SubmissionMode.SECRET,
                             compilation=value.compilation,
                             result=value.run,
                             system=result.system,
@@ -207,7 +209,7 @@ class KernelBackend:
             await reporter.update_title(reporter.title + " ✅ success")
 
         short_report = make_short_report(
-            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
+            result.runs, full=mode in [SubmissionMode.PUBLIC, SubmissionMode.SECRET]
         )
 
         stream_msg = (
@@ -222,7 +224,7 @@ class KernelBackend:
         )
 
         await reporter.push(short_report)
-        if mode != SubmissionMode.PRIVATE:
+        if mode != SubmissionMode.SECRET:
             try:
                 # does the last message of the short report start with ✅ or ❌?
                 verdict = short_report[-1][0]
