@@ -17,7 +17,6 @@ steps = [
         """
         ALTER TABLE leaderboard.leaderboard
           DROP COLUMN IF EXISTS last_modified,
-          DROP COLUMN IF EXISTS start_time,
           DROP COLUMN IF EXISTS config,
           DROP COLUMN IF EXISTS status;
         """
