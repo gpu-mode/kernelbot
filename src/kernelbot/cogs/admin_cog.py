@@ -1,3 +1,4 @@
+import io
 import json
 import subprocess
 import tempfile
@@ -102,6 +103,10 @@ class AdminCog(commands.Cog):
         self.show_bot_stats = bot.admin_group.command(
             name="show-stats", description="Show stats for the kernelbot"
         )(self.show_bot_stats)
+
+        self.show_timing_correlation = bot.admin_group.command(
+            name="show-timing-correlation", description="Show correlation between public and private run timings"
+        )(self.show_timing_correlation)
 
         self.resync = bot.admin_group.command(
             name="resync", description="Trigger re-synchronization of slash commands"
@@ -782,6 +787,67 @@ class AdminCog(commands.Cog):
                 msg += f"\n{k} = {v}"
             msg += "\n```"
             await send_discord_message(interaction, msg, ephemeral=True)
+
+    @with_error_handling
+    @discord.app_commands.describe(leaderboard="Which leaderboard")
+    @discord.app_commands.autocomplete(leaderboard=leaderboard_name_autocomplete)
+    async def show_timing_correlation(self, interaction: discord.Interaction, leaderboard: str):
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to have Admin permissions to run this command",
+                ephemeral=True,
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            stats = db.generate_correlation_stats(leaderboard)
+
+            if len(stats) == 0:
+                await send_discord_message(
+                    interaction,
+                    f"No ranked runs (with matching public/secret scores) found for leaderboard {leaderboard}.")
+                return
+
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            files = []
+            for runner, pairs in stats.items():
+                public_scores, secret_scores = zip(*pairs)
+
+                plt.figure(figsize=(8, 6))
+                plt.scatter(public_scores, secret_scores, alpha=0.6)
+
+                # Diagonal reference line
+                min_val = min(min(public_scores), min(secret_scores))
+                max_val = max(max(public_scores), max(secret_scores))
+                plt.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5, label='y=x')
+
+                # Calculate correlation
+                corr = np.corrcoef(public_scores, secret_scores)[0, 1]
+
+                plt.xlabel('Public Score')
+                plt.ylabel('Secret Score')
+                plt.title(f'{leaderboard} on {runner} - Correlation: {corr:.3f}')
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+
+                plt.tight_layout()
+
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png', dpi=150)
+                buf.seek(0)
+
+                files.append(discord.File(buf, filename=f'correlation_{runner}.png'))
+                plt.close()
+
+            await send_discord_message(
+                interaction,
+                "Correlation of running times for public and private runs",
+                files=files,
+                ephemeral=True)
 
     @with_error_handling
     async def resync(self, interaction: discord.Interaction):

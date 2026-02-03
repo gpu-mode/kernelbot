@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import json
+from collections import defaultdict
 from typing import Dict, List, Optional
 
 import psycopg2
@@ -811,6 +812,50 @@ class LeaderboardDB:
                 result[f"total.{row[0]}"] = row[1]
 
         return result
+
+    def generate_correlation_stats(self, leaderboard_name: str) -> dict[str, list]:
+        query = """
+        SELECT
+            s.id,
+            r.score,
+            r.runner,
+            r.secret
+        FROM leaderboard.runs r
+        JOIN leaderboard.submission s ON r.submission_id = s.id
+        JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+        WHERE
+            l.name = %s
+            AND r.score IS NOT NULL
+            AND r.passed
+        """
+
+        self.cursor.execute(query, (leaderboard_name,))
+
+        matches = defaultdict(list)
+        for run in self.cursor.fetchall():
+            id, score, runner, secret = run
+            matches[(id, runner)].append((float(score), secret))
+
+        results = defaultdict(list)
+        for entry, values in matches.items():
+            if len(values) != 2:
+                continue
+            secret = None
+            public = None
+            if values[0][1]:
+                secret = values[0][0]
+            else:
+                public = values[0][0]
+
+            if values[1][1]:
+                secret = values[1][0]
+            else:
+                public = values[1][0]
+
+            if secret is not None and public is not None:
+                results[entry[1]].append((public, secret))
+
+        return results
 
     def get_user_from_id(self, id: str) -> Optional[str]:
         try:
