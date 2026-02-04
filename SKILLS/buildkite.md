@@ -252,6 +252,57 @@ If you see version conflicts:
 sudo apt-get install -y nvidia-container-toolkit=1.18.1-1 nvidia-container-toolkit-base=1.18.1-1
 ```
 
+### Agent fails with "Missing build-path"
+
+The config file needs `build-path` set:
+
+```bash
+sudo nano /etc/buildkite-agent/buildkite-agent.cfg
+```
+
+Add this line:
+```
+build-path="/var/lib/buildkite-agent/builds"
+```
+
+Then:
+```bash
+sudo mkdir -p /var/lib/buildkite-agent/builds
+sudo chown buildkite-agent:buildkite-agent /var/lib/buildkite-agent/builds
+sudo systemctl restart buildkite-agent
+```
+
+### Agent not appearing - "Could not find queue"
+
+You must create the queue in Buildkite web UI:
+1. Go to **Agents** tab → **Default cluster** → **Queues**
+2. Click **New Queue**
+3. Enter queue name (e.g., `test`)
+4. Select **Self hosted**
+5. Click **Create Queue**
+
+### Jobs run on hosted agents instead of self-hosted
+
+Make sure your pipeline steps include the queue:
+
+```yaml
+steps:
+  - label: ":rocket: Test Job"
+    command: "nvidia-smi"
+    agents:
+      queue: "test"  # This is required!
+```
+
+Without `agents: queue:`, Buildkite uses hosted runners by default.
+
+### Git clone fails with "Permission denied (publickey)"
+
+The buildkite-agent user doesn't have SSH keys for GitHub. Fix by using HTTPS:
+
+```bash
+cd /tmp && sudo -u buildkite-agent git config --global url."https://github.com/".insteadOf "git@github.com:"
+```
+
 ## Resource Isolation
 
 | Resource | Method | Enforcement |
