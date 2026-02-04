@@ -1,0 +1,49 @@
+# Kernelbot Evaluation Pipeline
+# Jobs target specific GPU queue, Buildkite routes to idle agent
+
+steps:
+  - label: ":rocket: Kernel Evaluation"
+    command: "python /app/src/runners/buildkite-runner.py"
+
+    # Queue is set dynamically via KERNELBOT_QUEUE env var
+    agents:
+      queue: "${KERNELBOT_QUEUE}"
+
+    plugins:
+      - docker#v5.11.0:
+          image: "${KERNELBOT_IMAGE:-ghcr.io/gpu-mode/kernelbot:latest}"
+          always-pull: true
+          runtime: nvidia
+          # GPU isolation - agent exports NVIDIA_VISIBLE_DEVICES
+          propagate-environment: true
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+            - KERNELBOT_PAYLOAD
+            - KERNELBOT_RUN_ID
+            - KERNELBOT_GPU_INDEX
+            - KERNELBOT_CPUSET
+            - KERNELBOT_MEMORY
+          # Resource constraints
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+          # Mount for caching
+          volumes:
+            - "/var/lib/buildkite-agent/cache:/cache:rw"
+          # Cleanup
+          leave-container: false
+
+    timeout_in_minutes: 15
+
+    # Artifacts
+    artifact_paths:
+      - "result.json"
+      - "profile_data/**/*"
+
+    # Retry on infrastructure failures only
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 255
+          limit: 1
