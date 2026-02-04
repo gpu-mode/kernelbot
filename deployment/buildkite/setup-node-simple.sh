@@ -48,6 +48,7 @@ mkdir -p /var/lib/buildkite-agent/builds
 chown -R buildkite-agent:buildkite-agent /var/lib/buildkite-agent
 
 # === CONFIGURE GIT TO USE HTTPS ===
+cd /tmp
 sudo -u buildkite-agent git config --global url."https://github.com/".insteadOf "git@github.com:"
 
 # === CREATE AGENT FOR EACH GPU ===
