@@ -296,9 +296,19 @@ class BuildkiteLauncher(Launcher):
             for artifact in artifacts:
                 if artifact.get("filename") == "result.json":
                     download_url = artifact.get("download_url")
-                    result_resp = await client.get(download_url)
-                    result_resp.raise_for_status()
-                    return result_resp.json()
+                    # Buildkite returns a 302 redirect to S3
+                    # We need to follow it without the auth header
+                    result_resp = await client.get(download_url, follow_redirects=False)
+                    if result_resp.status_code == 302:
+                        # Get the redirect URL and fetch without auth
+                        s3_url = result_resp.headers.get("location")
+                        async with httpx.AsyncClient(timeout=30.0) as s3_client:
+                            result_resp = await s3_client.get(s3_url)
+                            result_resp.raise_for_status()
+                            return result_resp.json()
+                    else:
+                        result_resp.raise_for_status()
+                        return result_resp.json()
         except Exception as e:
             logger.error(f"Failed to download artifacts: {e}")
 
