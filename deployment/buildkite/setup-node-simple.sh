@@ -64,6 +64,7 @@ done
 # === CREATE DIRECTORIES ===
 echo "Creating directories..."
 mkdir -p /var/lib/buildkite-agent/builds
+mkdir -p /var/lib/buildkite-agent/plugins
 mkdir -p /etc/buildkite-agent/hooks
 chown -R buildkite-agent:buildkite-agent /var/lib/buildkite-agent
 chown -R buildkite-agent:buildkite-agent /etc/buildkite-agent
@@ -138,6 +139,7 @@ name="${agent_name}"
 tags="queue=${GPU_TYPE},gpu=${GPU_TYPE},gpu-index=${gpu_idx},node=${NODE_NAME}"
 build-path="${build_dir}"
 hooks-path="/etc/buildkite-agent/hooks"
+plugins-path="/var/lib/buildkite-agent/plugins"
 EOF
     chown buildkite-agent:buildkite-agent "${config_file}"
 
