@@ -839,6 +839,24 @@ retry:
 - Network isolation (Docker bridge)
 - Result validation before storing
 
+### 8. Organization & Billing
+
+**Current State**: Running under personal `mark-saroufim` Buildkite org.
+
+**Limitations**:
+- **Not production-ready**: Personal org has limited visibility/access controls
+- **Billing unclear**: Need to understand Buildkite pricing for self-hosted agents
+  - Self-hosted agents are free, but there may be limits on concurrent builds
+  - Artifact storage (S3) costs depend on volume
+- **Access management**: Personal org doesn't support team-based permissions
+
+**TODO before production**:
+- [ ] Create official `gpu-mode` Buildkite organization
+- [ ] Understand billing model for high-volume usage
+- [ ] Set up proper team access controls
+- [ ] Configure SSO/SAML if needed
+- [ ] Review artifact retention policies and costs
+
 ---
 
 ## Future Improvements
