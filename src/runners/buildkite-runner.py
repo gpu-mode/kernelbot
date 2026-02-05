@@ -29,8 +29,13 @@ def main():
     print()
 
     if not payload_b64:
-        print("ERROR: KERNELBOT_PAYLOAD not set", file=sys.stderr)
-        sys.exit(1)
+        # No payload means this was triggered by push/PR, not API
+        # Exit gracefully so CI doesn't fail
+        print("KERNELBOT_PAYLOAD not set - this build was triggered by push/PR, not API.")
+        print("Skipping evaluation. To run an evaluation, trigger via BuildkiteLauncher API.")
+        print()
+        print("=== Skipped (no payload) ===")
+        sys.exit(0)
 
     # Decode payload
     try:
