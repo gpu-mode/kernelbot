@@ -200,7 +200,7 @@ BUILDKITE_API_TOKEN=<api-token> uv run python tests/e2e_buildkite_test.py --queu
 
 Options:
 - `--queue <name>`: Target queue (default: test)
-- `--org <slug>`: Buildkite org (default: gpu-mode)
+- `--org <slug>`: Buildkite org (default: mark-saroufim)
 - `--pipeline <slug>`: Pipeline name (default: kernelbot)
 - `--dry-run`: Print config without submitting
 
@@ -244,7 +244,7 @@ These are set in Heroku config vars or your `.env` file:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `BUILDKITE_API_TOKEN` | Yes | API token for submitting jobs and downloading artifacts. Get from Buildkite → Personal Settings → API Access Tokens |
-| `BUILDKITE_ORG` | No | Organization slug (default: `gpu-mode`) |
+| `BUILDKITE_ORG` | No | Organization slug (default: `mark-saroufim`) |
 | `BUILDKITE_PIPELINE` | No | Pipeline slug (default: `kernelbot`) |
 
 **API Token Permissions Required:**
@@ -659,3 +659,194 @@ git clone --depth 1 --branch buildkite-infrastructure https://github.com/gpu-mod
 ```
 
 Once merged to `main`, update the pipeline config to use `main` branch.
+
+## E2E Testing with Database
+
+A comprehensive end-to-end test script is available that:
+1. Creates a test leaderboard in the database
+2. Submits a real kernel evaluation to Buildkite
+3. Stores results in PostgreSQL
+4. Verifies data integrity
+
+### Running E2E Tests
+
+```bash
+# Test mode (correctness only)
+BUILDKITE_API_TOKEN=xxx uv run python scripts/e2e_buildkite_with_db.py \
+  --org mark-saroufim --queue test
+
+# Leaderboard mode (with benchmarks and scoring)
+BUILDKITE_API_TOKEN=xxx uv run python scripts/e2e_buildkite_with_db.py \
+  --org mark-saroufim --queue test --mode leaderboard
+
+# With cleanup (delete test leaderboard after)
+BUILDKITE_API_TOKEN=xxx uv run python scripts/e2e_buildkite_with_db.py \
+  --org mark-saroufim --queue test --mode leaderboard --cleanup
+```
+
+### Verified Working (2026-02-04)
+
+| Mode | Status | Details |
+|------|--------|---------|
+| Test | ✅ | 5 tests passed, ~3.4s duration |
+| Benchmark | ✅ | 30 runs, 4.07ms mean |
+| Leaderboard | ✅ | Score computed and stored |
+| Database | ✅ | All runs stored with system info |
+
+---
+
+## Known Limitations & Review Notes
+
+This section documents known limitations and tradeoffs for code reviewers.
+
+### 1. Cold Start Overhead
+
+**Problem**: Each job incurs significant startup overhead:
+
+| Phase | Time | Notes |
+|-------|------|-------|
+| Docker pull | 10-30s | First run only if image not cached |
+| Container start | 2-5s | Includes cgroup setup |
+| Python imports | 5-10s | PyTorch, Triton, etc. |
+| Code clone | 3-5s | If using runtime install |
+| **Total cold start** | **20-50s** | Varies by image caching |
+
+**Current Approach**: We use a pre-built Docker image (`ghcr.io/gpu-mode/kernelbot:latest`) with dependencies baked in. This reduces cold start to ~10-15s after first pull.
+
+### 2. Dependency Installation Tradeoffs
+
+There are two operational models with different tradeoffs:
+
+#### Option A: Pre-Built Image (Current Default)
+```yaml
+image: "ghcr.io/gpu-mode/kernelbot:latest"
+```
+- **Pros**: Fast cold starts (~5-10s), consistent environment
+- **Cons**: Must rebuild image for dependency changes, requires image registry
+- **When to rebuild**: PyTorch version change, new packages, security updates
+
+#### Option B: Runtime Installation
+```yaml
+image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+command: |
+  pip install torch triton numpy
+  python eval.py
+```
+- **Pros**: Always latest dependencies, no image maintenance
+- **Cons**: Slow cold starts (~40-60s), network dependency, version drift
+- **Use when**: Testing new dependencies, development
+
+#### Option C: Cached Dependencies on Host
+```yaml
+volumes:
+  - "/var/lib/buildkite-agent/cache/pip:/root/.cache/pip:rw"
+```
+- **Pros**: Fast after first run, no image rebuild needed
+- **Cons**: Cache invalidation complexity, disk usage, per-node setup
+- **Use when**: Frequent dependency changes, limited registry access
+
+**Recommendation**: Use Option A (pre-built image) for production. Use Option B for development/testing new dependencies.
+
+### 3. GPU Isolation Limitations
+
+**Current Isolation Model**:
+- GPU isolation via `NVIDIA_VISIBLE_DEVICES` environment variable
+- CPU isolation via Docker `--cpuset-cpus`
+- Memory isolation via Docker `--memory`
+
+**Known Gaps**:
+
+| Resource | Isolation Level | Notes |
+|----------|-----------------|-------|
+| GPU Compute | ✅ Strong | Only assigned GPU visible |
+| GPU Memory | ⚠️ Partial | Other processes could exhaust VRAM if running |
+| PCIe Bandwidth | ❌ None | Shared across all GPUs |
+| NVLink | ❌ None | If present, shared |
+| CPU Cache | ⚠️ Partial | L3 cache shared across cores |
+| Network | ⚠️ Partial | Docker bridge, but shared bandwidth |
+| Disk I/O | ❌ None | Shared unless using separate volumes |
+
+**Potential Issues**:
+- **Noisy neighbor**: One job could impact another via shared resources
+- **VRAM exhaustion**: If host processes use GPU memory
+- **Timing variability**: Benchmark results may vary due to shared resources
+
+**Mitigations**:
+- Run one agent per GPU (current approach)
+- Use dedicated benchmark nodes for competition scoring
+- Monitor for outlier results
+
+### 4. Artifact Handling
+
+**Current Flow**:
+1. Job writes `result.json` to working directory
+2. Buildkite agent uploads to S3
+3. Backend downloads via Buildkite API (302 redirect to S3)
+
+**Limitations**:
+- **Size limit**: ~100MB per artifact (Buildkite limit)
+- **Retention**: 6 months by default
+- **Download latency**: 1-2s for small files, more for large profiles
+
+### 5. Queue Management
+
+**Current Model**: One queue per GPU type (e.g., `b200`, `h100`, `mi300`)
+
+**Limitations**:
+- No priority queuing (FIFO only)
+- No job preemption
+- No fair-share scheduling between users
+- Queue depth visibility requires API calls
+
+**Potential Improvements**:
+- Implement priority via build metadata
+- Add rate limiting per user
+- Create admin queue for verification runs
+
+### 6. Error Handling
+
+**Automatic Retries**:
+```yaml
+retry:
+  automatic:
+    - exit_status: -1   # Infrastructure failure
+      limit: 2
+    - exit_status: 255  # Agent disconnect
+      limit: 1
+```
+
+**Not Automatically Retried**:
+- Compilation errors (user code issue)
+- Test failures (user code issue)
+- Timeout (15 min default)
+- OOM errors
+
+### 7. Security Considerations
+
+**Sandboxing**:
+- Jobs run in Docker containers
+- No host network access
+- Limited volume mounts
+
+**Risks**:
+- User code has full GPU access (could mine crypto briefly)
+- User code could attempt network attacks (mitigated by Docker networking)
+- Large submissions could exhaust disk space
+
+**Mitigations**:
+- Timeout limits (15 min)
+- Disk quotas (via Docker)
+- Network isolation (Docker bridge)
+- Result validation before storing
+
+---
+
+## Future Improvements
+
+- [ ] Add MIG (Multi-Instance GPU) support for H100/A100
+- [ ] Implement job priority queuing
+- [ ] Add per-user rate limiting
+- [ ] Support multi-GPU jobs for distributed problems
+- [ ] Add warm pool of pre-started containers
+- [ ] Implement result caching for identical submissions
+
