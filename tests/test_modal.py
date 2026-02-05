@@ -109,7 +109,7 @@ def modal_deployment(project_root: Path):
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "gpu_type", [ModalGPU.T4, ModalGPU.L4, ModalGPU.A100, ModalGPU.H100, ModalGPU.B200]
+    "gpu_type", [ModalGPU.T4, ModalGPU.H100]  # Reduced from 5 GPUs to 2 for faster CI
 )
 @pytest.mark.parametrize(
     "task",
