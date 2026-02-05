@@ -1,5 +1,8 @@
 # Kernelbot Evaluation Pipeline
 # Jobs target specific GPU queue, Buildkite routes to idle agent
+#
+# NOTE: This pipeline is designed to be triggered via API with KERNELBOT_PAYLOAD.
+# Direct push/PR triggers will skip gracefully.
 
 steps:
   - label: ":rocket: Kernel Evaluation"

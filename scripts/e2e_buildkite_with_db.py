@@ -25,7 +25,6 @@ import datetime
 import os
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 # Add src to path for local testing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -106,18 +105,12 @@ async def main():
     print()
 
     # Import kernelbot modules
-    from libkernelbot.backend import KernelBackend
     from libkernelbot.consts import BuildkiteGPU, SubmissionMode
     from libkernelbot.launchers.buildkite import BuildkiteConfig, BuildkiteLauncher
     from libkernelbot.leaderboard_db import LeaderboardDB
     from libkernelbot.task import make_task_definition
 
     # Set up database connection
-    env = SimpleNamespace(
-        DATABASE_URL=database_url,
-        DISABLE_SSL=disable_ssl,
-    )
-
     db = LeaderboardDB(url=database_url, ssl_mode="disable" if disable_ssl else "require")
 
     # Find example
@@ -153,7 +146,8 @@ async def main():
 
     if args.dry_run:
         print("\n[DRY RUN] Would create leaderboard and submit job")
-        print(f"  Task config keys: {list(task_definition.task.config.keys()) if task_definition.task.config else 'None'}")
+        config_keys = list(task_definition.task.config.keys()) if task_definition.task.config else "None"
+        print(f"  Task config keys: {config_keys}")
         return
 
     # Step 1: Create test leaderboard
@@ -276,7 +270,9 @@ async def main():
                     result=run_result.run,
                     system=result.system,
                 )
-                print(f"  Stored run: {run_name} (passed={run_result.run.passed}, duration={run_result.run.duration:.2f}s)")
+                passed = run_result.run.passed
+                duration = run_result.run.duration
+                print(f"  Stored run: {run_name} (passed={passed}, duration={duration:.2f}s)")
 
             # Mark submission as done
             db.mark_submission_done(submission_id)
