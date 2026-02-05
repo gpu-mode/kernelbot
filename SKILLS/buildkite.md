@@ -63,9 +63,10 @@ Buildkite provides a parallel infrastructure for onboarding arbitrary GPU vendor
 ### API Token Permissions
 
 The API token needs these scopes:
-- `read_builds`
-- `write_builds`
-- `read_agents` (optional, for queue status)
+- `read_builds` - Poll build status
+- `write_builds` - Create/trigger builds
+- `read_artifacts` - Download result.json artifact
+- `read_agents` (optional) - Check queue status
 
 ## Vendor Node Setup
 
@@ -413,3 +414,94 @@ This is calculated in the environment hook as:
 4. **One agent per GPU** - Each agent has its own build path and GPU assignment
 5. **HTTPS for git** - Avoids SSH key issues on buildkite-agent user
 6. **Queue must exist first** - Create queue in Buildkite UI before agents can connect
+7. **Follow S3 redirects for artifacts** - Buildkite returns 302 to S3; must fetch without auth header
+
+## E2E Workflow (Verified Working)
+
+The complete end-to-end flow for submitting jobs and retrieving results:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Your Backend   │────▶│    Buildkite    │────▶│  GPU Runner     │
+│                 │     │     Cloud       │     │  (Self-hosted)  │
+│ BuildkiteLauncher     │                 │     │                 │
+│ ._launch()      │     │  Routes to      │     │  Runs Docker    │
+│                 │     │  idle agent     │     │  container      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        │  1. POST /builds      │                       │
+        │  (payload encoded)    │                       │
+        │──────────────────────▶│                       │
+        │                       │  2. Dispatch job      │
+        │                       │──────────────────────▶│
+        │                       │                       │
+        │                       │                       │  3. Run evaluation
+        │                       │                       │  Write result.json
+        │                       │                       │
+        │                       │  4. Upload artifact   │
+        │                       │◀──────────────────────│
+        │                       │                       │
+        │  5. Poll status       │                       │
+        │◀─────────────────────▶│                       │
+        │                       │                       │
+        │  6. Download artifact │                       │
+        │  (via S3 redirect)    │                       │
+        │◀──────────────────────│                       │
+        │                       │                       │
+        ▼                       │                       │
+   Return result                │                       │
+```
+
+### Verified Test Output
+
+```
+=== Buildkite E2E Test ===
+Organization: mark-saroufim
+Pipeline: kernelbot
+Queue: test
+Mode: artifact
+
+Submitting test job...
+[UPDATE] Build created: [28]
+[UPDATE] Build completed: [28]
+
+=== Result ===
+Success: True
+Build URL: https://buildkite.com/mark-saroufim/kernelbot/builds/28
+Downloaded artifact:
+{
+  "success": true,
+  "error": "",
+  "runs": {},
+  "system": {
+    "gpu_name": "test",
+    "cuda_version": "12.4",
+    "python_version": "N/A"
+  }
+}
+
+=== Queue Status ===
+Queue: test
+Total agents: 0
+Idle agents: 0
+```
+
+### How It Works
+
+1. **BuildkiteLauncher._launch()** encodes config as base64+zlib compressed payload
+2. **POST to Buildkite API** creates a build with env vars (KERNELBOT_PAYLOAD, KERNELBOT_RUN_ID)
+3. **Buildkite routes** the job to an idle agent in the specified queue
+4. **Agent runs Docker container** with GPU isolation (NVIDIA_VISIBLE_DEVICES set by environment hook)
+5. **Container writes result.json** to working directory
+6. **Buildkite uploads artifact** to S3
+7. **BuildkiteLauncher polls** until build completes
+8. **Downloads result.json** by following S3 redirect (without auth header)
+9. **Returns parsed result** to caller
+
+### Running the E2E Test
+
+```bash
+BUILDKITE_API_TOKEN=<your-token> uv run python tests/e2e_buildkite_test.py \
+  --org <your-org> \
+  --queue test
+```
