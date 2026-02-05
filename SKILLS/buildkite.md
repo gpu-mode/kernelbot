@@ -233,26 +233,49 @@ Buildkite-managed GPUs are registered with `_BK` suffix:
 | `B200_BK` | `b200` | 100 |
 | `H100_BK` | `h100` | 90a |
 | `MI300_BK` | `mi300` | (AMD) |
+| `L40S_BK` | `test` | 89 (Ada Lovelace) |
 
 ## Environment Variables
 
-### For Kernelbot API/Backend
+### On Heroku/Backend (where the app runs)
 
-- `BUILDKITE_API_TOKEN`: API token for submitting jobs
+These are set in Heroku config vars or your `.env` file:
 
-### For Buildkite Agents (set by setup script)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `BUILDKITE_API_TOKEN` | Yes | API token for submitting jobs and downloading artifacts. Get from Buildkite → Personal Settings → API Access Tokens |
+| `BUILDKITE_ORG` | No | Organization slug (default: `gpu-mode`) |
+| `BUILDKITE_PIPELINE` | No | Pipeline slug (default: `kernelbot`) |
 
-- `NVIDIA_VISIBLE_DEVICES`: GPU index for isolation
-- `CUDA_VISIBLE_DEVICES`: Same as above
-- `KERNELBOT_GPU_INDEX`: GPU index (0, 1, 2, ...)
-- `KERNELBOT_CPUSET`: CPU cores for this agent
-- `KERNELBOT_MEMORY`: Memory limit
+**API Token Permissions Required:**
+- `read_builds` - Poll build status
+- `write_builds` - Create/trigger builds
+- `read_artifacts` - Download result.json artifact
+- `read_agents` (optional) - Check queue status
 
-### For Jobs (passed via pipeline)
+### On GPU Runner Nodes
 
-- `KERNELBOT_RUN_ID`: Unique run identifier
-- `KERNELBOT_PAYLOAD`: Base64+zlib compressed job config
-- `KERNELBOT_QUEUE`: Target queue name
+These are set during node setup:
+
+| Variable | Set By | Description |
+|----------|--------|-------------|
+| `BUILDKITE_AGENT_TOKEN` | Admin (setup script) | Agent token for connecting to Buildkite |
+| `NVIDIA_VISIBLE_DEVICES` | Environment hook | GPU index for isolation (auto-set per job) |
+| `CUDA_VISIBLE_DEVICES` | Environment hook | Same as above |
+| `KERNELBOT_GPU_INDEX` | Environment hook | GPU index (0, 1, 2, ...) |
+| `KERNELBOT_CPUSET` | Environment hook | CPU cores for this agent |
+| `KERNELBOT_MEMORY` | Environment hook | Memory limit for Docker |
+
+### Passed to Jobs (via Buildkite API)
+
+These are set automatically by the launcher:
+
+| Variable | Description |
+|----------|-------------|
+| `KERNELBOT_RUN_ID` | Unique run identifier |
+| `KERNELBOT_PAYLOAD` | Base64+zlib compressed job config |
+| `KERNELBOT_QUEUE` | Target queue name |
+| `KERNELBOT_IMAGE` | Docker image to use |
 
 ## Troubleshooting
 
