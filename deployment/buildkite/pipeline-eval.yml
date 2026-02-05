@@ -1,0 +1,69 @@
+# Kernelbot Evaluation Pipeline for Buildkite
+# This pipeline runs real kernel evaluations by cloning the repo and running the evaluator
+#
+# To use this pipeline:
+# 1. Go to your Buildkite pipeline settings
+# 2. Paste this YAML in the Steps section
+# 3. Submit jobs via BuildkiteLauncher
+
+steps:
+  - label: ":rocket: Kernel Evaluation"
+    agents:
+      queue: "${KERNELBOT_QUEUE:-test}"
+
+    plugins:
+      - docker#v5.11.0:
+          image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+          always-pull: false
+          gpus: "all"
+          propagate-environment: true
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+            - KERNELBOT_PAYLOAD
+            - KERNELBOT_RUN_ID
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+
+    command: |
+      set -e
+
+      echo "=== Environment ==="
+      echo "NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES"
+      echo "KERNELBOT_RUN_ID=$$KERNELBOT_RUN_ID"
+      nvidia-smi -L
+
+      echo ""
+      echo "=== Installing Dependencies ==="
+      apt-get update -qq
+      apt-get install -y -qq python3.11 python3.11-venv python3-pip git > /dev/null
+
+      # Create and activate virtual environment
+      python3.11 -m venv /tmp/venv
+      source /tmp/venv/bin/activate
+
+      # Install PyTorch and kernelbot
+      pip install --quiet torch triton numpy scipy
+
+      # Clone kernelbot and install
+      git clone --depth 1 https://github.com/gpu-mode/kernelbot.git /tmp/kernelbot
+      cd /tmp/kernelbot
+      pip install --quiet -e .
+
+      echo ""
+      echo "=== Running Evaluation ==="
+      python src/runners/buildkite-runner.py
+
+      echo ""
+      echo "=== Done ==="
+
+    artifact_paths:
+      - "result.json"
+      - "profile_data/**/*"
+
+    timeout_in_minutes: 30
+
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2

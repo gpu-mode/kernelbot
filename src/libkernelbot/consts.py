@@ -38,6 +38,7 @@ class BuildkiteGPU(Enum):
     B200_BK = "B200_BK"
     H100_BK = "H100_BK"
     MI300_BK = "MI300_BK"
+    L40S_BK = "L40S_BK"  # Test infrastructure
 
 
 @dataclasses.dataclass
