@@ -70,7 +70,7 @@ class MultiReporter:
         print(f"\n[SHOW] {msg}")
 
 
-async def main():
+async def main():  # noqa: C901
     parser = argparse.ArgumentParser(description="E2E Buildkite test with database storage")
     parser.add_argument("--queue", default="test", help="Buildkite queue (default: test)")
     parser.add_argument("--org", default="gpu-mode", help="Buildkite org slug")
