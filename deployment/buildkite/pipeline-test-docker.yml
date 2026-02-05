@@ -1,0 +1,36 @@
+# Simple Docker test pipeline for Buildkite
+# Paste this into your pipeline settings to test Docker + GPU isolation
+
+steps:
+  - label: ":whale: Docker GPU Test"
+    agents:
+      queue: "test"  # Change to your queue name
+
+    plugins:
+      - docker#v5.11.0:
+          image: "nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+          always-pull: true
+          runtime: nvidia
+          propagate-environment: true
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+          # Resource constraints from environment hook
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+
+    command: |
+      echo "=== Environment ==="
+      echo "NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES"
+      echo "CUDA_VISIBLE_DEVICES=$$CUDA_VISIBLE_DEVICES"
+      echo ""
+      echo "=== GPU Info ==="
+      nvidia-smi
+      echo ""
+      echo "=== CPU Info ==="
+      nproc
+      echo ""
+      echo "=== Memory Info ==="
+      free -h
+
+    timeout_in_minutes: 5
