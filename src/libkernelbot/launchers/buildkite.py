@@ -98,6 +98,7 @@ class BuildkiteLauncher(Launcher):
             "B200_BK": "b200",
             "H100_BK": "h100",
             "MI300_BK": "mi300",
+            "L40S_BK": "test",  # Test infrastructure
         }
         return queue_map.get(gpu_type.name, gpu_type.name.lower().replace("_bk", ""))
 
