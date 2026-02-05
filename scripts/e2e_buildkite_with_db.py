@@ -12,7 +12,7 @@ Usage:
 
 Options:
     --queue <name>      Buildkite queue (default: test)
-    --org <slug>        Buildkite org (default: gpu-mode)
+    --org <slug>        Buildkite org (default: mark-saroufim)
     --pipeline <slug>   Pipeline name (default: kernelbot)
     --example <name>    Example to run (default: vectoradd_py)
     --cleanup           Delete the test leaderboard after the test
@@ -73,7 +73,7 @@ class MultiReporter:
 async def main():  # noqa: C901
     parser = argparse.ArgumentParser(description="E2E Buildkite test with database storage")
     parser.add_argument("--queue", default="test", help="Buildkite queue (default: test)")
-    parser.add_argument("--org", default="gpu-mode", help="Buildkite org slug")
+    parser.add_argument("--org", default="mark-saroufim", help="Buildkite org slug")
     parser.add_argument("--pipeline", default="kernelbot", help="Pipeline slug")
     parser.add_argument("--example", default="vectoradd_py", help="Example to run")
     parser.add_argument("--mode", choices=["test", "leaderboard"], default="test", help="Submission mode")
