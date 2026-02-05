@@ -11,6 +11,20 @@ Buildkite provides a parallel infrastructure for onboarding arbitrary GPU vendor
 - Clear, reproducible Docker environment
 - Automatic queue management
 
+## Quick Start
+
+1. Create queue in Buildkite UI: Agents → Default cluster → Queues → New Queue (select "Self hosted")
+2. Run setup script on your GPU node:
+   ```bash
+   sudo BUILDKITE_AGENT_TOKEN=<token> GPU_TYPE=<queue-name> ./deployment/buildkite/setup-node-simple.sh
+   ```
+3. Test with `pipeline-test-docker.yml`
+
+## Current Status
+
+**Working**: Full GPU isolation with auto-resource detection. Tested on 2x NVIDIA L40S node with:
+- Each agent gets 1 GPU, 8 CPUs, 144GB RAM (auto-calculated from 16 CPUs / 2 GPUs, 289GB / 2 GPUs)
+
 ## Architecture
 
 ```
@@ -139,6 +153,40 @@ steps:
 ```
 
 ## Testing
+
+### Working Docker Pipeline
+
+Use this tested pipeline configuration for GPU jobs:
+
+```yaml
+steps:
+  - label: ":whale: Docker GPU Test"
+    agents:
+      queue: "test"  # Must match your queue name
+    plugins:
+      - docker#v5.11.0:
+          image: "nvidia/cuda:12.4.0-runtime-ubuntu22.04"
+          always-pull: true
+          gpus: "all"  # Use gpus instead of runtime: nvidia
+          propagate-environment: true
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+    command: |
+      echo "=== Resource Isolation ==="
+      echo "NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES"
+      nvidia-smi
+      nproc
+      free -h
+    timeout_in_minutes: 5
+```
+
+**Key points**:
+- Use `gpus: "all"` instead of `runtime: nvidia` (more reliable)
+- Use `$$NVIDIA_VISIBLE_DEVICES` (double dollar) in YAML to prevent variable stripping
+- The environment hook auto-sets KERNELBOT_CPUS, KERNELBOT_MEMORY based on machine resources
 
 ### End-to-End Test
 
@@ -283,6 +331,33 @@ steps:
 
 Without `agents: queue:`, Buildkite uses hosted runners by default.
 
+### Docker runtime crashes / "nvidia-container-runtime: no such file"
+
+Use `gpus: "all"` in the Docker plugin instead of `runtime: nvidia`:
+
+```yaml
+plugins:
+  - docker#v5.11.0:
+      gpus: "all"  # ✓ Use this
+      # runtime: nvidia  # ✗ Avoid - can cause crashes
+```
+
+If issues persist, reinstall nvidia-container-toolkit:
+```bash
+sudo apt-get remove --purge nvidia-container-toolkit nvidia-container-toolkit-base
+sudo apt-get install nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+### Environment hook not running
+
+Make sure the hook has a shebang line:
+```bash
+#!/bin/bash
+# Rest of hook script...
+```
+
 ### Git clone fails with "Permission denied (publickey)"
 
 The buildkite-agent user doesn't have SSH keys for GitHub. Fix by using HTTPS:
@@ -305,9 +380,36 @@ cd /tmp && sudo -u buildkite-agent git config --global url."https://github.com/"
 
 | File | Purpose |
 |------|---------|
-| `deployment/buildkite/setup-node.sh` | Vendor node setup script |
+| `deployment/buildkite/setup-node-simple.sh` | Vendor node setup script (recommended) |
 | `deployment/buildkite/pipeline.yml` | Buildkite pipeline config |
+| `deployment/buildkite/pipeline-test-docker.yml` | Docker test pipeline |
 | `deployment/buildkite/Dockerfile` | Docker image for jobs |
 | `src/libkernelbot/launchers/buildkite.py` | BuildkiteLauncher class |
 | `src/runners/buildkite-runner.py` | Job execution script |
 | `tests/e2e_buildkite_test.py` | E2E test script |
+
+## Auto-Resource Detection
+
+The environment hook automatically detects and divides machine resources:
+
+```
+Machine: 16 CPUs, 289GB RAM, 2 GPUs
+   ↓
+Per-GPU allocation:
+  - GPU 0: CPUs 0-7, 144GB RAM
+  - GPU 1: CPUs 8-15, 144GB RAM
+```
+
+This is calculated in the environment hook as:
+- `CPUS_PER_GPU = TOTAL_CPUS / GPU_COUNT`
+- `RAM_PER_GPU = TOTAL_RAM_GB / GPU_COUNT`
+- `KERNELBOT_CPUSET = (GPU_INDEX * CPUS_PER_GPU) to ((GPU_INDEX + 1) * CPUS_PER_GPU - 1)`
+
+## Summary of Key Decisions
+
+1. **Use `gpus: "all"` not `runtime: nvidia`** - More reliable with nvidia-container-toolkit
+2. **Environment hook for isolation** - Sets `NVIDIA_VISIBLE_DEVICES`, `KERNELBOT_*` vars before each job
+3. **Auto-detect resources** - No hardcoded CPU/RAM values; divides machine resources by GPU count
+4. **One agent per GPU** - Each agent has its own build path and GPU assignment
+5. **HTTPS for git** - Avoids SSH key issues on buildkite-agent user
+6. **Queue must exist first** - Create queue in Buildkite UI before agents can connect
