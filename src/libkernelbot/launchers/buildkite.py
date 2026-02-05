@@ -40,7 +40,7 @@ BUILDKITE_API = "https://api.buildkite.com/v2"
 class BuildkiteConfig:
     """Buildkite launcher configuration."""
 
-    org_slug: str = "gpu-mode"
+    org_slug: str = "mark-saroufim"
     pipeline_slug: str = "kernelbot"
     api_token: str = field(default_factory=lambda: os.environ.get("BUILDKITE_API_TOKEN", ""))
 
