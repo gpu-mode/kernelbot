@@ -55,68 +55,56 @@ The API token needs these scopes:
 
 ## Vendor Node Setup
 
-### Automated Setup (Full)
+### Prerequisites (Do This First in Buildkite UI)
 
-For a fresh Ubuntu node with NVIDIA GPUs:
+Before running the setup script on your node:
+
+1. **Create Buildkite account** at https://buildkite.com
+2. **Create pipeline** named `kernelbot`
+3. **Generate Agent Token**: Go to Agents → Agent Tokens → New Token
+4. **Create Queue**: Go to Agents → Default cluster → Queues → New Queue
+   - Enter your GPU type as the key (e.g., `test`, `b200`, `h100`)
+   - Select **Self hosted**
+   - Click Create Queue
+
+### Run Setup Script
+
+On your GPU node:
 
 ```bash
 git clone https://github.com/gpu-mode/kernelbot.git
 cd kernelbot
-git checkout buildkite-infrastructure
 
-sudo BUILDKITE_AGENT_TOKEN=<agent-token> GPU_TYPE=<gpu-type> ./deployment/buildkite/setup-node.sh
+sudo BUILDKITE_AGENT_TOKEN=<your-token> GPU_TYPE=<queue-name> ./deployment/buildkite/setup-node-simple.sh
 ```
 
-Environment variables:
+The script will:
+- Install Buildkite agent (if not present)
+- Create one agent per GPU with proper isolation
+- Configure git to use HTTPS (avoids SSH key issues)
+- Create environment hook that sets `NVIDIA_VISIBLE_DEVICES` per job
+- Start all agents as systemd services
+
+### Verify Setup
+
+1. Check agents appear in Buildkite: https://buildkite.com/organizations/YOUR_ORG/agents
+2. Run a test build with this pipeline:
+
+```yaml
+steps:
+  - label: "GPU Test"
+    command: "echo NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES && nvidia-smi -L"
+    agents:
+      queue: "your-queue-name"
+```
+
+### Environment Variables
+
+The setup script sets these automatically:
+- `GPU_TYPE` (required): Queue name matching what you created in Buildkite
 - `BUILDKITE_AGENT_TOKEN` (required): Agent token from Buildkite
-- `GPU_TYPE` (required): Queue name, e.g., `b200`, `h100`, `mi300`, `test`
-- `GPU_COUNT` (optional): Number of GPUs (auto-detected)
-- `CPUS_PER_GPU` (optional): CPUs per agent (default: 8)
-- `RAM_PER_GPU` (optional): RAM per agent (default: 64g)
-- `NODE_NAME` (optional): Node identifier (default: hostname)
-
-### Manual Setup (Existing Docker/NVIDIA)
-
-If Docker and nvidia-container-toolkit are already installed:
-
-```bash
-# Install Buildkite agent
-sudo apt-get install -y apt-transport-https gnupg
-curl -fsSL https://keys.openpgp.org/vks/v1/by-fingerprint/32A37959C2FA5C3C99EFBC32A79206696452D198 | \
-    sudo gpg --dearmor -o /usr/share/keyrings/buildkite-agent-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/buildkite-agent-archive-keyring.gpg] https://apt.buildkite.com/buildkite-agent stable main" | \
-    sudo tee /etc/apt/sources.list.d/buildkite-agent.list
-sudo apt-get update
-sudo apt-get install -y buildkite-agent
-
-# Configure agent
-export BUILDKITE_TOKEN="<your-agent-token>"
-export GPU_TYPE="test"
-export NODE_NAME=$(hostname)
-
-echo "token=\"${BUILDKITE_TOKEN}\"
-name=\"${NODE_NAME}-gpu0\"
-tags=\"queue=${GPU_TYPE},gpu=${GPU_TYPE},gpu-index=0,node=${NODE_NAME}\"" | \
-    sudo tee /etc/buildkite-agent/buildkite-agent.cfg
-
-# Add to docker group and start
-sudo usermod -aG docker buildkite-agent
-sudo systemctl enable buildkite-agent
-sudo systemctl start buildkite-agent
-```
-
-### Verify Agent Connection
-
-Check the Buildkite dashboard:
-```
-https://buildkite.com/organizations/<org>/agents
-```
-
-Or via API:
-```bash
-curl -H "Authorization: Bearer <api-token>" \
-    https://api.buildkite.com/v2/organizations/<org>/agents
-```
+- `NODE_NAME` (optional): Defaults to hostname
+- `GPU_COUNT` (optional): Auto-detected from nvidia-smi
 
 ## Pipeline Configuration
 

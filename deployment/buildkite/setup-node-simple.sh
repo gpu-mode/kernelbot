@@ -1,6 +1,14 @@
 #!/bin/bash
-# Buildkite GPU Node Setup - Simplified version
+# Buildkite GPU Node Setup
 # Usage: sudo BUILDKITE_AGENT_TOKEN=xxx GPU_TYPE=test ./setup-node-simple.sh
+#
+# PREREQUISITES:
+#   1. Create a Buildkite account and pipeline named 'kernelbot'
+#   2. Generate an Agent Token from: Agents > Agent Tokens
+#   3. Create a queue in: Agents > Default cluster > Queues > New Queue
+#      - Enter your GPU_TYPE as the key (e.g., 'test', 'b200', 'h100')
+#      - Select 'Self hosted'
+#   4. Run this script with the token and GPU type
 
 set -euo pipefail
 
@@ -22,6 +30,12 @@ echo "GPU Type: ${GPU_TYPE}"
 echo "GPU Count: ${GPU_COUNT}"
 echo ""
 
+# === CHECK ROOT ===
+if [[ $EUID -ne 0 ]]; then
+   echo "ERROR: This script must be run as root (use sudo)"
+   exit 1
+fi
+
 # === INSTALL BUILDKITE AGENT ===
 if ! command -v buildkite-agent &> /dev/null; then
     echo "Installing Buildkite Agent..."
@@ -33,23 +47,43 @@ if ! command -v buildkite-agent &> /dev/null; then
         tee /etc/apt/sources.list.d/buildkite-agent.list
     apt-get update
     apt-get install -y buildkite-agent
+    echo "Buildkite Agent installed."
+else
+    echo "Buildkite Agent already installed."
 fi
 
 # === STOP EXISTING AGENTS ===
 echo "Stopping existing agents..."
 systemctl stop buildkite-agent 2>/dev/null || true
+systemctl disable buildkite-agent 2>/dev/null || true
 for i in $(seq 0 15); do
     systemctl stop "buildkite-agent-gpu${i}" 2>/dev/null || true
     systemctl disable "buildkite-agent-gpu${i}" 2>/dev/null || true
 done
 
 # === CREATE DIRECTORIES ===
+echo "Creating directories..."
 mkdir -p /var/lib/buildkite-agent/builds
+mkdir -p /etc/buildkite-agent/hooks
 chown -R buildkite-agent:buildkite-agent /var/lib/buildkite-agent
+chown -R buildkite-agent:buildkite-agent /etc/buildkite-agent
 
-# === CONFIGURE GIT TO USE HTTPS ===
+# === CONFIGURE GIT TO USE HTTPS (avoids SSH key issues) ===
+echo "Configuring git to use HTTPS..."
 cd /tmp
 sudo -u buildkite-agent git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+# === CREATE ENVIRONMENT HOOK FOR GPU ISOLATION ===
+echo "Creating environment hook for GPU isolation..."
+cat > /etc/buildkite-agent/hooks/environment << 'HOOKEOF'
+#!/bin/bash
+# GPU isolation hook - sets NVIDIA_VISIBLE_DEVICES based on agent's gpu-index tag
+export NVIDIA_VISIBLE_DEVICES="${BUILDKITE_AGENT_META_DATA_GPU_INDEX}"
+export CUDA_VISIBLE_DEVICES="${BUILDKITE_AGENT_META_DATA_GPU_INDEX}"
+echo "GPU isolation: NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}"
+HOOKEOF
+chmod +x /etc/buildkite-agent/hooks/environment
+chown buildkite-agent:buildkite-agent /etc/buildkite-agent/hooks/environment
 
 # === CREATE AGENT FOR EACH GPU ===
 echo "Creating ${GPU_COUNT} agents..."
@@ -70,6 +104,7 @@ tags="queue=${GPU_TYPE},gpu=${GPU_TYPE},gpu-index=${gpu_idx},node=${NODE_NAME}"
 build-path="${build_dir}"
 hooks-path="/etc/buildkite-agent/hooks"
 EOF
+    chown buildkite-agent:buildkite-agent "${config_file}"
 
     # Write systemd service
     cat > "/etc/systemd/system/buildkite-agent-gpu${gpu_idx}.service" << EOF
@@ -81,8 +116,6 @@ After=network.target
 [Service]
 Type=simple
 User=buildkite-agent
-Environment=NVIDIA_VISIBLE_DEVICES=${gpu_idx}
-Environment=CUDA_VISIBLE_DEVICES=${gpu_idx}
 ExecStart=/usr/bin/buildkite-agent start --config ${config_file}
 RestartSec=5
 Restart=on-failure
@@ -93,7 +126,7 @@ TimeoutStopSec=60
 WantedBy=multi-user.target
 EOF
 
-    echo "  Created agent ${gpu_idx}: GPU=${gpu_idx}"
+    echo "  Created agent ${gpu_idx}: ${agent_name}"
 done
 
 # === START AGENTS ===
@@ -116,7 +149,20 @@ done
 
 echo ""
 echo "=== Setup Complete ==="
-echo "Created ${GPU_COUNT} agents for queue: ${GPU_TYPE}"
-echo "Each agent sees only its assigned GPU via NVIDIA_VISIBLE_DEVICES"
 echo ""
-echo "Check agents at: https://buildkite.com/organizations/YOUR_ORG/agents"
+echo "Created ${GPU_COUNT} agents for queue: ${GPU_TYPE}"
+echo "GPU isolation is handled via environment hook (NVIDIA_VISIBLE_DEVICES)"
+echo ""
+echo "IMPORTANT: Make sure you created the '${GPU_TYPE}' queue in Buildkite:"
+echo "  1. Go to: https://buildkite.com/organizations/YOUR_ORG/clusters"
+echo "  2. Click 'Default cluster' > 'Queues' > 'New Queue'"
+echo "  3. Enter '${GPU_TYPE}' as the key, select 'Self hosted'"
+echo ""
+echo "Your agents should appear at: https://buildkite.com/organizations/YOUR_ORG/agents"
+echo ""
+echo "Test with this pipeline step:"
+echo '  steps:'
+echo '    - label: "GPU Test"'
+echo '      command: "echo NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES && nvidia-smi -L"'
+echo '      agents:'
+echo "        queue: \"${GPU_TYPE}\""
