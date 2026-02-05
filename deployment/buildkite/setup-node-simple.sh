@@ -77,11 +77,25 @@ sudo -u buildkite-agent git config --global url."https://github.com/".insteadOf 
 echo "Creating environment hook for GPU/CPU/RAM isolation..."
 cat > /etc/buildkite-agent/hooks/environment << 'HOOKEOF'
 #!/bin/bash
-# Resource isolation hook - sets GPU, CPU, and memory limits based on agent's gpu-index
+# Resource isolation hook - auto-detects and divides resources by GPU count
 
 GPU_INDEX="${BUILDKITE_AGENT_META_DATA_GPU_INDEX:-0}"
-CPUS_PER_GPU="${CPUS_PER_GPU:-8}"
-RAM_PER_GPU="${RAM_PER_GPU:-64g}"
+
+# Auto-detect total resources
+TOTAL_CPUS=$(nproc)
+TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+TOTAL_RAM_GB=$((TOTAL_RAM_KB / 1024 / 1024))
+
+# Auto-detect GPU count
+if command -v nvidia-smi &> /dev/null; then
+    GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -1)
+else
+    GPU_COUNT=1
+fi
+
+# Calculate per-GPU allocation
+CPUS_PER_GPU=$((TOTAL_CPUS / GPU_COUNT))
+RAM_PER_GPU=$((TOTAL_RAM_GB / GPU_COUNT))
 
 # GPU isolation
 export NVIDIA_VISIBLE_DEVICES="${GPU_INDEX}"
@@ -94,15 +108,14 @@ export KERNELBOT_CPUSET="${CPU_START}-${CPU_END}"
 export KERNELBOT_CPUS="${CPUS_PER_GPU}"
 
 # Memory isolation
-export KERNELBOT_MEMORY="${RAM_PER_GPU}"
+export KERNELBOT_MEMORY="${RAM_PER_GPU}g"
 
 # GPU index for the runner
 export KERNELBOT_GPU_INDEX="${GPU_INDEX}"
 
 echo "=== Resource Isolation ==="
-echo "GPU: ${NVIDIA_VISIBLE_DEVICES}"
-echo "CPUs: ${KERNELBOT_CPUSET} (${KERNELBOT_CPUS} cores)"
-echo "Memory: ${KERNELBOT_MEMORY}"
+echo "Machine: ${TOTAL_CPUS} CPUs, ${TOTAL_RAM_GB}GB RAM, ${GPU_COUNT} GPUs"
+echo "This job: GPU ${NVIDIA_VISIBLE_DEVICES}, CPUs ${KERNELBOT_CPUSET}, RAM ${KERNELBOT_MEMORY}"
 HOOKEOF
 chmod +x /etc/buildkite-agent/hooks/environment
 chown buildkite-agent:buildkite-agent /etc/buildkite-agent/hooks/environment
