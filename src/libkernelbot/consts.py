@@ -133,6 +133,7 @@ GPU_TO_SM = {
     "B200_BK": "100",
     "H100_BK": "90a",
     "MI300_BK": None,
+    "L40S_BK": "89",  # Ada Lovelace
 }
 
 
