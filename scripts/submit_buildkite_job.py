@@ -35,7 +35,7 @@ class SimpleReporter:
         print(f"[UPDATE] {msg}")
 
 
-async def main():
+async def main():  # noqa: C901
     parser = argparse.ArgumentParser(description="Submit a test job to Buildkite")
     parser.add_argument("--org", default="mark-saroufim", help="Buildkite org slug")
     parser.add_argument("--pipeline", default="kernelbot", help="Pipeline slug")
