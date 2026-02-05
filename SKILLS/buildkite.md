@@ -505,3 +505,108 @@ BUILDKITE_API_TOKEN=<your-token> uv run python tests/e2e_buildkite_test.py \
   --org <your-org> \
   --queue test
 ```
+
+## Real Evaluation Jobs
+
+### Submit a Real Kernel Evaluation
+
+```bash
+BUILDKITE_API_TOKEN=<your-token> uv run python scripts/submit_buildkite_job.py --eval vectoradd_py
+```
+
+This runs the full evaluation pipeline on actual GPU hardware and returns real benchmark results:
+
+```
+=== Result ===
+Success: True
+System: SystemInfo(gpu='NVIDIA L40S', device_count=1, cpu='AMD EPYC 9254 24-Core Processor', runtime='CUDA', platform='Linux-5.15.0-164-generic-x86_64-with-glibc2.35', torch='2.6.0+cu124', hostname='...')
+
+test:
+  Passed: True
+  Duration: 3.18s
+  Result: {'test-count': '5', 'test.0.status': 'pass', 'test.1.status': 'pass', ...}
+```
+
+### Integration Tests
+
+Run the full integration test suite:
+
+```bash
+BUILDKITE_API_TOKEN=<your-token> uv run pytest tests/test_buildkite.py -v -m integration
+```
+
+Tests include:
+- `test_buildkite_launcher_python_script` - Real evaluation with vectoradd_py
+- `test_buildkite_launcher_failing_script` - Verifies cheating scripts correctly fail
+- `test_buildkite_queue_status` - Tests agent queue API
+
+### Available Examples
+
+Any example in the `examples/` directory works:
+
+```bash
+# List available examples
+ls examples/
+
+# Run a specific example
+BUILDKITE_API_TOKEN=xxx uv run python scripts/submit_buildkite_job.py --eval identity_py
+```
+
+## Operational Model
+
+### No Pre-Built Docker Image (Current Setup)
+
+The pipeline does **NOT** use a pre-built Docker image. Each job:
+
+1. Uses base `nvidia/cuda:12.4.0-devel-ubuntu22.04` image
+2. Installs dependencies at runtime:
+   - `uv` for Python package management
+   - Clones kernelbot repo from `buildkite-infrastructure` branch
+   - Runs `uv sync` to install project dependencies
+   - Runs `uv pip install torch triton numpy` for GPU packages
+3. Runs the evaluation
+
+**Advantages:**
+- No Dockerfile to maintain or rebuild
+- No image registry to manage
+- Always uses latest code from repo
+- **No admin action needed** after code updates
+
+**Trade-off:**
+- Slightly longer job startup time (~30-40 seconds for dependency installation)
+
+### When Admin Action Is Needed
+
+The only time the machine admin needs to run anything is:
+
+1. **Initial setup**: Run `setup-node-simple.sh` once when onboarding a new node
+2. **Buildkite agent updates**: If Buildkite releases a new agent version (rare)
+3. **System-level changes**: NVIDIA driver updates, OS updates, etc.
+
+Code changes to kernelbot require **no admin action** - the pipeline clones fresh code each run.
+
+### Shared Evaluation Logic
+
+All runners (GitHub, Modal, Buildkite) use the exact same evaluation engine:
+
+```python
+# src/runners/buildkite-runner.py:49
+from libkernelbot.run_eval import run_config
+result = run_config(config)
+```
+
+This means:
+- Any problem that works on GitHub/Modal works on Buildkite
+- Same result format (`FullResult`)
+- Same test/benchmark logic
+- Same correctness checking
+
+## Current Branch
+
+The Buildkite infrastructure is on the `buildkite-infrastructure` branch. The pipeline clones from this branch:
+
+```yaml
+git clone --depth 1 --branch buildkite-infrastructure https://github.com/gpu-mode/kernelbot.git
+```
+
+Once merged to `main`, update the pipeline config to use `main` branch.
