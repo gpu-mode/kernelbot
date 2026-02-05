@@ -1,4 +1,5 @@
 # Kernelbot evaluation image
+# Pre-built with all dependencies for fast cold starts
 FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -6,37 +7,36 @@ ENV PYTHONUNBUFFERED=1
 
 # System packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-dev \
-    python3.11-venv \
-    python3-pip \
-    git \
-    wget \
     curl \
+    ca-certificates \
+    git \
     build-essential \
     ninja-build \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.11 as default
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
-# Upgrade pip
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Clone and install kernelbot
+WORKDIR /opt/kernelbot
+RUN git clone --depth 1 --branch buildkite-infrastructure https://github.com/gpu-mode/kernelbot.git .
 
-# PyTorch + CUDA
-RUN pip install --no-cache-dir \
-    torch==2.4.0 \
-    triton \
-    numpy \
-    scipy
+# Install dependencies with uv
+RUN uv sync
 
-# Copy kernelbot
-WORKDIR /app
-COPY pyproject.toml .
-COPY src/ src/
-RUN pip install --no-cache-dir -e .
+# Install PyTorch and GPU packages
+RUN uv pip install torch triton numpy --index-url https://download.pytorch.org/whl/cu124
+
+# Ensure venv is activated for any commands
+ENV VIRTUAL_ENV=/opt/kernelbot/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Verify installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__}')" && \
+    python -c "import triton; print(f'Triton installed')" && \
+    python -c "from libkernelbot.run_eval import run_config; print('kernelbot installed')"
 
 # Default command
-CMD ["python", "/app/src/runners/buildkite-runner.py"]
+CMD ["python", "/opt/kernelbot/src/runners/buildkite-runner.py"]

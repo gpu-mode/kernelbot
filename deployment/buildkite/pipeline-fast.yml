@@ -1,0 +1,53 @@
+# Kernelbot Fast Evaluation Pipeline
+# Uses pre-built image for fast cold starts (~5s vs ~40s)
+#
+# Prerequisites:
+# 1. Build image on node: ./deployment/buildkite/build-image.sh
+# 2. Or pull from registry: docker pull ghcr.io/gpu-mode/kernelbot:latest
+
+steps:
+  - label: ":rocket: Kernel Evaluation"
+    agents:
+      queue: "${KERNELBOT_QUEUE:-test}"
+
+    plugins:
+      - docker#v5.11.0:
+          image: "${KERNELBOT_IMAGE:-kernelbot:latest}"
+          always-pull: false
+          gpus: "all"
+          propagate-environment: true
+          shell: ["/bin/bash", "-e", "-c"]
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+            - KERNELBOT_PAYLOAD
+            - KERNELBOT_RUN_ID
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+          workdir: /workdir
+
+    command: |
+      set -e
+
+      echo "=== Environment ==="
+      echo "NVIDIA_VISIBLE_DEVICES=$NVIDIA_VISIBLE_DEVICES"
+      echo "KERNELBOT_RUN_ID=$KERNELBOT_RUN_ID"
+      nvidia-smi -L
+
+      echo ""
+      echo "=== Running Evaluation ==="
+      cd /opt/kernelbot
+      python src/runners/buildkite-runner.py
+
+      echo ""
+      echo "=== Copying Artifacts ==="
+      cp result.json /workdir/result.json
+      cp -r profile_data /workdir/profile_data 2>/dev/null || true
+
+      echo "=== Done ==="
+
+    artifact_paths:
+      - "result.json"
+      - "profile_data/*"
+
+    timeout_in_minutes: 15
