@@ -180,7 +180,7 @@ class BuildkiteLauncher(Launcher):
 
         build_data = {
             "commit": "HEAD",
-            "branch": "main",
+            "branch": "buildkite-infrastructure",
             "message": f"Kernel eval: {run_id}",
             "env": {
                 "KERNELBOT_RUN_ID": run_id,
