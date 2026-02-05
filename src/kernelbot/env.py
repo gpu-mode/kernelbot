@@ -35,7 +35,7 @@ env.PROBLEMS_REPO = os.getenv("PROBLEMS_REPO")
 
 # Buildkite-specific constants
 env.BUILDKITE_API_TOKEN = os.getenv("BUILDKITE_API_TOKEN")
-env.BUILDKITE_ORG = os.getenv("BUILDKITE_ORG", "gpu-mode")
+env.BUILDKITE_ORG = os.getenv("BUILDKITE_ORG", "mark-saroufim")
 env.BUILDKITE_PIPELINE = os.getenv("BUILDKITE_PIPELINE", "kernelbot")
 
 # Directory that will be used for local problem development.
