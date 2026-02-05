@@ -16,7 +16,8 @@ from env import env, init_environment
 from libkernelbot import consts
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
-from libkernelbot.launchers import GitHubLauncher, ModalLauncher
+from libkernelbot.launchers import BuildkiteLauncher, GitHubLauncher, ModalLauncher
+from libkernelbot.launchers.buildkite import BuildkiteConfig
 from libkernelbot.utils import setup_logging
 
 logger = setup_logging(__name__)
@@ -29,6 +30,17 @@ def create_backend(debug_mode: bool = False) -> KernelBackend:
     backend.register_launcher(
         GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
     )
+
+    # Register Buildkite launcher if API token is configured
+    if env.BUILDKITE_API_TOKEN:
+        buildkite_config = BuildkiteConfig(
+            org_slug=env.BUILDKITE_ORG,
+            pipeline_slug=env.BUILDKITE_PIPELINE,
+            api_token=env.BUILDKITE_API_TOKEN,
+        )
+        backend.register_launcher(BuildkiteLauncher(buildkite_config))
+        logger.info("Buildkite launcher registered")
+
     return backend
 
 

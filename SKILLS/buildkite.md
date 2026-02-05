@@ -554,16 +554,15 @@ BUILDKITE_API_TOKEN=xxx uv run python scripts/submit_buildkite_job.py --eval ide
 
 ## Operational Model
 
-### No Pre-Built Docker Image (Current Setup)
+### Option 1: No Pre-Built Image (Current Default)
 
-The pipeline does **NOT** use a pre-built Docker image. Each job:
+The pipeline installs dependencies at runtime. Each job:
 
 1. Uses base `nvidia/cuda:12.4.0-devel-ubuntu22.04` image
-2. Installs dependencies at runtime:
+2. Installs dependencies at runtime (~30-40 seconds):
    - `uv` for Python package management
-   - Clones kernelbot repo from `buildkite-infrastructure` branch
-   - Runs `uv sync` to install project dependencies
-   - Runs `uv pip install torch triton numpy` for GPU packages
+   - Clones kernelbot repo
+   - Runs `uv sync` and `uv pip install torch triton numpy`
 3. Runs the evaluation
 
 **Advantages:**
@@ -573,17 +572,44 @@ The pipeline does **NOT** use a pre-built Docker image. Each job:
 - **No admin action needed** after code updates
 
 **Trade-off:**
-- Slightly longer job startup time (~30-40 seconds for dependency installation)
+- Slower cold starts (~40 seconds)
+
+### Option 2: Pre-Built Image (Fast Cold Starts)
+
+For faster cold starts (~5 seconds), build the Docker image on each node:
+
+```bash
+# During initial setup:
+sudo BUILDKITE_AGENT_TOKEN=xxx GPU_TYPE=test BUILD_IMAGE=true ./deployment/buildkite/setup-node-simple.sh
+
+# Or build separately:
+./deployment/buildkite/build-image.sh
+```
+
+Then update the Buildkite pipeline config to use the local image:
+```yaml
+image: "kernelbot:latest"
+```
+
+**When to rebuild the image:**
+- When dependencies change (new PyTorch version, new packages)
+- When you want the latest kernelbot code baked in
+- NOT needed for problem/task changes (those come via config)
+
+**Rebuild command:**
+```bash
+./deployment/buildkite/build-image.sh
+```
 
 ### When Admin Action Is Needed
 
-The only time the machine admin needs to run anything is:
-
-1. **Initial setup**: Run `setup-node-simple.sh` once when onboarding a new node
-2. **Buildkite agent updates**: If Buildkite releases a new agent version (rare)
-3. **System-level changes**: NVIDIA driver updates, OS updates, etc.
-
-Code changes to kernelbot require **no admin action** - the pipeline clones fresh code each run.
+| Scenario | Action Required |
+|----------|-----------------|
+| Code changes (no deps) | None - pipeline clones fresh code |
+| Dependency changes | Rebuild image: `./build-image.sh` |
+| Initial node setup | Run `setup-node-simple.sh` once |
+| NVIDIA driver updates | May need to rebuild image |
+| Buildkite agent updates | Rare - Buildkite handles this |
 
 ### Shared Evaluation Logic
 

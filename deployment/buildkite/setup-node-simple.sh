@@ -203,3 +203,27 @@ echo '    - label: "GPU Test"'
 echo '      command: "echo NVIDIA_VISIBLE_DEVICES=$$NVIDIA_VISIBLE_DEVICES && nvidia-smi -L"'
 echo '      agents:'
 echo "        queue: \"${GPU_TYPE}\""
+
+# === BUILD DOCKER IMAGE (optional) ===
+if [[ "${BUILD_IMAGE:-}" == "true" ]]; then
+    echo ""
+    echo "=== Building Docker Image ==="
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    if [[ -f "$SCRIPT_DIR/Dockerfile" ]]; then
+        docker build -t kernelbot:latest -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR/../.."
+        echo "Docker image built: kernelbot:latest"
+        echo ""
+        echo "To use the fast pipeline, update Buildkite config to use:"
+        echo "  image: \"kernelbot:latest\""
+    else
+        echo "WARNING: Dockerfile not found at $SCRIPT_DIR/Dockerfile"
+        echo "Clone the repo first: git clone https://github.com/gpu-mode/kernelbot.git"
+    fi
+fi
+
+echo ""
+echo "For faster cold starts, build the Docker image:"
+echo "  BUILD_IMAGE=true $0"
+echo "Or manually:"
+echo "  ./deployment/buildkite/build-image.sh"
