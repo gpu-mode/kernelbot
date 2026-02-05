@@ -6,9 +6,9 @@ Usage:
 
 This script:
 1. Creates a simple test job
-2. Submits it to Buildkite
+2. Submits it to Buildkite with inline steps (no pipeline config needed)
 3. Waits for completion
-4. Prints the result
+4. Downloads and prints the result artifact
 """
 
 import argparse
@@ -26,6 +26,12 @@ async def main():
     parser.add_argument("--org", default="gpu-mode", help="Buildkite org slug")
     parser.add_argument("--pipeline", default="kernelbot", help="Buildkite pipeline slug")
     parser.add_argument("--dry-run", action="store_true", help="Just print config, don't submit")
+    parser.add_argument(
+        "--mode",
+        choices=["artifact", "full"],
+        default="artifact",
+        help="Test mode: artifact (simple inline test) or full (uses pipeline from repo)",
+    )
     args = parser.parse_args()
 
     token = os.environ.get("BUILDKITE_API_TOKEN")
@@ -45,29 +51,19 @@ async def main():
     print(f"Organization: {config.org_slug}")
     print(f"Pipeline: {config.pipeline_slug}")
     print(f"Queue: {args.queue}")
+    print(f"Mode: {args.mode}")
     print()
 
-    # Simple test config - just print GPU info
+    # Simple test config
     test_config = {
-        "lang": "py",
-        "mode": "test",
-        "sources": {
-            "submission.py": """
-import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
-if torch.cuda.is_available():
-    print(f"GPU: {torch.cuda.get_device_name()}")
-    print(f"Device count: {torch.cuda.device_count()}")
-""",
-        },
-        "main": "submission.py",
-        "tests": [],
-        "benchmarks": [],
+        "test": True,
+        "message": "Hello from e2e test",
     }
 
     if args.dry_run:
         print("Dry run - config would be:")
         import json
+
         print(json.dumps(test_config, indent=2))
         return
 
@@ -82,11 +78,19 @@ if torch.cuda.is_available():
             print(f"[UPDATE] {msg}")
 
     print("Submitting test job...")
+
+    # Use inline steps for artifact mode (no pipeline config needed in Buildkite)
+    inline_steps = None
+    if args.mode == "artifact":
+        inline_steps = launcher.create_artifact_test_steps(args.queue)
+        print("Using inline steps (no pipeline config needed)")
+
     result = await launcher._launch(
         run_id="e2e-test",
         config=test_config,
         queue=args.queue,
         status=SimpleReporter(),
+        inline_steps=inline_steps,
     )
 
     print()
@@ -98,7 +102,11 @@ if torch.cuda.is_available():
         print(f"Build URL: {result.build_url}")
     if result.result:
         import json
-        print(f"Result: {json.dumps(result.result, indent=2)}")
+
+        print("Downloaded artifact:")
+        print(json.dumps(result.result, indent=2))
+    else:
+        print("No artifact downloaded (result.json not found or download failed)")
 
     # Also test queue status
     print()
@@ -109,6 +117,9 @@ if torch.cuda.is_available():
     print(f"Idle agents: {status.get('idle')}")
     for agent in status.get("agents", []):
         print(f"  - {agent['name']}: {agent['state']} (busy={agent['busy']})")
+
+    # Exit with appropriate code
+    sys.exit(0 if result.success else 1)
 
 
 if __name__ == "__main__":

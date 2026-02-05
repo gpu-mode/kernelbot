@@ -13,7 +13,7 @@ steps:
       - docker#v5.11.0:
           image: "${KERNELBOT_IMAGE:-ghcr.io/gpu-mode/kernelbot:latest}"
           always-pull: true
-          runtime: nvidia
+          gpus: "all"  # Use gpus instead of runtime: nvidia for reliability
           # GPU isolation - agent exports NVIDIA_VISIBLE_DEVICES
           propagate-environment: true
           environment:
