@@ -153,6 +153,7 @@ class BuildkiteLauncher(Launcher):
         config: dict[str, Any],
         queue: str,
         status: RunProgressReporter,
+        inline_steps: list[dict[str, Any]] | None = None,
     ) -> BuildkiteResult:
         """
         Launch a kernel evaluation job.
@@ -162,6 +163,7 @@ class BuildkiteLauncher(Launcher):
             config: Evaluation configuration dict
             queue: GPU queue name (e.g., "b200", "mi300")
             status: Progress reporter
+            inline_steps: Optional inline pipeline steps (for testing without pipeline config)
 
         Returns:
             BuildkiteResult with success status and results
@@ -192,6 +194,10 @@ class BuildkiteLauncher(Launcher):
                 "queue": queue,
             },
         }
+
+        # If inline steps provided, use them instead of pipeline from repo
+        if inline_steps:
+            build_data["steps"] = inline_steps
 
         try:
             response = await client.post(url, json=build_data)
@@ -357,3 +363,74 @@ class BuildkiteLauncher(Launcher):
             "idle": sum(1 for a in queue_agents if not a["busy"]),
             "agents": queue_agents,
         }
+
+    def create_artifact_test_steps(self, queue: str) -> list[dict[str, Any]]:
+        """Create inline steps for artifact upload/download testing."""
+        # Python script that decodes payload and writes result.json
+        script = '''
+import base64
+import json
+import os
+import zlib
+from datetime import datetime
+
+run_id = os.environ.get("KERNELBOT_RUN_ID", "unknown")
+payload_b64 = os.environ.get("KERNELBOT_PAYLOAD", "")
+
+print("=== Artifact Test ===")
+print(f"Run ID: {run_id}")
+print(f"GPU: {os.environ.get('NVIDIA_VISIBLE_DEVICES', 'not set')}")
+
+# Decode payload if present
+config = {}
+if payload_b64:
+    try:
+        compressed = base64.b64decode(payload_b64)
+        config_json = zlib.decompress(compressed).decode("utf-8")
+        config = json.loads(config_json)
+        print(f"Decoded config keys: {list(config.keys())}")
+    except Exception as e:
+        print(f"Could not decode payload: {e}")
+
+# Create result matching FullResult structure
+result = {
+    "success": True,
+    "error": "",
+    "runs": {},
+    "system": {
+        "gpu_name": os.environ.get("NVIDIA_VISIBLE_DEVICES", "unknown"),
+        "cuda_version": "test",
+        "python_version": "3.11",
+    },
+}
+
+# Write result.json
+with open("result.json", "w") as f:
+    json.dump(result, f, indent=2)
+
+print("\\n=== Result ===")
+print(json.dumps(result, indent=2))
+print("\\nResult written to result.json")
+'''
+        return [
+            {
+                "label": ":test_tube: Artifact Test",
+                "agents": {"queue": queue},
+                "plugins": [
+                    {
+                        "docker#v5.11.0": {
+                            "image": "python:3.11-slim",
+                            "propagate-environment": True,
+                            "environment": [
+                                "KERNELBOT_PAYLOAD",
+                                "KERNELBOT_RUN_ID",
+                                "NVIDIA_VISIBLE_DEVICES",
+                            ],
+                        }
+                    }
+                ],
+                "command": f"python3 -c {json.dumps(script)}",
+                "artifact_paths": ["result.json"],
+                "timeout_in_minutes": 5,
+            }
+        ]

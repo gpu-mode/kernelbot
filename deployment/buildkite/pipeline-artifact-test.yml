@@ -1,0 +1,69 @@
+# Simple artifact test pipeline
+# Tests: submit job -> run in Docker -> write result.json -> upload artifact -> download
+
+steps:
+  - label: ":package: Artifact Test"
+    agents:
+      queue: "${KERNELBOT_QUEUE:-test}"
+
+    plugins:
+      - docker#v5.11.0:
+          image: "python:3.11-slim"
+          propagate-environment: true
+          environment:
+            - KERNELBOT_PAYLOAD
+            - KERNELBOT_RUN_ID
+            - NVIDIA_VISIBLE_DEVICES
+
+    command: |
+      python3 << 'PYEOF'
+      import base64
+      import json
+      import os
+      import zlib
+      from datetime import datetime
+
+      run_id = os.environ.get("KERNELBOT_RUN_ID", "unknown")
+      payload_b64 = os.environ.get("KERNELBOT_PAYLOAD", "")
+
+      print("=== Artifact Test ===")
+      print(f"Run ID: {run_id}")
+      print(f"GPU: {os.environ.get('NVIDIA_VISIBLE_DEVICES', 'not set')}")
+
+      # Decode payload if present
+      config = {}
+      if payload_b64:
+          try:
+              compressed = base64.b64decode(payload_b64)
+              config_json = zlib.decompress(compressed).decode("utf-8")
+              config = json.loads(config_json)
+              print(f"Decoded config: {json.dumps(config, indent=2)}")
+          except Exception as e:
+              print(f"Could not decode payload: {e}")
+
+      # Create result
+      result = {
+          "success": True,
+          "error": None,
+          "run_id": run_id,
+          "timestamp": datetime.now().isoformat(),
+          "config_received": config,
+          "system": {
+              "gpu": os.environ.get("NVIDIA_VISIBLE_DEVICES", "none"),
+          },
+          "runs": {}
+      }
+
+      # Write result.json
+      with open("result.json", "w") as f:
+          json.dump(result, f, indent=2)
+
+      print("\n=== Result ===")
+      print(json.dumps(result, indent=2))
+      print("\nResult written to result.json")
+      PYEOF
+
+    artifact_paths:
+      - "result.json"
+
+    timeout_in_minutes: 5
