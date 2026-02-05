@@ -50,8 +50,13 @@ steps:
       uv sync
 
       echo ""
+      echo "=== Installing PyTorch ==="
+      uv pip install torch triton numpy --index-url https://download.pytorch.org/whl/cu124
+
+      echo ""
       echo "=== Running Evaluation ==="
-      uv run python src/runners/buildkite-runner.py
+      . .venv/bin/activate
+      python src/runners/buildkite-runner.py
 
       echo ""
       echo "=== Copying Artifacts ==="
