@@ -241,7 +241,7 @@ def test_make_short_report_benchmarking_failed(sample_eval_result: EvalResult):
     sample_eval_result.run.success = False
     sample_eval_result.compilation = None
     sample_eval_result.run.exit_code = consts.ExitCode.CUDA_FAIL
-    runs = {"benchmark": sample_eval_result}
+    runs = {"private": sample_eval_result}
 
     result = make_short_report(runs, full=False)
     assert result == ["❌ Running benchmarks failed (cuda api error)"]
@@ -274,27 +274,27 @@ def test_make_short_report_leaderboard_failed(sample_eval_result: EvalResult):
     sample_eval_result.run.success = False
     sample_eval_result.compilation = None
     sample_eval_result.run.exit_code = consts.ExitCode.TEST_SPEC
-    runs = {"leaderboard": sample_eval_result}
+    runs = {"public": sample_eval_result}
 
     result = make_short_report(runs, full=False)
-    assert result == ["❌ Running leaderboard failed (internal error 113)"]
+    assert result == ["❌ Running ranked submission failed (internal error 113)"]
 
     sample_eval_result.run.success = True
     sample_eval_result.run.passed = False
     sample_eval_result.run.exit_code = consts.ExitCode.VALIDATE_FAIL
     result = make_short_report(runs)
     # TODO is this actually possible? Should profiling do **any** correctness testing?
-    assert result == ["❌ Tests missing", "❌ Benchmarks missing", "❌ Leaderboard run failed"]
+    assert result == ["❌ Tests missing", "❌ Benchmarks missing", "❌ Ranked submission failed"]
 
 
 def test_make_short_report_empty():
     result = make_short_report({})
-    assert result == ["❌ Tests missing", "❌ Benchmarks missing", "❌ Leaderboard missing"]
+    assert result == ["❌ Tests missing", "❌ Benchmarks missing", "❌ Ranked submission missing"]
 
 
 def test_make_short_report_full_success():
     runs = {}
-    for run_type in ["test", "benchmark", "profile", "leaderboard"]:
+    for run_type in ["test", "private", "profile", "public"]:
         runs[run_type] = EvalResult(
             start=datetime.datetime.now() - datetime.timedelta(minutes=5),
             end=datetime.datetime.now(),
@@ -318,7 +318,7 @@ def test_make_short_report_full_success():
         "✅ Testing successful",
         "✅ Benchmarking successful",
         "✅ Profiling successful",
-        "✅ Leaderboard run successful",
+        "✅ Ranked submission successful",
     ]
     assert result == expected
 
@@ -331,7 +331,7 @@ def test_make_short_report_missing_components():
         "✅ Compilation successful",
         "✅ Testing successful",
         "❌ Benchmarks missing",
-        "❌ Leaderboard missing",
+        "❌ Ranked submission missing",
     ]
     assert result == expected
 
@@ -532,7 +532,7 @@ def test_generate_report_test_failure(sample_full_result: FullResult):
 def test_generate_report_benchmark_failure(sample_full_result: FullResult):
     from libkernelbot.report import Log, Text
 
-    sample_full_result.runs["benchmark"] = create_eval_result()
+    sample_full_result.runs["private"] = create_eval_result()
     report = generate_report(sample_full_result)
     assert report.data == [
         Text(
@@ -557,8 +557,8 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
         Log(header="Benchmarks", content="❗ Could not find any benchmarks"),
     ]
 
-    sample_full_result.runs["benchmark"].run.passed = False
-    sample_full_result.runs["benchmark"].run.result = {
+    sample_full_result.runs["private"].run.passed = False
+    sample_full_result.runs["private"].run.result = {
         "benchmark-count": "2",
         "benchmark.0.status": "pass",
         "benchmark.0.spec": "Basic functionality",
@@ -607,7 +607,7 @@ def test_generate_report_benchmark_failure(sample_full_result: FullResult):
 def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
     from libkernelbot.report import Log, Text
 
-    sample_full_result.runs["leaderboard"] = create_eval_result()
+    sample_full_result.runs["public"] = create_eval_result()
     report = generate_report(sample_full_result)
     assert report.data == [
         Text(
@@ -632,9 +632,9 @@ def test_generate_report_leaderboard_failure(sample_full_result: FullResult):
         Log(header="Ranked Benchmark", content="❗ Could not find any benchmarks"),
     ]
 
-    sample_full_result.runs["leaderboard"].run.success = False
-    sample_full_result.runs["leaderboard"].run.exit_code = consts.ExitCode.TIMEOUT_EXPIRED
-    sample_full_result.runs["leaderboard"].run.duration = 10.0
+    sample_full_result.runs["public"].run.success = False
+    sample_full_result.runs["public"].run.exit_code = consts.ExitCode.TIMEOUT_EXPIRED
+    sample_full_result.runs["public"].run.duration = 10.0
 
     report = generate_report(sample_full_result)
     assert report.data == [

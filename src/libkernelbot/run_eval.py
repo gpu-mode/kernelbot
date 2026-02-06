@@ -556,8 +556,8 @@ def run_single_evaluation(
         if mode == "test":
             timeout = test_timeout
             cases.write(tests)
-        elif mode in ["benchmark", "profile", "leaderboard"]:
-            timeout = ranked_timeout if mode == "leaderboard" else benchmark_timeout
+        elif mode in ["private", "profile", "public", "secret"]:
+            timeout = ranked_timeout if mode in ["public", "secret"] else benchmark_timeout
             if ranking_by == "last":
                 cases.write(benchmarks.splitlines(keepends=True)[-1])
             else:
@@ -801,22 +801,22 @@ def run_evaluation(
             common_args["benchmarks"] = benchmark
             results[f"{mode}.{i}"] = call(mode=mode, **common_args)
 
-    elif mode in ["test", "benchmark"]:
+    elif mode in ["test", "private"]:
         results[mode] = call(mode=mode, **common_args)
-    elif mode in ["private", "leaderboard"]:
+    elif mode in ["public", "secret"]:
         # first, run the tests
         results["test"] = call(mode="test", **common_args)
 
         if not results["test"].run or not results["test"].run.passed:
             return results
 
-        results["benchmark"] = call(mode="benchmark", **common_args)
+        results["private"] = call(mode="private", **common_args)
 
-        if not results["benchmark"].run or not results["benchmark"].run.passed:
+        if not results["private"].run or not results["private"].run.passed:
             return results
 
-        # if they pass, run the leaderboard validation
-        results["leaderboard"] = call(mode="leaderboard", **common_args)
+        # if they pass, run the public/secret validation
+        results[mode] = call(mode=mode, **common_args)
     else:
         raise AssertionError("Invalid mode")
 
