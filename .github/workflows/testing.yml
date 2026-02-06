@@ -63,3 +63,16 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
       - run: uv run pytest -m integration tests/test_github.py -v
+
+  integration-tests-buildkite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Skip for Dependabot PRs as they don't have access to secrets
+    if: github.actor != 'dependabot[bot]'
+    env:
+      BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --extra dev
+      - run: uv run pytest -m integration tests/test_buildkite.py -v

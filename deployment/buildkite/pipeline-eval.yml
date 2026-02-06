@@ -1,0 +1,72 @@
+# Kernelbot Evaluation Pipeline for Buildkite
+# Mirrors GitHub runner: clone repo, install deps, run evaluation
+
+steps:
+  - label: ":rocket: Kernel Evaluation"
+    agents:
+      queue: "${KERNELBOT_QUEUE:-test}"
+
+    plugins:
+      - docker#v5.11.0:
+          image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+          always-pull: false
+          gpus: "all"
+          propagate-environment: true
+          shell: ["/bin/bash", "-e", "-c"]
+          environment:
+            - NVIDIA_VISIBLE_DEVICES
+            - CUDA_VISIBLE_DEVICES
+            - KERNELBOT_PAYLOAD
+            - KERNELBOT_RUN_ID
+          cpus: "${KERNELBOT_CPUS:-8}"
+          memory: "${KERNELBOT_MEMORY:-64g}"
+          workdir: /workdir
+
+    command: |
+      set -e
+
+      echo "=== Environment ==="
+      echo "NVIDIA_VISIBLE_DEVICES=$NVIDIA_VISIBLE_DEVICES"
+      echo "KERNELBOT_RUN_ID=$KERNELBOT_RUN_ID"
+      nvidia-smi -L
+
+      echo ""
+      echo "=== Installing System Dependencies ==="
+      apt-get update -qq
+      apt-get install -y -qq curl ca-certificates git
+
+      echo ""
+      echo "=== Installing uv ==="
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      . /root/.local/bin/env
+
+      echo ""
+      echo "=== Cloning Repository ==="
+      git clone --depth 1 --branch buildkite-infrastructure https://github.com/gpu-mode/kernelbot.git /opt/kernelbot
+      cd /opt/kernelbot
+
+      echo ""
+      echo "=== Installing Dependencies ==="
+      uv sync
+
+      echo ""
+      echo "=== Installing PyTorch ==="
+      uv pip install torch triton numpy --index-url https://download.pytorch.org/whl/cu124
+
+      echo ""
+      echo "=== Running Evaluation ==="
+      . .venv/bin/activate
+      python src/runners/buildkite-runner.py
+
+      echo ""
+      echo "=== Copying Artifacts ==="
+      cp result.json /workdir/result.json
+      cp -r profile_data /workdir/profile_data 2>/dev/null || true
+
+      echo "=== Done ==="
+
+    artifact_paths:
+      - "result.json"
+      - "profile_data/*"
+
+    timeout_in_minutes: 30
