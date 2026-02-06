@@ -848,6 +848,90 @@ class LeaderboardDB:
             logger.exception("Could not delete submission %s.", submission_id, exc_info=e)
             raise KernelBotError(f"Could not delete submission {submission_id}!") from e
 
+    def get_user_submissions(
+        self,
+        user_id: str,
+        leaderboard_name: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """
+        Get submissions for a specific user.
+
+        Args:
+            user_id: The user's ID
+            leaderboard_name: Optional filter by leaderboard name
+            limit: Maximum number of submissions to return (max 100)
+            offset: Offset for pagination
+
+        Returns:
+            List of submission dictionaries with summary info and runs
+        """
+        # Validate and clamp inputs
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        try:
+            # Build query with conditional WHERE clause
+            where_clause = "WHERE s.user_id = %s"
+            params: list = [user_id]
+
+            if leaderboard_name:
+                where_clause += " AND lb.name = %s"
+                params.append(leaderboard_name)
+
+            # First, get distinct submissions
+            submission_query = f"""
+                SELECT s.id, lb.name as leaderboard_name, s.file_name,
+                       s.submission_time, s.done
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                {where_clause}
+                ORDER BY s.submission_time DESC
+                LIMIT %s OFFSET %s
+            """
+            self.cursor.execute(submission_query, params + [limit, offset])
+            submissions = self.cursor.fetchall()
+
+            if not submissions:
+                return []
+
+            # Get all runs for these submissions
+            submission_ids = [row[0] for row in submissions]
+            runs_query = """
+                SELECT submission_id, runner as gpu_type, score
+                FROM leaderboard.runs
+                WHERE submission_id = ANY(%s) AND NOT secret AND passed
+            """
+            self.cursor.execute(runs_query, (submission_ids,))
+            runs_by_submission: dict = {}
+            for run_row in self.cursor.fetchall():
+                sub_id = run_row[0]
+                if sub_id not in runs_by_submission:
+                    runs_by_submission[sub_id] = []
+                runs_by_submission[sub_id].append({
+                    "gpu_type": run_row[1],
+                    "score": run_row[2],
+                })
+
+            # Build result with runs grouped by submission
+            results = []
+            for row in submissions:
+                sub_id = row[0]
+                results.append({
+                    "id": sub_id,
+                    "leaderboard_name": row[1],
+                    "file_name": row[2],
+                    "submission_time": row[3],
+                    "done": row[4],
+                    "runs": runs_by_submission.get(sub_id, []),
+                })
+            return results
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching user submissions for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error fetching user submissions") from e
+
     def get_submission_by_id(self, submission_id: int) -> Optional["SubmissionItem"]:
         query = """
                 SELECT s.leaderboard_id, lb.name, s.file_name, s.user_id,
