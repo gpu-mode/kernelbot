@@ -142,14 +142,16 @@ class KernelBackend:
 
         if result.success:
             score = None
-            # Check for the mode's result key (public or secret)
             mode_key = mode.value
-            if (
-                mode_key in result.runs
-                and result.runs[mode_key].run.success
-                and result.runs[mode_key].run.passed
-            ):
-                score = compute_score(result, task, submission_id, mode_key)
+            # Only compute scores for ranked modes (PUBLIC and SECRET), not PRIVATE
+            # PRIVATE runs return timing info but don't affect leaderboard ranking
+            if mode in (SubmissionMode.PUBLIC, SubmissionMode.SECRET):
+                if (
+                    mode_key in result.runs
+                    and result.runs[mode_key].run.success
+                    and result.runs[mode_key].run.passed
+                ):
+                    score = compute_score(result, task, submission_id, mode_key)
 
             # verifyruns uses a fake submission id of -1
             if submission_id != -1:
