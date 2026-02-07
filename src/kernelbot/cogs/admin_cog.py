@@ -54,9 +54,7 @@ async def leaderboard_dir_autocomplete(
 ) -> list[discord.app_commands.Choice[str]]:
     """Return leaderboard names that match the current typed name"""
     root = Path(env.PROBLEM_DEV_DIR)
-    return [
-        discord.app_commands.Choice(name=x.name, value=x.name) for x in root.iterdir() if x.is_dir()
-    ]
+    return [discord.app_commands.Choice(name=x.name, value=x.name) for x in root.iterdir() if x.is_dir()]
 
 
 # ensure valid serialization
@@ -83,9 +81,9 @@ class AdminCog(commands.Cog):
             name="delete-leaderboard", description="Delete a leaderboard"
         )(self.delete_leaderboard)
 
-        self.delete_submission = bot.admin_group.command(
-            name="delete-submission", description="Delete a submission"
-        )(self.delete_submission)
+        self.delete_submission = bot.admin_group.command(name="delete-submission", description="Delete a submission")(
+            self.delete_submission
+        )
 
         self.accept_jobs = bot.admin_group.command(
             name="start", description="Make the kernelbot accept new submissions"
@@ -99,9 +97,9 @@ class AdminCog(commands.Cog):
             name="update-problems", description="Reload all problem definitions"
         )(self.update_problems)
 
-        self.show_bot_stats = bot.admin_group.command(
-            name="show-stats", description="Show stats for the kernelbot"
-        )(self.show_bot_stats)
+        self.show_bot_stats = bot.admin_group.command(name="show-stats", description="Show stats for the kernelbot")(
+            self.show_bot_stats
+        )
 
         self.resync = bot.admin_group.command(
             name="resync", description="Trigger re-synchronization of slash commands"
@@ -111,17 +109,21 @@ class AdminCog(commands.Cog):
             name="get-submission", description="Retrieve one of past submissions"
         )(self.get_submission_by_id)
 
-        self.get_user_names = bot.admin_group.command(
-            name="get-user-names", description="Get user names"
-        )(self.get_user_names)
+        self.get_user_names = bot.admin_group.command(name="get-user-names", description="Get user names")(
+            self.get_user_names
+        )
 
-        self.update_user_names = bot.admin_group.command(
-            name="update-user-names", description="Update user names"
-        )(self.update_user_names)
+        self.update_user_names = bot.admin_group.command(name="update-user-names", description="Update user names")(
+            self.update_user_names
+        )
 
-        self.set_forum_ids = bot.admin_group.command(
-            name="set-forum-ids", description="Sets forum IDs"
-        )(self.set_forum_ids)
+        self.set_forum_ids = bot.admin_group.command(name="set-forum-ids", description="Sets forum IDs")(
+            self.set_forum_ids
+        )
+
+        self.set_leaderboard_gpu_rate_limit = bot.admin_group.command(
+            name="set-leaderboard-gpu-rate-limit", description="Set a rate limit for a leaderboard GPU type"
+        )(self.set_leaderboard_gpu_rate_limit)
 
         self._scheduled_cleanup_temp_users.start()
 
@@ -139,9 +141,7 @@ class AdminCog(commands.Cog):
             return True
         return False
 
-    async def is_creator_check(
-        self, interaction: discord.Interaction, leaderboard_name: str
-    ) -> bool:
+    async def is_creator_check(self, interaction: discord.Interaction, leaderboard_name: str) -> bool:
         with self.bot.leaderboard_db as db:
             leaderboard_item = db.get_leaderboard(leaderboard_name)
             if leaderboard_item["creator_id"] == interaction.user.id:
@@ -218,9 +218,7 @@ class AdminCog(commands.Cog):
                 f"Leaderboard '{leaderboard_name}' created.",
             )
 
-    def _leaderboard_opening_message(
-        self, leaderboard_name: str, deadline: datetime, description: str
-    ):
+    def _leaderboard_opening_message(self, leaderboard_name: str, deadline: datetime, description: str):
         return f"""
         # New Leaderboard: {leaderboard_name}\n
         **Deadline**: {deadline.strftime("%Y-%m-%d %H:%M")}\n
@@ -252,7 +250,7 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-        if date_value < datetime.now():
+        if date_value < datetime.now(timezone.utc):
             await send_discord_message(
                 interaction,
                 f"Deadline {date_value} has already passed.",
@@ -268,9 +266,7 @@ class AdminCog(commands.Cog):
                 content=self._leaderboard_opening_message(
                     leaderboard_name,
                     date_value,
-                    definition.description[:1500]
-                    if len(definition.description) > 1500
-                    else definition.description,
+                    definition.description[:1500] if len(definition.description) > 1500 else definition.description,
                 ),
                 auto_archive_duration=10080,  # 7 days
             )
@@ -293,8 +289,7 @@ class AdminCog(commands.Cog):
         except discord.Forbidden:
             await send_discord_message(
                 interaction,
-                "Error: Bot doesn't have permission to create forum threads."
-                " Leaderboard was not created.",
+                "Error: Bot doesn't have permission to create forum threads. Leaderboard was not created.",
                 ephemeral=True,
             )
         except discord.HTTPException:
@@ -328,9 +323,7 @@ class AdminCog(commands.Cog):
     ) -> bool:
         if gpu is None:
             # Ask the user to select GPUs
-            view = GPUSelectionView(
-                [gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU]
-            )
+            view = GPUSelectionView([gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU])
 
             await send_discord_message(
                 interaction,
@@ -368,9 +361,7 @@ class AdminCog(commands.Cog):
     @discord.app_commands.describe(leaderboard_name="Name of the leaderboard")
     @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
     @with_error_handling
-    async def delete_leaderboard(
-        self, interaction: discord.Interaction, leaderboard_name: str, force: bool = False
-    ):
+    async def delete_leaderboard(self, interaction: discord.Interaction, leaderboard_name: str, force: bool = False):
         is_admin = await self.admin_check(interaction)
         is_creator = await self.creator_check(interaction)
         is_creator_of_leaderboard = await self.is_creator_check(interaction, leaderboard_name)
@@ -391,9 +382,7 @@ class AdminCog(commands.Cog):
                 )
                 return
 
-        modal = DeleteConfirmationModal(
-            "leaderboard", leaderboard_name, self.bot.leaderboard_db, force=force
-        )
+        modal = DeleteConfirmationModal("leaderboard", leaderboard_name, self.bot.leaderboard_db, force=force)
 
         forum_channel = self.bot.get_channel(self.bot.leaderboard_forum_id)
 
@@ -404,7 +393,7 @@ class AdminCog(commands.Cog):
         if threads:
             thread = threads[0]
             new_name = (
-                f"{leaderboard_name} - archived at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"{leaderboard_name} - archived at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
             )
             await thread.edit(name=new_name, archived=True)
 
@@ -459,9 +448,7 @@ class AdminCog(commands.Cog):
             reject_text="Keep",
             reject_callback=no_delete,
         )
-        await send_discord_message(
-            interaction, "# Attention\nYou are about to **delete** the following submission:\n"
-        )
+        await send_discord_message(interaction, "# Attention\nYou are about to **delete** the following submission:\n")
         await send_discord_message(interaction, msg, files=files)
         await send_discord_message(
             interaction,
@@ -482,9 +469,7 @@ class AdminCog(commands.Cog):
             return
 
         self.bot.backend.accepts_jobs = False
-        await send_discord_message(
-            interaction, "Bot will refuse all future submissions!", ephemeral=True
-        )
+        await send_discord_message(interaction, "Bot will refuse all future submissions!", ephemeral=True)
 
     @with_error_handling
     async def start(self, interaction: discord.Interaction):
@@ -498,8 +483,41 @@ class AdminCog(commands.Cog):
             return
 
         self.bot.backend.accepts_jobs = True
+        await send_discord_message(interaction, "Bot will accept submissions again!", ephemeral=True)
+
+    @app_commands.describe(
+        leaderboard_name="Name of the leaderboard",
+        gpu_type="Name of the GPU type",
+        rate_limit_seconds="Rate limit in seconds",
+    )
+    @with_error_handling
+    async def set_leaderboard_gpu_rate_limit(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu_type: str,
+        rate_limit_seconds: int,
+    ):
+        await interaction.response.defer(ephemeral=True)
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to have Admin permissions to run this command",
+                ephemeral=True,
+            )
+            return
+        if rate_limit_seconds <= 0:
+            rate_limit_seconds = None
+
+        with self.bot.leaderboard_db as db:
+            db.set_leaderboard_gpu_rate_limit(leaderboard_name, gpu_type, rate_limit_seconds)
+        rate_limit_str = f"{rate_limit_seconds} seconds" if rate_limit_seconds is not None else "no rate limit"
+
         await send_discord_message(
-            interaction, "Bot will accept submissions again!", ephemeral=True
+            interaction,
+            f"Leaderboard GPU rate limit set to {rate_limit_str} for {gpu_type} on {leaderboard_name}",
+            ephemeral=True,
         )
 
     @app_commands.describe(
@@ -643,9 +661,7 @@ class AdminCog(commands.Cog):
                     # we can only change things that have no bearing on existing
                     # runs (like description and templates)
                     if ot.files != new_task.files:
-                        file_list = set.symmetric_difference(
-                            set(ot.files.keys()), set(new_task.files)
-                        )
+                        file_list = set.symmetric_difference(set(ot.files.keys()), set(new_task.files))
                         if len(file_list) != 0:
                             await send_discord_message(
                                 interaction,
@@ -653,9 +669,7 @@ class AdminCog(commands.Cog):
                                 f" is currently not possible. File list difference: {file_list}",
                             )
                         else:
-                            diff_files = {
-                                key for key in ot.files if ot.files[key] != new_task.files[key]
-                            }
+                            diff_files = {key for key in ot.files if ot.files[key] != new_task.files[key]}
                             await send_discord_message(
                                 interaction,
                                 f"Changing task files of existing problem `{name}`"
@@ -692,9 +706,7 @@ class AdminCog(commands.Cog):
 
         return update_list, create_list
 
-    async def update_competition(
-        self, interaction: discord.Interaction, spec_file: Path, force: bool = False
-    ):
+    async def update_competition(self, interaction: discord.Interaction, spec_file: Path, force: bool = False):
         try:
             root = spec_file.parent
             with open(spec_file) as f:
@@ -703,9 +715,7 @@ class AdminCog(commands.Cog):
             header = f"Handling `{competition['name']}`..."
             await send_discord_message(interaction, header)
 
-            update_list, create_list = await self._create_update_plan(
-                interaction, competition, root, force
-            )
+            update_list, create_list = await self._create_update_plan(interaction, competition, root, force)
 
             # OK, now we know what we want to do
             plan = ""
@@ -738,9 +748,7 @@ class AdminCog(commands.Cog):
             for entry in update_list:
                 with self.bot.leaderboard_db as db:
                     task = make_task_definition(root / entry["directory"])
-                    db.update_leaderboard(
-                        entry["name"], parse_deadline(entry["deadline"]), task
-                    )
+                    db.update_leaderboard(entry["name"], parse_deadline(entry["deadline"]), task)
                     new_lb: LeaderboardItem = db.get_leaderboard(entry["name"])
 
                 forum_id = new_lb["forum_id"]
@@ -753,9 +761,7 @@ class AdminCog(commands.Cog):
                             )
                         )
                 except (discord.errors.NotFound, discord.errors.HTTPException):
-                    logger.warning(
-                        "Could not find forum thread %s for lb %s", forum_id, entry["name"]
-                    )
+                    logger.warning("Could not find forum thread %s for lb %s", forum_id, entry["name"])
                     pass
 
             header += " DONE"
@@ -802,9 +808,7 @@ class AdminCog(commands.Cog):
                 logger.error(f"Error in resync command: {str(e)}", exc_info=True)
                 await send_discord_message(interaction, f"Error: {str(e)}")
         else:
-            await send_discord_message(
-                interaction, "You need administrator permissions to use this command"
-            )
+            await send_discord_message(interaction, "You need administrator permissions to use this command")
 
     # admin version of this command; less restricted
     @discord.app_commands.describe(submission_id="ID of the submission")
@@ -828,9 +832,7 @@ class AdminCog(commands.Cog):
 
         # allowed/possible to see submission
         if sub is None:
-            await send_discord_message(
-                interaction, f"Submission {submission_id} does not exist", ephemeral=True
-            )
+            await send_discord_message(interaction, f"Submission {submission_id} does not exist", ephemeral=True)
             return
 
         msg, files = self._make_submission_message(submission_id, sub)
@@ -917,9 +919,7 @@ class AdminCog(commands.Cog):
             await send_discord_message(interaction, error_message)
 
     @app_commands.describe(attachment="The JSON file containing user ID to name mapping")
-    async def update_user_names(
-        self, interaction: discord.Interaction, attachment: discord.Attachment
-    ):
+    async def update_user_names(self, interaction: discord.Interaction, attachment: discord.Attachment):
         """Update the database with user names from a JSON file"""
         if not await self.admin_check(interaction):
             await send_discord_message(
@@ -932,9 +932,7 @@ class AdminCog(commands.Cog):
 
         try:
             if not attachment.filename.endswith(".json"):
-                await send_discord_message(
-                    interaction, "Please attach a JSON file with .json extension."
-                )
+                await send_discord_message(interaction, "Please attach a JSON file with .json extension.")
                 return
 
             json_content = await attachment.read()
@@ -982,9 +980,7 @@ class AdminCog(commands.Cog):
             )
 
         except json.JSONDecodeError:
-            await send_discord_message(
-                interaction, "Invalid JSON format in the attached file.", ephemeral=True
-            )
+            await send_discord_message(interaction, "Invalid JSON format in the attached file.", ephemeral=True)
         except Exception as e:
             error_message = f"Error updating database with user names: {str(e)}"
             logger.error(error_message, exc_info=True)
@@ -1007,11 +1003,7 @@ class AdminCog(commands.Cog):
                     threads = [thread for thread in forum_channel.threads if thread.name == name]
                     if len(threads) == 0:
                         # is it an archived thread?
-                        threads = [
-                            thread
-                            async for thread in forum_channel.archived_threads()
-                            if thread.name == name
-                        ]
+                        threads = [thread async for thread in forum_channel.archived_threads() if thread.name == name]
                     if len(threads) != 1:
                         await send_discord_message(
                             interaction, f"Could not set forum thread for {name}", ephemeral=True

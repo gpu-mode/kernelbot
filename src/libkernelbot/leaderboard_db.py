@@ -90,7 +90,14 @@ class LeaderboardDB:
                 VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (name, deadline, task.to_str(), creator_id, forum_id, definition.description),
+                (
+                    name,
+                    deadline.astimezone(datetime.timezone.utc),
+                    task.to_str(),
+                    creator_id,
+                    forum_id,
+                    definition.description,
+                ),
             )
 
             leaderboard_id = self.cursor.fetchone()[0]
@@ -123,15 +130,11 @@ class LeaderboardDB:
         except psycopg2.Error as e:
             logger.exception("Error in leaderboard creation.", exc_info=e)
             if isinstance(e, psycopg2.errors.UniqueViolation):
-                raise KernelBotError(
-                    f"Error: Tried to create a leaderboard '{name}' that already exists."
-                ) from e
+                raise KernelBotError(f"Error: Tried to create a leaderboard '{name}' that already exists.") from e
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error in leaderboard creation.") from e
 
-    def update_leaderboard(
-        self, name, deadline: datetime.datetime, definition: LeaderboardDefinition
-    ):
+    def update_leaderboard(self, name, deadline: datetime.datetime, definition: LeaderboardDefinition):
         task = definition.task
         try:
             lb_id = self.get_leaderboard_id(name)
@@ -259,9 +262,7 @@ class LeaderboardDB:
                 (identifier,),
             )
             row = self.cursor.fetchone()
-            return (
-                {"user_id": row[0], "user_name": row[1], "id_type": id_type.value} if row else None
-            )
+            return {"user_id": row[0], "user_name": row[1], "id_type": id_type.value} if row else None
         except psycopg2.Error as e:
             self.connection.rollback()
             logger.exception("Error validating %s %s", human_label, identifier, exc_info=e)
@@ -447,15 +448,9 @@ class LeaderboardDB:
                     submission,
                     mode,
                 )
-                raise KernelBotError(
-                    "Internal error: Attempted to add run, "
-                    "but submission was already marked as done."
-                )
+                raise KernelBotError("Internal error: Attempted to add run, but submission was already marked as done.")
 
-            meta = {
-                k: result.__dict__[k]
-                for k in ["stdout", "stderr", "success", "exit_code", "command", "duration"]
-            }
+            meta = {k: result.__dict__[k] for k in ["stdout", "stderr", "success", "exit_code", "command", "duration"]}
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.runs (submission_id, start_time, end_time, mode,
@@ -494,7 +489,7 @@ class LeaderboardDB:
         if active_only:
             self.cursor.execute(
                 "SELECT name FROM leaderboard.leaderboard WHERE leaderboard.deadline > %s",
-                (datetime.datetime.now().astimezone(datetime.timezone.utc),),
+                (datetime.datetime.now(datetime.timezone.utc),),
             )
         else:
             self.cursor.execute("SELECT name FROM leaderboard.leaderboard")
@@ -512,9 +507,7 @@ class LeaderboardDB:
         leaderboards = []
 
         for lb in lbs:
-            self.cursor.execute(
-                "SELECT * from leaderboard.gpu_type WHERE leaderboard_id = %s", [lb[0]]
-            )
+            self.cursor.execute("SELECT * from leaderboard.gpu_type WHERE leaderboard_id = %s", [lb[0]])
             gpu_types = [x[1] for x in self.cursor.fetchall()]
 
             leaderboards.append(
@@ -707,9 +700,7 @@ class LeaderboardDB:
             # did we specify a valid GPU?
             gpus = self.get_leaderboard_gpu_types(leaderboard_name)
             if gpu_name not in gpus:
-                raise KernelBotError(
-                    f"Invalid GPU type '{gpu_name}' for leaderboard '{leaderboard_name}'"
-                )
+                raise KernelBotError(f"Invalid GPU type '{gpu_name}' for leaderboard '{leaderboard_name}'")
 
         return result
 
@@ -909,23 +900,27 @@ class LeaderboardDB:
                 sub_id = run_row[0]
                 if sub_id not in runs_by_submission:
                     runs_by_submission[sub_id] = []
-                runs_by_submission[sub_id].append({
-                    "gpu_type": run_row[1],
-                    "score": run_row[2],
-                })
+                runs_by_submission[sub_id].append(
+                    {
+                        "gpu_type": run_row[1],
+                        "score": run_row[2],
+                    }
+                )
 
             # Build result with runs grouped by submission
             results = []
             for row in submissions:
                 sub_id = row[0]
-                results.append({
-                    "id": sub_id,
-                    "leaderboard_name": row[1],
-                    "file_name": row[2],
-                    "submission_time": row[3],
-                    "done": row[4],
-                    "runs": runs_by_submission.get(sub_id, []),
-                })
+                results.append(
+                    {
+                        "id": sub_id,
+                        "leaderboard_name": row[1],
+                        "file_name": row[2],
+                        "submission_time": row[3],
+                        "done": row[4],
+                        "runs": runs_by_submission.get(sub_id, []),
+                    }
+                )
             return results
         except psycopg2.Error as e:
             self.connection.rollback()
@@ -1030,9 +1025,7 @@ class LeaderboardDB:
             # did we specify a valid GPU?
             gpus = self.get_leaderboard_gpu_types(leaderboard_name)
             if gpu_name not in gpus:
-                raise KernelBotError(
-                    f"Invalid GPU type '{gpu_name}' for leaderboard '{leaderboard_name}'"
-                )
+                raise KernelBotError(f"Invalid GPU type '{gpu_name}' for leaderboard '{leaderboard_name}'")
 
         return count
 
@@ -1139,9 +1132,7 @@ class LeaderboardDB:
                 (user_id,),
             )
             if not self.cursor.fetchone():
-                raise Exception(
-                    "User not found. Please use the register command to create an account."
-                )
+                raise Exception("User not found. Please use the register command to create an account.")
 
             self.cursor.execute(
                 """
@@ -1213,6 +1204,105 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
             raise KernelBotError("Error validating CLI ID") from e
+
+    def is_user_rate_limited(self, user_id: int, leaderboard_id: int, gpu_type: str) -> tuple[bool, str | None]:
+        try:
+            self.cursor.execute(
+                """
+                SELECT rate_limit_seconds
+                FROM leaderboard.gpu_type
+                WHERE leaderboard_id = %s AND gpu_type = %s
+                """,
+                (leaderboard_id, gpu_type),
+            )
+            row = self.cursor.fetchone()
+            if row is None or row[0] is None:
+                return False, None
+
+            rate_limit_seconds = row[0]
+            self.cursor.execute(
+                """
+                SELECT s.submission_time
+                FROM leaderboard.submission s
+                JOIN leaderboard.runs r ON r.submission_id = s.id
+                WHERE s.user_id = %s
+                    AND s.leaderboard_id = %s
+                    AND s.submission_time > NOW() - make_interval(secs => %s)
+                    AND r.runner = %s
+                ORDER BY s.submission_time DESC
+                LIMIT 1
+                """,
+                (str(user_id), leaderboard_id, rate_limit_seconds, gpu_type),
+            )
+            last = self.cursor.fetchone()
+            if last is not None:
+                last_time = last[0]
+                return True, (
+                    f"Rate limit exceeded for `{gpu_type}`. "
+                    f"You can submit once every {rate_limit_seconds} seconds. "
+                    f"Last submission: {last_time.strftime('%Y-%m-%d %H:%M:%S UTC')}."
+                )
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error checking submission rate limit") from e
+        return False, None
+
+    def is_user_allowed_to_submit(self, user_id: int, leaderboard: str, gpus: list) -> tuple[bool, str | None]:
+        """
+        Check if a user is allowed to submit to a leaderboard.
+        Enforces per-(leaderboard, gpu) rate limits stored in leaderboard.gpu_type.rate_limit_seconds.
+        """
+        try:
+            lb_id = self.get_leaderboard_id(leaderboard)
+
+            for gpu in gpus:
+                is_user_rate_limited, reason = self.is_user_rate_limited(user_id, lb_id, gpu)
+                if is_user_rate_limited:
+                    return False, reason
+
+            return True, None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error checking submission rate limit") from e
+
+    def set_leaderboard_gpu_rate_limit(self, leaderboard_name: str, gpu_type: str, rate_limit_seconds: int | None):
+        try:
+            leaderboard_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.gpu_type
+                SET rate_limit_seconds = %s
+                WHERE leaderboard_id = %s AND gpu_type = %s
+                """,
+                (rate_limit_seconds, leaderboard_id, gpu_type),
+            )
+
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception(
+                "Error setting leaderboard GPU rate limit for %s %s", leaderboard_name, gpu_type, exc_info=e
+            )
+            raise KernelBotError("Error setting leaderboard GPU rate limit") from e
+
+    def get_leaderboard_rate_limits(self, leaderboard_name: str) -> dict[str, int]:
+        try:
+            leaderboard_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                SELECT gpu_type, rate_limit_seconds
+                FROM leaderboard.gpu_type
+                WHERE leaderboard_id = %s
+                """,
+                (leaderboard_id,),
+            )
+            return {x[0]: x[1] for x in self.cursor.fetchall()}
+        except psycopg2.Error as e:
+            logger.exception("Error getting leaderboard rate limits for %s", leaderboard_name, exc_info=e)
+            self.connection.rollback()
+            raise KernelBotError("Error getting leaderboard rate limits") from e
 
 
 class LeaderboardDoesNotExist(KernelBotError):

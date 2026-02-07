@@ -74,9 +74,7 @@ async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]
     user_name = user_json.get("username")
 
     if not user_id or not user_name:
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve user ID or username from Discord."
-        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve user ID or username from Discord.")
 
     return user_id, user_name
 
@@ -135,16 +133,12 @@ async def _handle_github_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
     user_name = user_json.get("login")  # GitHub uses 'login' for username
 
     if not user_id or not user_name:
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve user ID or username from GitHub."
-        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve user ID or username from GitHub.")
 
     return user_id, user_name
 
 
-async def _run_submission(
-    submission: SubmissionRequest, mode: SubmissionMode, backend: KernelBackend
-):
+async def _run_submission(submission: SubmissionRequest, mode: SubmissionMode, backend: KernelBackend):
     try:
         req = prepare_submission(submission, backend)
     except Exception as e:
@@ -225,21 +219,6 @@ async def to_submit_info(
 
     try:
         with db_context as db:
-            # Per-user rate limit: max 1 submission per hour on Modal B200 for leaderboard 730
-            if gpu_type == "B200":
-                lb_id = db.get_leaderboard_id(leaderboard_name)
-                if lb_id == 730:
-                    last_submission_time = db.check_user_rate_limit(user_id)
-                    if last_submission_time:
-                        raise HTTPException(
-                            status_code=429,
-                            detail=(
-                                f"Rate limit exceeded. You can submit once per hour. "
-                                f"Last submission: {last_submission_time.isoformat()}. "
-                                f"Consider using the NVIDIA runner instead of Modal for faster iteration."
-                            ),
-                        )
-
             leaderboard_item = db.get_leaderboard(leaderboard_name)
             gpus = leaderboard_item.get("gpu_types", [])
             if gpu_type not in gpus:

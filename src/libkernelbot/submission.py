@@ -39,13 +39,9 @@ class ProcessedSubmissionRequest(SubmissionRequest):
     task_gpus: list
 
 
-def prepare_submission(
-    req: SubmissionRequest, backend: "KernelBackend"
-) -> ProcessedSubmissionRequest:
+def prepare_submission(req: SubmissionRequest, backend: "KernelBackend") -> ProcessedSubmissionRequest:
     if not backend.accepts_jobs:
-        raise KernelBotError(
-            "The bot is currently not accepting any new submissions, please try again later."
-        )
+        raise KernelBotError("The bot is currently not accepting any new submissions, please try again later.")
 
     if profanity.contains_profanity(req.file_name):
         raise KernelBotError("Please provide a non-rude filename")
@@ -72,11 +68,16 @@ def prepare_submission(
                 task_gpu_list = "".join([f" * {t}\n" for t in task_gpus])
 
                 raise KernelBotError(
-                    f"GPU {g} not available for `{req.leaderboard}`\n"
-                    f"Choose one of: {task_gpu_list}",
+                    f"GPU {g} not available for `{req.leaderboard}`\n" f"Choose one of: {task_gpu_list}",
                 )
     elif len(task_gpus) == 1:
         req.gpus = task_gpus
+
+    with backend.db as db:
+        is_user_allowed, potential_reason = db.is_user_allowed_to_submit(req.user_id, req.leaderboard, req.gpus)
+
+    if not is_user_allowed:
+        raise KernelBotError(potential_reason)
 
     return ProcessedSubmissionRequest(
         **dataclasses.asdict(req),
@@ -92,8 +93,7 @@ def check_deadline(leaderboard: LeaderboardItem):
 
     if now > deadline:
         raise KernelBotError(
-            f"The deadline to submit to {leaderboard['name']} has passed.\n"
-            f"It was {deadline} and today is {now}."
+            f"The deadline to submit to {leaderboard['name']} has passed.\n" f"It was {deadline} and today is {now}."
         )
 
 
@@ -174,14 +174,11 @@ def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int)
     if task.ranking_by == RankCriterion.LAST:
         if num_benchmarks != 1:
             logger.error(
-                "Ranked submission error for submission %d ranking_by is `last`, "
-                "but got %d benchmarks",
+                "Ranked submission error for submission %d ranking_by is `last`, " "but got %d benchmarks",
                 submission_id,
                 num_benchmarks,
             )
-            raise KernelBotError(
-                f"Expected submission to have exactly one benchmark, got {num_benchmarks}."
-            )
+            raise KernelBotError(f"Expected submission to have exactly one benchmark, got {num_benchmarks}.")
         score = float(result.runs["leaderboard"].run.result["benchmark.0.mean"]) / 1e9
     else:
         scores = []
