@@ -289,7 +289,7 @@ class AdminCog(commands.Cog):
         except discord.Forbidden:
             await send_discord_message(
                 interaction,
-                "Error: Bot doesn't have permission to create forum threads." " Leaderboard was not created.",
+                "Error: Bot doesn't have permission to create forum threads. Leaderboard was not created.",
                 ephemeral=True,
             )
         except discord.HTTPException:
@@ -512,10 +512,11 @@ class AdminCog(commands.Cog):
 
         with self.bot.leaderboard_db as db:
             db.set_leaderboard_gpu_rate_limit(leaderboard_name, gpu_type, rate_limit_seconds)
+        rate_limit_str = f"{rate_limit_seconds} seconds" if rate_limit_seconds is not None else "no rate limit"
 
         await send_discord_message(
             interaction,
-            f"Leaderboard GPU rate limit set to {rate_limit_seconds} seconds for {gpu_type} on {leaderboard_name}",
+            f"Leaderboard GPU rate limit set to {rate_limit_str} for {gpu_type} on {leaderboard_name}",
             ephemeral=True,
         )
 
