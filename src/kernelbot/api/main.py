@@ -43,6 +43,7 @@ logger = setup_logging(__name__)
 
 app = FastAPI()
 
+
 def json_serializer(obj):
     """JSON serializer for objects not serializable by default json code"""
     if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
@@ -185,9 +186,7 @@ def require_admin(
 @app.get("/auth/init")
 async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
     if provider not in ["discord", "github"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid provider, must be 'discord' or 'github'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid provider, must be 'discord' or 'github'")
 
     """
     Initialize authentication flow for the specified provider.
@@ -230,9 +229,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
     """
 
     if auth_provider not in ["discord", "github"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid provider, must be 'discord' or 'github'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid provider, must be 'discord' or 'github'")
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing authorization code or state")
@@ -252,8 +249,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
     if not api_base_url:
         raise HTTPException(
             status_code=500,
-            detail="Redirect URI base not configured."
-            "Set HEROKU_APP_DEFAULT_DOMAIN_NAME or POPCORN_API_URL.",
+            detail="Redirect URI base not configured.Set HEROKU_APP_DEFAULT_DOMAIN_NAME or POPCORN_API_URL.",
         )
     redirect_uri_base = api_base_url.rstrip("/")
     redirect_uri = f"https://{redirect_uri_base}/auth/cli/{auth_provider}"
@@ -275,7 +271,10 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         raise HTTPException(status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}") from e
 
     if not user_id or not user_name:
-        raise HTTPException(status_code=500,detail="Failed to retrieve user ID or username from provider.",)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve user ID or username from provider.",
+        )
 
     try:
         with db_context as db:
@@ -297,6 +296,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         "is_reset": is_reset,
     }
 
+
 async def _stream_submission_response(
     submission_request: SubmissionRequest,
     submission_mode_enum: SubmissionMode,
@@ -315,18 +315,18 @@ async def _stream_submission_response(
 
         while not task.done():
             elapsed_time = time.time() - start_time
-            yield f"event: status\ndata: {json.dumps({'status': 'processing',
-                                                      'elapsed_time': round(elapsed_time, 2)},
-                                                      default=json_serializer)}\n\n"
+            yield f"event: status\ndata: {
+                json.dumps({'status': 'processing', 'elapsed_time': round(elapsed_time, 2)}, default=json_serializer)
+            }\n\n"
 
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                yield f"event: error\ndata: {json.dumps(
-                    {'status': 'error', 'detail': 'Submission cancelled'},
-                    default=json_serializer)}\n\n"
+                yield f"event: error\ndata: {
+                    json.dumps({'status': 'error', 'detail': 'Submission cancelled'}, default=json_serializer)
+                }\n\n"
                 return
 
         result, reports = await task
@@ -359,6 +359,7 @@ async def _stream_submission_response(
                 await task
             except asyncio.CancelledError:
                 pass
+
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
@@ -398,13 +399,13 @@ async def run_submission(  # noqa: C901
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
+
 async def enqueue_background_job(
     req: ProcessedSubmissionRequest,
     mode: SubmissionMode,
     backend: KernelBackend,
     manager: BackgroundSubmissionManager,
 ):
-
     # pre-create the submission for api returns
     with backend.db as db:
         sub_id = db.create_submission(
@@ -412,13 +413,14 @@ async def enqueue_background_job(
             file_name=req.file_name,
             code=req.code,
             user_id=req.user_id,
-            time=datetime.datetime.now(),
+            time=datetime.datetime.now(datetime.timezone.utc),
             user_name=req.user_name,
         )
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
-    return sub_id,job_id
+    return sub_id, job_id
+
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_async(
@@ -445,15 +447,13 @@ async def run_submission_async(
         JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
     """
     try:
-
         await simple_rate_limit()
         logger.info(f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}")
-
 
         # throw error if submission request is invalid
         try:
             submission_request, submission_mode_enum = await to_submit_info(
-            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+                user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
             )
 
             req = prepare_submission(submission_request, backend_instance)
@@ -466,13 +466,13 @@ async def run_submission_async(
             raise HTTPException(status_code=400, detail="Invalid GPU type")
 
         # put submission request to background manager to run in background
-        sub_id,job_status_id = await enqueue_background_job(
+        sub_id, job_status_id = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
 
         return JSONResponse(
             status_code=202,
-            content={"details":{"id": sub_id, "job_status_id": job_status_id}, "status": "accepted"},
+            content={"details": {"id": sub_id, "job_status_id": job_status_id}, "status": "accepted"},
         )
         # Preserve FastAPI HTTPException as-is
     except HTTPException:
@@ -536,8 +536,7 @@ async def create_dev_leaderboard(
     # GPUs must be specified in task.yml
     if not definition.gpus:
         raise HTTPException(
-            status_code=400,
-            detail="No gpus specified in task.yml. Add 'gpus:' field with list of GPU types."
+            status_code=400, detail="No gpus specified in task.yml. Add 'gpus:' field with list of GPU types."
         )
 
     with db_context as db:
@@ -629,7 +628,7 @@ async def admin_update_problems(
             branch=branch,
             force=force,
             creator_id=0,  # API-created
-            forum_id=-1,   # No Discord forum
+            forum_id=-1,  # No Discord forum
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -640,6 +639,33 @@ async def admin_update_problems(
         "updated": result.updated,
         "skipped": result.skipped,
         "errors": result.errors,
+    }
+
+
+@app.get("/leaderboard/rate-limits/{leaderboard_name}")
+async def get_leaderboard_rate_limits(leaderboard_name: str, db_context=Depends(get_db)) -> dict:
+    with db_context as db:
+        rate_limits = db.get_leaderboard_rate_limits(leaderboard_name)
+    return {"status": "ok", "rate_limits": rate_limits}
+
+
+@app.post("/leaderboard/rate-limits/{leaderboard_name}/{gpu_type}")
+async def set_leaderboard_gpu_rate_limit(
+    leaderboard_name: str,
+    gpu_type: str,
+    rate_limit_seconds: int,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    if rate_limit_seconds <= 0:
+        rate_limit_seconds = None
+    with db_context as db:
+        db.set_leaderboard_gpu_rate_limit(leaderboard_name, gpu_type, rate_limit_seconds)
+    return {
+        "status": "ok",
+        "leaderboard_name": leaderboard_name,
+        "gpu_type": gpu_type,
+        "rate_limit_seconds": rate_limit_seconds,
     }
 
 
@@ -692,9 +718,7 @@ async def get_submissions(
     try:
         with db_context as db:
             # Add validation for leaderboard and GPU? Might be redundant if DB handles it.
-            return db.get_leaderboard_submissions(
-                leaderboard_name, gpu_name, limit=limit, offset=offset
-            )
+            return db.get_leaderboard_submissions(leaderboard_name, gpu_name, limit=limit, offset=offset)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching submissions: {e}") from e
 

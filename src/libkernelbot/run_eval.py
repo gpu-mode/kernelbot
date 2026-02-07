@@ -273,9 +273,7 @@ def compile_cuda_script(  # # noqa: C901
 
     print_("[Compiling]")
     try:
-        compile_process = subprocess.run(
-            command, capture_output=True, text=True, check=True, timeout=Timeout.COMPILE
-        )
+        compile_process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=Timeout.COMPILE)
     except subprocess.CalledProcessError as e:
         return CompileResult(
             nvcc_found=True,
@@ -357,10 +355,7 @@ def run_program(
             result_dict[key.strip()] = value.strip()
 
     return RunResult(
-        success=(
-            run_process.returncode == ExitCode.SUCCESS
-            or run_process.returncode == ExitCode.VALIDATE_FAIL
-        ),
+        success=(run_process.returncode == ExitCode.SUCCESS or run_process.returncode == ExitCode.VALIDATE_FAIL),
         passed=result_dict.get("check", None) == "pass",
         command=_make_cmd(run_process.args),
         stdout=_limit_length(run_process.stdout),
@@ -474,9 +469,7 @@ def profile_program_ncu(
         "--",
     ] + call
 
-    run_result = run_program(
-        call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={"POPCORN_NCU": "1"}
-    )
+    run_result = run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={"POPCORN_NCU": "1"})
     profile_result = None
 
     try:
@@ -494,9 +487,7 @@ def profile_program_ncu(
         ]
         report = subprocess.check_output(ncu_cmd, text=True)
         report = _filter_ncu_report(report, get_tables)
-        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode(
-            "utf-8"
-        )
+        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode("utf-8")
     except subprocess.CalledProcessError:
         pass
 
@@ -602,9 +593,7 @@ def make_system_info() -> SystemInfo:  # noqa: C901
             # try again for HIP
             try:
                 rocm_info = json.loads(
-                    subprocess.check_output(
-                        ["rocm-smi", "--showproductname", "--json"], encoding="utf-8"
-                    )
+                    subprocess.check_output(["rocm-smi", "--showproductname", "--json"], encoding="utf-8")
                 )
                 if len(rocm_info) > 0:
                     info.gpu = next(rocm_info.__iter__())["Card Series"]
@@ -668,7 +657,7 @@ def run_cuda_script(  # # noqa: C901
     Returns:
         tuple[CompileResult, RunResult]: CUDA compile/eval result information
     """
-    start = datetime.datetime.now()
+    start = datetime.datetime.now(datetime.timezone.utc)
     try:
         # Write submission files to directory
         _create_files(sources)
@@ -687,7 +676,7 @@ def run_cuda_script(  # # noqa: C901
         if not compile_result.success:
             return EvalResult(
                 start=start,
-                end=datetime.datetime.now(),
+                end=datetime.datetime.now(datetime.timezone.utc),
                 compilation=compile_result,
                 run=None,
                 profile=None,
@@ -704,7 +693,7 @@ def run_cuda_script(  # # noqa: C901
     run_result, profile_result = run_single_evaluation(["./eval.out"], **kwargs)
     return EvalResult(
         start=start,
-        end=datetime.datetime.now(),
+        end=datetime.datetime.now(datetime.timezone.utc),
         compilation=compile_result,
         run=run_result,
         profile=profile_result,
@@ -727,7 +716,7 @@ def run_pytorch_script(  # noqa: C901
     Returns:
         RunResult
     """
-    start = datetime.datetime.now()
+    start = datetime.datetime.now(datetime.timezone.utc)
     try:
         assert main in sources.keys()
 
@@ -767,7 +756,7 @@ def run_pytorch_script(  # noqa: C901
 
         return EvalResult(
             start=start,
-            end=datetime.datetime.now(),
+            end=datetime.datetime.now(datetime.timezone.utc),
             compilation=comp,
             run=run,
             profile=profile,
@@ -847,9 +836,7 @@ def run_config(config: dict):
         "multi_gpu": config.get("multi_gpu", False),
     }
     if config["lang"] == "py":
-        runner = functools.partial(
-            run_pytorch_script, sources=config["sources"], main=config["main"]
-        )
+        runner = functools.partial(run_pytorch_script, sources=config["sources"], main=config["main"])
     elif config["lang"] == "cu":
         runner = functools.partial(
             run_cuda_script,
