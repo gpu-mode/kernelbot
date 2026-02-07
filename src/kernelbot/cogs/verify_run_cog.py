@@ -50,14 +50,10 @@ class VerifyRunCog(commands.Cog):
         submit_leaderboard = self.bot.backend.submit_leaderboard
 
         if lang == "py":
-            sub_code = create_mock_attachment(
-                "submission.py", Path("examples/identity_py/submission.py").read_text()
-            )
+            sub_code = create_mock_attachment("submission.py", Path("examples/identity_py/submission.py").read_text())
             leaderboard = make_task_definition("examples/identity_py")
         else:
-            sub_code = create_mock_attachment(
-                "test.cu", Path("examples/identity_cuda/submission.cu").read_text()
-            )
+            sub_code = create_mock_attachment("test.cu", Path("examples/identity_cuda/submission.cu").read_text())
             leaderboard = make_task_definition("examples/identity_cuda")
 
         return await submit_leaderboard(
@@ -177,9 +173,7 @@ class VerifyRunCog(commands.Cog):
         ]
     )
     @with_error_handling
-    async def verify_task(
-        self, interaction: discord.Interaction, task: str, mode: Choice[str] = None
-    ):
+    async def verify_task(self, interaction: discord.Interaction, task: str, mode: Choice[str] = None):
         directory = Path(env.PROBLEM_DEV_DIR) / task
         if not directory.resolve().is_relative_to(Path.cwd() / env.PROBLEM_DEV_DIR):
             await send_discord_message(interaction, f"Invalid path {directory.resolve()}")
@@ -206,7 +200,7 @@ class VerifyRunCog(commands.Cog):
             db.create_leaderboard(
                 {
                     "name": lb_name,
-                    "deadline": datetime.datetime.now() + datetime.timedelta(days=1),
+                    "deadline": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1),
                     "task": task,
                     "gpu_types": "T4",
                     "creator_id": interaction.user.id,
@@ -218,9 +212,7 @@ class VerifyRunCog(commands.Cog):
             reports = []
             for sub in directory.glob("solutions/*/*"):
                 for mode in modes:
-                    submissions.append(
-                        self.verify_submission(interaction, lb_name, sub, mode, reports)
-                    )
+                    submissions.append(self.verify_submission(interaction, lb_name, sub, mode, reports))
             await asyncio.gather(*submissions)
         except Exception as E:
             logger.exception("Error in LB test", exc_info=E)
@@ -313,6 +305,4 @@ class VerifyRunCog(commands.Cog):
 
         except Exception as e:
             logger.error(f"Error starting verification runs: {e}", exc_info=True)
-            await send_discord_message(
-                interaction, f"❌ Problem performing verification runs: {str(e)}"
-            )
+            await send_discord_message(interaction, f"❌ Problem performing verification runs: {str(e)}")

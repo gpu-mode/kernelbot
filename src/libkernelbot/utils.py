@@ -1,7 +1,7 @@
 import logging
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 
@@ -63,7 +63,7 @@ def parse_deadline(deadline: str) -> Optional[datetime]:
     """
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
         try:
-            return datetime.strptime(deadline, fmt)
+            return datetime.strptime(deadline, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None

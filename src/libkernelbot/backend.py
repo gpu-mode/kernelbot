@@ -1,6 +1,6 @@
 import asyncio
 import copy
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Optional
 
@@ -67,7 +67,7 @@ class KernelBackend:
                     file_name=req.file_name,
                     code=req.code,
                     user_id=req.user_id,
-                    time=datetime.now(),
+                    time=datetime.now(timezone.utc),
                     user_name=req.user_name,
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
@@ -100,9 +100,7 @@ class KernelBackend:
                     )
                     for gpu in selected_gpus
                 ]
-            await reporter.show(
-                f"Submission **{sub_id}**: `{req.file_name}` for `{req.leaderboard}`"
-            )
+            await reporter.show(f"Submission **{sub_id}**: `{req.file_name}` for `{req.leaderboard}`")
             results = await asyncio.gather(*tasks)
         finally:
             with self.db as db:
@@ -191,9 +189,7 @@ class KernelBackend:
             if successful, returns the result of the run.
         """
         launcher = self.launcher_map[gpu_type.value]
-        config = build_task_config(
-            task=task, submission_content=code, arch=self._get_arch(gpu_type), mode=mode
-        )
+        config = build_task_config(task=task, submission_content=code, arch=self._get_arch(gpu_type), mode=mode)
 
         logger.info("submitting task to runner %s", launcher.name)
 
@@ -206,9 +202,7 @@ class KernelBackend:
         else:
             await reporter.update_title(reporter.title + " ✅ success")
 
-        short_report = make_short_report(
-            result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD]
-        )
+        short_report = make_short_report(result.runs, full=mode in [SubmissionMode.PRIVATE, SubmissionMode.LEADERBOARD])
 
         stream_msg = (
             """
