@@ -1172,6 +1172,23 @@ class LeaderboardDB:
             logger.exception("Could not cleanup temp users", exc_info=e)
             raise KernelBotError("Database error while cleaning up temp users") from e
 
+    def check_user_rate_limit(self, user_id: str, hours: int = 1) -> Optional[datetime.datetime]:
+        """Check if user has submitted within the last `hours` hours.
+        Returns the most recent submission_time if rate-limited, None if allowed."""
+        self.cursor.execute(
+            """
+            SELECT submission_time
+            FROM leaderboard.submission
+            WHERE user_id = %s
+              AND submission_time > NOW() - INTERVAL '%s hours'
+            ORDER BY submission_time DESC
+            LIMIT 1
+            """,
+            (str(user_id), hours),
+        )
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
     def validate_cli_id(self, cli_id: str) -> Optional[dict[str, str]]:
         """
         Validates a CLI ID and returns the associated user ID if valid.

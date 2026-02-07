@@ -605,6 +605,51 @@ def test_generate_stats(database, submit_leaderboard):
         }
 
 
+def test_check_user_rate_limit_no_submissions(database, submit_leaderboard):
+    """Test rate limit returns None when user has no submissions"""
+    with database as db:
+        result = db.check_user_rate_limit("999")
+        assert result is None
+
+
+def test_check_user_rate_limit_recent_submission(database, submit_leaderboard):
+    """Test rate limit returns submission_time when user submitted recently"""
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+    with database as db:
+        db.create_submission(
+            "submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user"
+        )
+        result = db.check_user_rate_limit("5")
+        assert result is not None
+        assert abs((result - submit_time).total_seconds()) < 2
+
+
+def test_check_user_rate_limit_old_submission(database, submit_leaderboard):
+    """Test rate limit returns None when submission is older than the window"""
+    old_time = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(hours=2)
+    with database as db:
+        db.create_submission(
+            "submit-leaderboard", "file.py", 5, "code", old_time, user_name="user"
+        )
+        result = db.check_user_rate_limit("5")
+        assert result is None
+
+
+def test_check_user_rate_limit_different_user(database, submit_leaderboard):
+    """Test rate limit only applies to the specific user"""
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+    with database as db:
+        db.create_submission(
+            "submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user5"
+        )
+        # User 6 should not be rate limited
+        result = db.check_user_rate_limit("6")
+        assert result is None
+        # User 5 should be rate limited
+        result = db.check_user_rate_limit("5")
+        assert result is not None
+
+
 def test_get_user_submissions_empty(database, submit_leaderboard):
     """Test get_user_submissions returns empty list for user with no submissions"""
     with database as db:
