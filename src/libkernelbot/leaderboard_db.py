@@ -1220,7 +1220,6 @@ class LeaderboardDB:
                 return False, None
 
             rate_limit_seconds = row[0]
-            print(f"GPU type: {gpu_type}, Rate limit: {rate_limit_seconds}")
             self.cursor.execute(
                 """
                 SELECT s.submission_time
