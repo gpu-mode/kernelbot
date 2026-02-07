@@ -867,7 +867,7 @@ def test_is_user_rate_limited_recent_submission(database, submit_leaderboard):
     """Test is_user_rate_limited returns True when user submitted recently"""
     with database as db:
         db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
-        db.create_submission(
+        sub_id = db.create_submission(
             "submit-leaderboard",
             "file.py",
             5,
@@ -875,6 +875,8 @@ def test_is_user_rate_limited_recent_submission(database, submit_leaderboard):
             datetime.datetime.now(tz=datetime.timezone.utc),
             user_name="user",
         )
+        # Create a run with A100 GPU - required since rate limit query joins with runs table
+        _create_submission_run(db, sub_id, runner="A100", score=1.0)
         lb_id = db.get_leaderboard_id("submit-leaderboard")
         is_limited, reason = db.is_user_rate_limited(5, lb_id, "A100")
         assert is_limited is True
@@ -899,7 +901,7 @@ def test_is_user_rate_limited_different_user(database, submit_leaderboard):
     """Test is_user_rate_limited only applies to the specific user"""
     with database as db:
         db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
-        db.create_submission(
+        sub_id = db.create_submission(
             "submit-leaderboard",
             "file.py",
             5,
@@ -907,6 +909,8 @@ def test_is_user_rate_limited_different_user(database, submit_leaderboard):
             datetime.datetime.now(tz=datetime.timezone.utc),
             user_name="user5",
         )
+        # Create a run with A100 GPU - required since rate limit query joins with runs table
+        _create_submission_run(db, sub_id, runner="A100", score=1.0)
         lb_id = db.get_leaderboard_id("submit-leaderboard")
         # User 6 should not be rate limited
         is_limited, reason = db.is_user_rate_limited(6, lb_id, "A100")
@@ -937,7 +941,7 @@ def test_is_user_allowed_to_submit_blocked(database, submit_leaderboard):
     """Test is_user_allowed_to_submit returns False when user submitted recently"""
     with database as db:
         db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
-        db.create_submission(
+        sub_id = db.create_submission(
             "submit-leaderboard",
             "file.py",
             5,
@@ -945,6 +949,8 @@ def test_is_user_allowed_to_submit_blocked(database, submit_leaderboard):
             datetime.datetime.now(tz=datetime.timezone.utc),
             user_name="user",
         )
+        # Create a run with A100 GPU - required since rate limit query joins with runs table
+        _create_submission_run(db, sub_id, runner="A100", score=1.0)
         allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100"])
         assert allowed is False
         assert reason is not None
@@ -956,7 +962,7 @@ def test_is_user_allowed_to_submit_multiple_gpus_one_blocked(database, submit_le
     with database as db:
         # Set rate limit only on A100
         db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
-        db.create_submission(
+        sub_id = db.create_submission(
             "submit-leaderboard",
             "file.py",
             5,
@@ -964,6 +970,8 @@ def test_is_user_allowed_to_submit_multiple_gpus_one_blocked(database, submit_le
             datetime.datetime.now(tz=datetime.timezone.utc),
             user_name="user",
         )
+        # Create a run with A100 GPU - required since rate limit query joins with runs table
+        _create_submission_run(db, sub_id, runner="A100", score=1.0)
         # Both GPUs requested, A100 is rate limited
         allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100", "H100"])
         assert allowed is False
