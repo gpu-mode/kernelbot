@@ -249,7 +249,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
     if not api_base_url:
         raise HTTPException(
             status_code=500,
-            detail="Redirect URI base not configured.Set HEROKU_APP_DEFAULT_DOMAIN_NAME or POPCORN_API_URL.",
+            detail="Redirect URI base not configured. Set HEROKU_APP_DEFAULT_DOMAIN_NAME or POPCORN_API_URL.",
         )
     redirect_uri_base = api_base_url.rstrip("/")
     redirect_uri = f"https://{redirect_uri_base}/auth/cli/{auth_provider}"

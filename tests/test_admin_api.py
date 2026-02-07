@@ -1,6 +1,5 @@
 """Tests for admin API endpoints."""
 
-import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,8 +19,9 @@ def mock_backend():
 def test_client(mock_backend):
     """Create a test client with mocked backend."""
     # Patch env before importing the app
-    with patch.dict('os.environ', {'ADMIN_TOKEN': 'test_token'}):
+    with patch.dict("os.environ", {"ADMIN_TOKEN": "test_token"}):
         from kernelbot.api.main import app, init_api
+
         init_api(mock_backend)
         yield TestClient(app)
 
@@ -37,19 +37,13 @@ class TestAdminAuth:
 
     def test_admin_rejects_invalid_token(self, test_client):
         """Admin endpoints reject invalid tokens."""
-        response = test_client.post(
-            "/admin/start",
-            headers={"Authorization": "Bearer wrong_token"}
-        )
+        response = test_client.post("/admin/start", headers={"Authorization": "Bearer wrong_token"})
         assert response.status_code == 401
         assert response.json()["detail"] == "Invalid admin token"
 
     def test_admin_accepts_valid_token(self, test_client, mock_backend):
         """Admin endpoints accept valid tokens."""
-        response = test_client.post(
-            "/admin/start",
-            headers={"Authorization": "Bearer test_token"}
-        )
+        response = test_client.post("/admin/start", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
         assert mock_backend.accepts_jobs is True
@@ -61,10 +55,7 @@ class TestAdminStartStop:
     def test_admin_start(self, test_client, mock_backend):
         """POST /admin/start enables job acceptance."""
         mock_backend.accepts_jobs = False
-        response = test_client.post(
-            "/admin/start",
-            headers={"Authorization": "Bearer test_token"}
-        )
+        response = test_client.post("/admin/start", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "accepts_jobs": True}
         assert mock_backend.accepts_jobs is True
@@ -72,10 +63,7 @@ class TestAdminStartStop:
     def test_admin_stop(self, test_client, mock_backend):
         """POST /admin/stop disables job acceptance."""
         mock_backend.accepts_jobs = True
-        response = test_client.post(
-            "/admin/stop",
-            headers={"Authorization": "Bearer test_token"}
-        )
+        response = test_client.post("/admin/stop", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "accepts_jobs": False}
         assert mock_backend.accepts_jobs is False
@@ -88,15 +76,14 @@ class TestAdminStats:
         """GET /admin/stats returns statistics."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
-        mock_backend.db.generate_stats = MagicMock(return_value={
-            "num_submissions": 10,
-            "num_users": 5,
-        })
-
-        response = test_client.get(
-            "/admin/stats",
-            headers={"Authorization": "Bearer test_token"}
+        mock_backend.db.generate_stats = MagicMock(
+            return_value={
+                "num_submissions": 10,
+                "num_users": 5,
+            }
         )
+
+        response = test_client.get("/admin/stats", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -106,15 +93,14 @@ class TestAdminStats:
         """GET /admin/stats with last_day_only parameter."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
-        mock_backend.db.generate_stats = MagicMock(return_value={
-            "num_submissions": 3,
-            "num_users": 2,
-        })
-
-        response = test_client.get(
-            "/admin/stats?last_day_only=true",
-            headers={"Authorization": "Bearer test_token"}
+        mock_backend.db.generate_stats = MagicMock(
+            return_value={
+                "num_submissions": 3,
+                "num_users": 2,
+            }
         )
+
+        response = test_client.get("/admin/stats?last_day_only=true", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         mock_backend.db.generate_stats.assert_called_once_with(True)
 
@@ -126,15 +112,14 @@ class TestAdminSubmissions:
         """GET /admin/submissions/{id} returns submission."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
-        mock_backend.db.get_submission_by_id = MagicMock(return_value={
-            "id": 123,
-            "code": "test code",
-        })
-
-        response = test_client.get(
-            "/admin/submissions/123",
-            headers={"Authorization": "Bearer test_token"}
+        mock_backend.db.get_submission_by_id = MagicMock(
+            return_value={
+                "id": 123,
+                "code": "test code",
+            }
         )
+
+        response = test_client.get("/admin/submissions/123", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
@@ -146,10 +131,7 @@ class TestAdminSubmissions:
         mock_backend.db.__exit__ = MagicMock(return_value=None)
         mock_backend.db.get_submission_by_id = MagicMock(return_value=None)
 
-        response = test_client.get(
-            "/admin/submissions/999",
-            headers={"Authorization": "Bearer test_token"}
-        )
+        response = test_client.get("/admin/submissions/999", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 404
 
     def test_delete_submission(self, test_client, mock_backend):
@@ -158,10 +140,7 @@ class TestAdminSubmissions:
         mock_backend.db.__exit__ = MagicMock(return_value=None)
         mock_backend.db.delete_submission = MagicMock()
 
-        response = test_client.delete(
-            "/admin/submissions/123",
-            headers={"Authorization": "Bearer test_token"}
-        )
+        response = test_client.delete("/admin/submissions/123", headers={"Authorization": "Bearer test_token"})
         assert response.status_code == 200
         mock_backend.db.delete_submission.assert_called_once_with(123)
 
@@ -174,7 +153,7 @@ class TestAdminLeaderboards:
         response = test_client.post(
             "/admin/leaderboards",
             headers={"Authorization": "Bearer test_token"},
-            json={}  # missing directory
+            json={},  # missing directory
         )
         assert response.status_code == 400
         assert "Missing required field: directory" in response.json()["detail"]
@@ -186,7 +165,7 @@ class TestAdminLeaderboards:
             headers={"Authorization": "Bearer test_token"},
             json={
                 "directory": "../../../etc/passwd",  # path traversal attempt
-            }
+            },
         )
         assert response.status_code == 400
 
@@ -201,12 +180,12 @@ class TestAdminLeaderboards:
         mock_definition = MagicMock()
         mock_definition.gpus = ["H100", "A100"]
 
-        with patch('kernelbot.api.main.resolve_problem_directory', return_value="/valid/path"):
-            with patch('kernelbot.api.main.make_task_definition', return_value=mock_definition):
+        with patch("kernelbot.api.main.resolve_problem_directory", return_value="/valid/path"):
+            with patch("kernelbot.api.main.make_task_definition", return_value=mock_definition):
                 response = test_client.post(
                     "/admin/leaderboards",
                     headers={"Authorization": "Bearer test_token"},
-                    json={"directory": "identity_py"}
+                    json={"directory": "identity_py"},
                 )
                 assert response.status_code == 200
                 assert response.json()["leaderboard"] == "identity_py-dev"
@@ -223,12 +202,12 @@ class TestAdminLeaderboards:
         mock_definition = MagicMock()
         mock_definition.gpus = []
 
-        with patch('kernelbot.api.main.resolve_problem_directory', return_value="/valid/path"):
-            with patch('kernelbot.api.main.make_task_definition', return_value=mock_definition):
+        with patch("kernelbot.api.main.resolve_problem_directory", return_value="/valid/path"):
+            with patch("kernelbot.api.main.make_task_definition", return_value=mock_definition):
                 response = test_client.post(
                     "/admin/leaderboards",
                     headers={"Authorization": "Bearer test_token"},
-                    json={"directory": "identity_py"}
+                    json={"directory": "identity_py"},
                 )
                 assert response.status_code == 400
                 assert "No gpus specified in task.yml" in response.json()["detail"]
@@ -240,8 +219,7 @@ class TestAdminLeaderboards:
         mock_backend.db.delete_leaderboard = MagicMock()
 
         response = test_client.delete(
-            "/admin/leaderboards/test-leaderboard",
-            headers={"Authorization": "Bearer test_token"}
+            "/admin/leaderboards/test-leaderboard", headers={"Authorization": "Bearer test_token"}
         )
         assert response.status_code == 200
         assert response.json()["leaderboard"] == "test-leaderboard"
@@ -254,8 +232,7 @@ class TestAdminLeaderboards:
         mock_backend.db.delete_leaderboard = MagicMock()
 
         response = test_client.delete(
-            "/admin/leaderboards/test-leaderboard?force=true",
-            headers={"Authorization": "Bearer test_token"}
+            "/admin/leaderboards/test-leaderboard?force=true", headers={"Authorization": "Bearer test_token"}
         )
         assert response.status_code == 200
         assert response.json()["force"] is True
@@ -281,11 +258,9 @@ class TestAdminUpdateProblems:
         mock_result.skipped = [{"name": "problem4", "reason": "no changes"}]
         mock_result.errors = []
 
-        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+        with patch("kernelbot.api.main.sync_problems", return_value=mock_result) as mock_sync:
             response = test_client.post(
-                "/admin/update-problems",
-                headers={"Authorization": "Bearer test_token"},
-                json={}
+                "/admin/update-problems", headers={"Authorization": "Bearer test_token"}, json={}
             )
             assert response.status_code == 200
             data = response.json()
@@ -314,11 +289,9 @@ class TestAdminUpdateProblems:
         mock_result.skipped = []
         mock_result.errors = []
 
-        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+        with patch("kernelbot.api.main.sync_problems", return_value=mock_result) as mock_sync:
             response = test_client.post(
-                "/admin/update-problems",
-                headers={"Authorization": "Bearer test_token"},
-                json={"problem_set": "nvidia"}
+                "/admin/update-problems", headers={"Authorization": "Bearer test_token"}, json={"problem_set": "nvidia"}
             )
             assert response.status_code == 200
             call_kwargs = mock_sync.call_args[1]
@@ -335,11 +308,9 @@ class TestAdminUpdateProblems:
         mock_result.skipped = []
         mock_result.errors = []
 
-        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+        with patch("kernelbot.api.main.sync_problems", return_value=mock_result) as mock_sync:
             response = test_client.post(
-                "/admin/update-problems",
-                headers={"Authorization": "Bearer test_token"},
-                json={"force": True}
+                "/admin/update-problems", headers={"Authorization": "Bearer test_token"}, json={"force": True}
             )
             assert response.status_code == 200
             call_kwargs = mock_sync.call_args[1]
@@ -356,14 +327,11 @@ class TestAdminUpdateProblems:
         mock_result.skipped = []
         mock_result.errors = []
 
-        with patch('kernelbot.api.main.sync_problems', return_value=mock_result) as mock_sync:
+        with patch("kernelbot.api.main.sync_problems", return_value=mock_result) as mock_sync:
             response = test_client.post(
                 "/admin/update-problems",
                 headers={"Authorization": "Bearer test_token"},
-                json={
-                    "repository": "other-org/other-repo",
-                    "branch": "develop"
-                }
+                json={"repository": "other-org/other-repo", "branch": "develop"},
             )
             assert response.status_code == 200
             call_kwargs = mock_sync.call_args[1]
@@ -375,11 +343,11 @@ class TestAdminUpdateProblems:
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
 
-        with patch('kernelbot.api.main.sync_problems', side_effect=ValueError("Invalid branch name")):
+        with patch("kernelbot.api.main.sync_problems", side_effect=ValueError("Invalid branch name")):
             response = test_client.post(
                 "/admin/update-problems",
                 headers={"Authorization": "Bearer test_token"},
-                json={"branch": "invalid/branch"}
+                json={"branch": "invalid/branch"},
             )
             assert response.status_code == 400
             assert "Invalid branch name" in response.json()["detail"]
@@ -395,11 +363,9 @@ class TestAdminUpdateProblems:
         mock_result.skipped = []
         mock_result.errors = [{"name": "bad-problem", "error": "create failed: DB error"}]
 
-        with patch('kernelbot.api.main.sync_problems', return_value=mock_result):
+        with patch("kernelbot.api.main.sync_problems", return_value=mock_result):
             response = test_client.post(
-                "/admin/update-problems",
-                headers={"Authorization": "Bearer test_token"},
-                json={}
+                "/admin/update-problems", headers={"Authorization": "Bearer test_token"}, json={}
             )
             assert response.status_code == 200
             data = response.json()
@@ -409,38 +375,15 @@ class TestAdminUpdateProblems:
 
 
 class TestSubmissionRateLimit:
-    """Test per-user submission rate limiting on Modal B200 for leaderboard 730."""
+    """Test per-user submission rate limiting (generic rate limiting, no hardcoded B200/730)."""
 
-    def test_rate_limit_blocks_b200_leaderboard_730(self, test_client, mock_backend):
-        """Second B200 submission to leaderboard 730 within 1 hour is rejected with 429."""
-        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
-        mock_backend.db.__exit__ = MagicMock(return_value=None)
-
-        recent_time = datetime.datetime.now(tz=datetime.timezone.utc)
-        mock_backend.db.check_user_rate_limit = MagicMock(return_value=recent_time)
-        mock_backend.db.get_leaderboard_id = MagicMock(return_value=730)
-        mock_backend.db.validate_cli_id = MagicMock(
-            return_value={"user_id": "123", "user_name": "testuser"}
-        )
-
-        response = test_client.post(
-            "/test-lb/B200/test",
-            headers={"X-Popcorn-Cli-Id": "test-cli-id"},
-            files={"file": ("solution.py", b"print('hello')", "text/plain")},
-        )
-        assert response.status_code == 429
-        assert "Rate limit exceeded" in response.json()["detail"]
-        assert "NVIDIA runner" in response.json()["detail"]
-
-    def test_rate_limit_skipped_for_non_b200(self, test_client, mock_backend):
-        """Rate limit is not enforced for non-B200 GPUs even on leaderboard 730."""
+    def test_submission_endpoint_does_not_reject_without_rate_limit(self, test_client, mock_backend):
+        """Submissions are not rate limited when no rate limit is configured."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
         mock_backend.accepts_jobs = True
 
-        mock_backend.db.validate_cli_id = MagicMock(
-            return_value={"user_id": "123", "user_name": "testuser"}
-        )
+        mock_backend.db.validate_cli_id = MagicMock(return_value={"user_id": "123", "user_name": "testuser"})
 
         mock_lb = MagicMock()
         mock_lb.__getitem__ = lambda self, key: {"gpu_types": ["H100"]}[key]
@@ -452,55 +395,83 @@ class TestSubmissionRateLimit:
             headers={"X-Popcorn-Cli-Id": "test-cli-id"},
             files={"file": ("solution.py", b"print('hello')", "text/plain")},
         )
-        # Should not hit rate limit at all — check_user_rate_limit should not be called
+        # Should not be rate limited (rate limits are now configurable per-leaderboard/GPU)
         assert response.status_code != 429
 
-    def test_rate_limit_skipped_for_other_leaderboard(self, test_client, mock_backend):
-        """Rate limit is not enforced for B200 on a leaderboard other than 730."""
+
+class TestLeaderboardRateLimitsAPI:
+    """Test leaderboard rate limit API endpoints."""
+
+    def test_get_rate_limits(self, test_client, mock_backend):
+        """GET /leaderboard/rate-limits/{name} returns rate limits."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
-        mock_backend.accepts_jobs = True
+        mock_backend.db.get_leaderboard_rate_limits = MagicMock(return_value={"A100": 3600, "H100": None})
 
-        recent_time = datetime.datetime.now(tz=datetime.timezone.utc)
-        mock_backend.db.check_user_rate_limit = MagicMock(return_value=recent_time)
-        mock_backend.db.get_leaderboard_id = MagicMock(return_value=999)
-        mock_backend.db.validate_cli_id = MagicMock(
-            return_value={"user_id": "123", "user_name": "testuser"}
-        )
+        response = test_client.get("/leaderboard/rate-limits/test-leaderboard")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["rate_limits"]["A100"] == 3600
+        assert data["rate_limits"]["H100"] is None
 
-        mock_lb = MagicMock()
-        mock_lb.__getitem__ = lambda self, key: {"gpu_types": ["B200"]}[key]
-        mock_lb.get = lambda key, default=None: {"gpu_types": ["B200"]}.get(key, default)
-        mock_backend.db.get_leaderboard = MagicMock(return_value=mock_lb)
+    def test_set_rate_limit_requires_auth(self, test_client):
+        """POST /leaderboard/rate-limits/{name}/{gpu} requires authorization."""
+        response = test_client.post("/leaderboard/rate-limits/test-leaderboard/A100?rate_limit_seconds=3600")
+        assert response.status_code == 401
 
+    def test_set_rate_limit_rejects_invalid_token(self, test_client):
+        """POST /leaderboard/rate-limits/{name}/{gpu} rejects invalid tokens."""
         response = test_client.post(
-            "/other-lb/B200/test",
-            headers={"X-Popcorn-Cli-Id": "test-cli-id"},
-            files={"file": ("solution.py", b"print('hello')", "text/plain")},
+            "/leaderboard/rate-limits/test-leaderboard/A100?rate_limit_seconds=3600",
+            headers={"Authorization": "Bearer wrong_token"},
         )
-        # Should not be rate limited since leaderboard ID is not 730
-        assert response.status_code != 429
+        assert response.status_code == 401
 
-    def test_rate_limit_allows_first_b200_submission(self, test_client, mock_backend):
-        """First B200 submission to leaderboard 730 passes the rate limit check."""
+    def test_set_rate_limit(self, test_client, mock_backend):
+        """POST /leaderboard/rate-limits/{name}/{gpu} sets rate limit."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
         mock_backend.db.__exit__ = MagicMock(return_value=None)
-        mock_backend.accepts_jobs = True
-
-        mock_backend.db.check_user_rate_limit = MagicMock(return_value=None)
-        mock_backend.db.get_leaderboard_id = MagicMock(return_value=730)
-        mock_backend.db.validate_cli_id = MagicMock(
-            return_value={"user_id": "123", "user_name": "testuser"}
-        )
-
-        mock_lb = MagicMock()
-        mock_lb.__getitem__ = lambda self, key: {"gpu_types": ["B200"]}[key]
-        mock_lb.get = lambda key, default=None: {"gpu_types": ["B200"]}.get(key, default)
-        mock_backend.db.get_leaderboard = MagicMock(return_value=mock_lb)
+        mock_backend.db.set_leaderboard_gpu_rate_limit = MagicMock()
 
         response = test_client.post(
-            "/test-lb/B200/test",
-            headers={"X-Popcorn-Cli-Id": "test-cli-id"},
-            files={"file": ("solution.py", b"print('hello')", "text/plain")},
+            "/leaderboard/rate-limits/test-leaderboard/A100?rate_limit_seconds=3600",
+            headers={"Authorization": "Bearer test_token"},
         )
-        assert response.status_code != 429
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["leaderboard_name"] == "test-leaderboard"
+        assert data["gpu_type"] == "A100"
+        assert data["rate_limit_seconds"] == 3600
+        mock_backend.db.set_leaderboard_gpu_rate_limit.assert_called_once_with("test-leaderboard", "A100", 3600)
+
+    def test_set_rate_limit_zero_clears_limit(self, test_client, mock_backend):
+        """POST /leaderboard/rate-limits/{name}/{gpu} with 0 clears the rate limit."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.set_leaderboard_gpu_rate_limit = MagicMock()
+
+        response = test_client.post(
+            "/leaderboard/rate-limits/test-leaderboard/A100?rate_limit_seconds=0",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["rate_limit_seconds"] is None
+        mock_backend.db.set_leaderboard_gpu_rate_limit.assert_called_once_with("test-leaderboard", "A100", None)
+
+    def test_set_rate_limit_negative_clears_limit(self, test_client, mock_backend):
+        """POST /leaderboard/rate-limits/{name}/{gpu} with negative value clears the rate limit."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.set_leaderboard_gpu_rate_limit = MagicMock()
+
+        response = test_client.post(
+            "/leaderboard/rate-limits/test-leaderboard/H100?rate_limit_seconds=-1",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["rate_limit_seconds"] is None
+        mock_backend.db.set_leaderboard_gpu_rate_limit.assert_called_once_with("test-leaderboard", "H100", None)

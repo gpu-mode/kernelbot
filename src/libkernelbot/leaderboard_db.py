@@ -1205,7 +1205,7 @@ class LeaderboardDB:
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
             raise KernelBotError("Error validating CLI ID") from e
 
-    def is_user_rate_limited(self, user_id: int, leaderboard_id: int, gpu_type: str) -> bool:
+    def is_user_rate_limited(self, user_id: int, leaderboard_id: int, gpu_type: str) -> tuple[bool, str | None]:
         try:
             self.cursor.execute(
                 """
@@ -1220,23 +1220,26 @@ class LeaderboardDB:
                 return False, None
 
             rate_limit_seconds = row[0]
+            print(f"GPU type: {gpu_type}, Rate limit: {rate_limit_seconds}")
             self.cursor.execute(
                 """
-                SELECT submission_time
-                FROM leaderboard.submission
-                WHERE user_id = %s
-                    AND leaderboard_id = %s
-                    AND submission_time > NOW() - make_interval(secs => %s)
-                ORDER BY submission_time DESC
+                SELECT s.submission_time
+                FROM leaderboard.submission s
+                JOIN leaderboard.runs r ON r.submission_id = s.id
+                WHERE s.user_id = %s
+                    AND s.leaderboard_id = %s
+                    AND s.submission_time > NOW() - make_interval(secs => %s)
+                    AND r.runner = %s
+                ORDER BY s.submission_time DESC
                 LIMIT 1
                 """,
-                (str(user_id), leaderboard_id, rate_limit_seconds),
+                (str(user_id), leaderboard_id, rate_limit_seconds, gpu_type),
             )
             last = self.cursor.fetchone()
             if last is not None:
                 last_time = last[0]
                 return True, (
-                    f"Rate limit exceeded for {gpu_type}`. "
+                    f"Rate limit exceeded for `{gpu_type}`. "
                     f"You can submit once every {rate_limit_seconds} seconds. "
                     f"Last submission: {last_time.strftime('%Y-%m-%d %H:%M:%S UTC')}."
                 )
@@ -1265,7 +1268,7 @@ class LeaderboardDB:
             logger.exception("Error checking rate limit for user %s", user_id, exc_info=e)
             raise KernelBotError("Error checking submission rate limit") from e
 
-    def set_leaderboard_gpu_rate_limit(self, leaderboard_name: str, gpu_type: str, rate_limit_seconds: int):
+    def set_leaderboard_gpu_rate_limit(self, leaderboard_name: str, gpu_type: str, rate_limit_seconds: int | None):
         try:
             leaderboard_id = self.get_leaderboard_id(leaderboard_name)
             self.cursor.execute(
@@ -1300,6 +1303,7 @@ class LeaderboardDB:
         except psycopg2.Error as e:
             logger.exception("Error getting leaderboard rate limits for %s", leaderboard_name, exc_info=e)
             self.connection.rollback()
+            raise KernelBotError("Error getting leaderboard rate limits") from e
 
 
 class LeaderboardDoesNotExist(KernelBotError):

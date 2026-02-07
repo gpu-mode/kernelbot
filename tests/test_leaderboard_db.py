@@ -53,8 +53,7 @@ def _create_submission_run(
     db.create_submission_run(
         submission,
         start=start or datetime.datetime.now(tz=datetime.timezone.utc),
-        end=end
-        or (datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=10)),
+        end=end or (datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=10)),
         mode=mode,
         secret=secret,
         runner=runner,
@@ -133,14 +132,10 @@ def test_leaderboard_basics(database, task_directory):
         assert db.get_leaderboard_submissions("test-leaderboard", "A100", "5", 100) == []
         assert db.get_leaderboard_submission_count("test-leaderboard", "A100", "5") == 0
 
-        with pytest.raises(
-            KernelBotError, match="Invalid GPU type 'A99' for leaderboard 'test-leaderboard'"
-        ):
+        with pytest.raises(KernelBotError, match="Invalid GPU type 'A99' for leaderboard 'test-leaderboard'"):
             assert db.get_leaderboard_submissions("test-leaderboard", "A99", "5", 100) == []
 
-        with pytest.raises(
-            KernelBotError, match="Invalid GPU type 'A99' for leaderboard 'test-leaderboard'"
-        ):
+        with pytest.raises(KernelBotError, match="Invalid GPU type 'A99' for leaderboard 'test-leaderboard'"):
             assert db.get_leaderboard_submission_count("test-leaderboard", "A99", "5") == 0
 
 
@@ -232,8 +227,7 @@ def test_leaderboard_submission_basic(database, submit_leaderboard):
         )
 
         expected_meta = {
-            k: getattr(run_result, k)
-            for k in ("stdout", "stderr", "success", "exit_code", "command", "duration")
+            k: getattr(run_result, k) for k in ("stdout", "stderr", "success", "exit_code", "command", "duration")
         }
 
         submission = db.get_submission_by_id(sub_id)
@@ -281,12 +275,8 @@ def test_leaderboard_submission_count(database, submit_leaderboard):
             "submit-leaderboard", "submission.py", 5, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="test", secret=False, runner="A100")
-        _create_submission_run(
-            db, sub_id, mode="leaderboard", secret=True, runner="H100", score=5.5
-        )
-        _create_submission_run(
-            db, sub_id, mode="leaderboard", secret=False, runner="A100", score=1.5
-        )
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="H100", score=5.5)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=False, runner="A100", score=1.5)
         submission = db.get_submission_by_id(sub_id)
 
         assert len(submission["runs"]) == 3
@@ -368,42 +358,45 @@ def test_leaderboard_submission_ranked(database, submit_leaderboard):
             },
         ]
 
+
 def test_validate_identity_web_auth_happy_path(database, submit_leaderboard):
     with database as db:
         db.cursor.execute(
-                """
+            """
                 INSERT INTO leaderboard.user_info (id, user_name, web_auth_id)
                 VALUES (%s, %s, %s)
                 """,
-                ("1234", "sara_jojo","2345" ),
-            )
-        user_info = db.validate_identity("2345",IdentityType.WEB)
-        assert user_info["user_id"] =="1234"
-        assert user_info["user_name"] =="sara_jojo"
-        assert user_info["id_type"] ==IdentityType.WEB.value
+            ("1234", "sara_jojo", "2345"),
+        )
+        user_info = db.validate_identity("2345", IdentityType.WEB)
+        assert user_info["user_id"] == "1234"
+        assert user_info["user_name"] == "sara_jojo"
+        assert user_info["id_type"] == IdentityType.WEB.value
 
-def  test_validate_identity_web_auth_not_found(database, submit_leaderboard):
+
+def test_validate_identity_web_auth_not_found(database, submit_leaderboard):
     with database as db:
         db.cursor.execute(
-                """
+            """
                 INSERT INTO leaderboard.user_info (id, user_name)
                 VALUES (%s, %s)
                 """,
-                ("1234", "sara_jojo"),
-            )
-        user_info = db.validate_identity("2345",IdentityType.WEB)
+            ("1234", "sara_jojo"),
+        )
+        user_info = db.validate_identity("2345", IdentityType.WEB)
         assert user_info is None
+
 
 def test_validate_identity_web_auth_missing(database, submit_leaderboard):
     with database as db:
         db.cursor.execute(
-                """
+            """
                 INSERT INTO leaderboard.user_info (id, user_name)
                 VALUES (%s, %s)
                 """,
-                ("1234", "sara_jojo"),
-            )
-        res = db.validate_identity("2345",IdentityType.WEB)
+            ("1234", "sara_jojo"),
+        )
+        res = db.validate_identity("2345", IdentityType.WEB)
         assert res is None
 
 
@@ -418,9 +411,7 @@ def test_leaderboard_submission_deduplication(database, submit_leaderboard):
             datetime.datetime.now(),
             user_name="user",
         )
-        db.create_submission(
-            "submit-leaderboard", "other.py", 6, "pass", datetime.datetime.now(), user_name="other"
-        )
+        db.create_submission("submit-leaderboard", "other.py", 6, "pass", datetime.datetime.now(), user_name="other")
 
         db.cursor.execute("SELECT COUNT(*) FROM leaderboard.code_files")
         assert db.cursor.fetchone()[0] == 1
@@ -447,9 +438,7 @@ def test_leaderboard_submission_delete(database, submit_leaderboard):
 
         _create_submission_run(db, sub_id, mode="leaderboard", secret=False, runner="A100", score=5)
         _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100", score=5)
-        _create_submission_run(
-            db, other_sub, mode="leaderboard", secret=False, runner="A100", score=5
-        )
+        _create_submission_run(db, other_sub, mode="leaderboard", secret=False, runner="A100", score=5)
         db.mark_submission_done(sub_id)
 
         db.cursor.execute("SELECT COUNT(*) FROM leaderboard.runs")
@@ -555,9 +544,7 @@ def test_leaderboard_update(database, task_directory):
 def test_generate_stats(database, submit_leaderboard):
     with database as db:
         start = datetime.datetime.now(tz=datetime.timezone.utc)
-        sub_id = db.create_submission(
-            "submit-leaderboard", "submission.py", 5, "pass", start, user_name="user"
-        )
+        sub_id = db.create_submission("submit-leaderboard", "submission.py", 5, "pass", start, user_name="user")
         _create_submission_run(
             db,
             sub_id,
@@ -616,9 +603,7 @@ def test_check_user_rate_limit_recent_submission(database, submit_leaderboard):
     """Test rate limit returns submission_time when user submitted recently"""
     submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
     with database as db:
-        db.create_submission(
-            "submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user"
-        )
+        db.create_submission("submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user")
         result = db.check_user_rate_limit("5")
         assert result is not None
         assert abs((result - submit_time).total_seconds()) < 2
@@ -628,9 +613,7 @@ def test_check_user_rate_limit_old_submission(database, submit_leaderboard):
     """Test rate limit returns None when submission is older than the window"""
     old_time = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(hours=2)
     with database as db:
-        db.create_submission(
-            "submit-leaderboard", "file.py", 5, "code", old_time, user_name="user"
-        )
+        db.create_submission("submit-leaderboard", "file.py", 5, "code", old_time, user_name="user")
         result = db.check_user_rate_limit("5")
         assert result is None
 
@@ -639,9 +622,7 @@ def test_check_user_rate_limit_different_user(database, submit_leaderboard):
     """Test rate limit only applies to the specific user"""
     submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
     with database as db:
-        db.create_submission(
-            "submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user5"
-        )
+        db.create_submission("submit-leaderboard", "file.py", 5, "code", submit_time, user_name="user5")
         # User 6 should not be rate limited
         result = db.check_user_rate_limit("6")
         assert result is None
@@ -820,3 +801,181 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+# --- Leaderboard GPU Rate Limit Tests ---
+
+
+def test_get_leaderboard_rate_limits_empty(database, submit_leaderboard):
+    """Test get_leaderboard_rate_limits returns None values when no limits set"""
+    with database as db:
+        result = db.get_leaderboard_rate_limits("submit-leaderboard")
+        # Rate limits should be None by default
+        assert "A100" in result
+        assert "H100" in result
+        assert result["A100"] is None
+        assert result["H100"] is None
+
+
+def test_set_leaderboard_gpu_rate_limit(database, submit_leaderboard):
+    """Test setting a rate limit for a specific GPU on a leaderboard"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        result = db.get_leaderboard_rate_limits("submit-leaderboard")
+        assert result["A100"] == 3600
+        assert result["H100"] is None
+
+
+def test_set_leaderboard_gpu_rate_limit_multiple(database, submit_leaderboard):
+    """Test setting different rate limits for different GPUs"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "H100", 7200)
+        result = db.get_leaderboard_rate_limits("submit-leaderboard")
+        assert result["A100"] == 3600
+        assert result["H100"] == 7200
+
+
+def test_set_leaderboard_gpu_rate_limit_update(database, submit_leaderboard):
+    """Test updating an existing rate limit"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 1800)
+        result = db.get_leaderboard_rate_limits("submit-leaderboard")
+        assert result["A100"] == 1800
+
+
+def test_is_user_rate_limited_no_limit_set(database, submit_leaderboard):
+    """Test is_user_rate_limited returns False when no rate limit is configured"""
+    with database as db:
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        is_limited, reason = db.is_user_rate_limited(5, lb_id, "A100")
+        assert is_limited is False
+        assert reason is None
+
+
+def test_is_user_rate_limited_no_submissions(database, submit_leaderboard):
+    """Test is_user_rate_limited returns False when user has no submissions"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        is_limited, reason = db.is_user_rate_limited(999, lb_id, "A100")
+        assert is_limited is False
+        assert reason is None
+
+
+def test_is_user_rate_limited_recent_submission(database, submit_leaderboard):
+    """Test is_user_rate_limited returns True when user submitted recently"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.create_submission(
+            "submit-leaderboard",
+            "file.py",
+            5,
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user",
+        )
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        is_limited, reason = db.is_user_rate_limited(5, lb_id, "A100")
+        assert is_limited is True
+        assert reason is not None
+        assert "Rate limit exceeded" in reason
+        assert "3600 seconds" in reason
+
+
+def test_is_user_rate_limited_old_submission(database, submit_leaderboard):
+    """Test is_user_rate_limited returns False when submission is older than rate limit window"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        old_time = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(hours=2)
+        db.create_submission("submit-leaderboard", "file.py", 5, "code", old_time, user_name="user")
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        is_limited, reason = db.is_user_rate_limited(5, lb_id, "A100")
+        assert is_limited is False
+        assert reason is None
+
+
+def test_is_user_rate_limited_different_user(database, submit_leaderboard):
+    """Test is_user_rate_limited only applies to the specific user"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.create_submission(
+            "submit-leaderboard",
+            "file.py",
+            5,
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+        lb_id = db.get_leaderboard_id("submit-leaderboard")
+        # User 6 should not be rate limited
+        is_limited, reason = db.is_user_rate_limited(6, lb_id, "A100")
+        assert is_limited is False
+        # User 5 should be rate limited
+        is_limited, reason = db.is_user_rate_limited(5, lb_id, "A100")
+        assert is_limited is True
+
+
+def test_is_user_allowed_to_submit_no_limit(database, submit_leaderboard):
+    """Test is_user_allowed_to_submit returns True when no rate limit is configured"""
+    with database as db:
+        allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100"])
+        assert allowed is True
+        assert reason is None
+
+
+def test_is_user_allowed_to_submit_allowed(database, submit_leaderboard):
+    """Test is_user_allowed_to_submit returns True when user hasn't submitted recently"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        allowed, reason = db.is_user_allowed_to_submit(999, "submit-leaderboard", ["A100"])
+        assert allowed is True
+        assert reason is None
+
+
+def test_is_user_allowed_to_submit_blocked(database, submit_leaderboard):
+    """Test is_user_allowed_to_submit returns False when user submitted recently"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.create_submission(
+            "submit-leaderboard",
+            "file.py",
+            5,
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user",
+        )
+        allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100"])
+        assert allowed is False
+        assert reason is not None
+        assert "Rate limit exceeded" in reason
+
+
+def test_is_user_allowed_to_submit_multiple_gpus_one_blocked(database, submit_leaderboard):
+    """Test is_user_allowed_to_submit returns False if any GPU has rate limit exceeded"""
+    with database as db:
+        # Set rate limit only on A100
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.create_submission(
+            "submit-leaderboard",
+            "file.py",
+            5,
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user",
+        )
+        # Both GPUs requested, A100 is rate limited
+        allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100", "H100"])
+        assert allowed is False
+        assert "A100" in reason
+
+
+def test_is_user_allowed_to_submit_multiple_gpus_all_allowed(database, submit_leaderboard):
+    """Test is_user_allowed_to_submit returns True when all GPUs are within limit"""
+    with database as db:
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "A100", 3600)
+        db.set_leaderboard_gpu_rate_limit("submit-leaderboard", "H100", 3600)
+        # No submissions, so all GPUs should be allowed
+        allowed, reason = db.is_user_allowed_to_submit(5, "submit-leaderboard", ["A100", "H100"])
+        assert allowed is True
+        assert reason is None

@@ -31,6 +31,8 @@ def mock_backend():
         "name": "test_board",
     }
     db_context.get_leaderboard_gpu_types.return_value = ["A100", "V100"]
+    # Default: user is allowed to submit (not rate-limited)
+    db_context.is_user_allowed_to_submit.return_value = (True, None)
 
     return backend
 
@@ -49,9 +51,7 @@ def test_check_deadline():
         "name": "test",
     }
 
-    with pytest.raises(
-        KernelBotError, match=r"The deadline to submit to test has passed\.\nIt was.*and today is.*"
-    ):
+    with pytest.raises(KernelBotError, match=r"The deadline to submit to test has passed\.\nIt was.*and today is.*"):
         submission.check_deadline(past_deadline)
 
 
@@ -125,9 +125,7 @@ def test_get_popcorn_directives_invalid():
     # Empty leaderboard but valid GPU
     code_empty_leaderboard = """#!POPCORN gpu A100
 #!POPCORN leaderboard"""
-    with pytest.raises(
-        KernelBotError, match="!POPCORN directive missing argument: #!POPCORN leaderboard"
-    ):
+    with pytest.raises(KernelBotError, match="!POPCORN directive missing argument: #!POPCORN leaderboard"):
         submission._get_popcorn_directives(code_empty_leaderboard)
 
     # Invalid directive
@@ -137,9 +135,7 @@ def test_get_popcorn_directives_invalid():
     # Multiple leaderboard directives (last one wins or first one wins?)
     code_multiple_leaderboard = """#!POPCORN leaderboard first_board
 #!POPCORN leaderboard second_board"""
-    with pytest.raises(
-        KernelBotError, match="Found multiple values for !POPCORN directive leaderboard"
-    ):
+    with pytest.raises(KernelBotError, match="Found multiple values for !POPCORN directive leaderboard"):
         submission._get_popcorn_directives(code_multiple_leaderboard)
 
 
@@ -280,20 +276,98 @@ def test_prepare_submission_checks(mock_backend):
 
     # invalid file extension
     req.file_name = "test.txt"
-    with pytest.raises(
-        KernelBotError, match=r"Please provide a Python \(.py\) or CUDA \(.cu / .cuh / .cpp\) file"
-    ):
+    with pytest.raises(KernelBotError, match=r"Please provide a Python \(.py\) or CUDA \(.cu / .cuh / .cpp\) file"):
         submission.prepare_submission(req, mock_backend)
 
     req.file_name = "test.py"
     req.gpus = ["A99"]
     with pytest.raises(
         KernelBotError,
-        match=re.escape(
-            "GPU A99 not available for `test_board`\nChoose one of:  * A100\n * V100\n"
-        ),
+        match=re.escape("GPU A99 not available for `test_board`\nChoose one of:  * A100\n * V100\n"),
     ):
         submission.prepare_submission(req, mock_backend)
+
+
+def test_prepare_submission_rate_limited(mock_backend):
+    """Test that prepare_submission raises KernelBotError when user is rate-limited."""
+    req = submission.SubmissionRequest(
+        code="#!POPCORN leaderboard test_board\nprint('hello world')",
+        file_name="test.py",
+        user_id=1,
+        user_name="test_user",
+        gpus=["A100"],
+        leaderboard=None,
+    )
+
+    # Mock rate limit exceeded
+    rate_limit_reason = "Rate limit exceeded for A100. You can submit once every 3600 seconds."
+    mock_backend.db.is_user_allowed_to_submit.return_value = (False, rate_limit_reason)
+
+    with pytest.raises(KernelBotError, match="Rate limit exceeded"):
+        submission.prepare_submission(req, mock_backend)
+
+    # Verify is_user_allowed_to_submit was called with correct arguments
+    mock_backend.db.is_user_allowed_to_submit.assert_called_once_with(1, "test_board", ["A100"])
+
+
+def test_prepare_submission_rate_limit_allowed(mock_backend):
+    """Test that prepare_submission succeeds when user is not rate-limited."""
+    req = submission.SubmissionRequest(
+        code="#!POPCORN leaderboard test_board\nprint('hello world')",
+        file_name="test.py",
+        user_id=1,
+        user_name="test_user",
+        gpus=["A100"],
+        leaderboard=None,
+    )
+
+    # Explicitly set user is allowed (default, but being explicit for clarity)
+    mock_backend.db.is_user_allowed_to_submit.return_value = (True, None)
+
+    result = submission.prepare_submission(req, mock_backend)
+
+    assert isinstance(result, submission.ProcessedSubmissionRequest)
+    assert result.leaderboard == "test_board"
+    mock_backend.db.is_user_allowed_to_submit.assert_called_once_with(1, "test_board", ["A100"])
+
+
+def test_prepare_submission_rate_limit_called_with_correct_gpus(mock_backend):
+    """Test that is_user_allowed_to_submit is called with the correct GPU list."""
+    # Test with multiple GPUs from POPCORN directive
+    mock_backend.db.get_leaderboard_gpu_types.return_value = ["A100", "V100", "H100"]
+
+    req = submission.SubmissionRequest(
+        code="#!POPCORN gpu V100 H100\n#!POPCORN leaderboard test_board\nprint('test')",
+        file_name="test.py",
+        user_id=42,
+        user_name="test_user",
+        gpus=None,
+        leaderboard=None,
+    )
+
+    result = submission.prepare_submission(req, mock_backend)
+
+    assert result.gpus == ["V100", "H100"]
+    mock_backend.db.is_user_allowed_to_submit.assert_called_once_with(42, "test_board", ["V100", "H100"])
+
+
+def test_prepare_submission_rate_limit_single_gpu_auto_assign(mock_backend):
+    """Test that is_user_allowed_to_submit is called with auto-assigned single GPU."""
+    mock_backend.db.get_leaderboard_gpu_types.return_value = ["H100"]
+
+    req = submission.SubmissionRequest(
+        code="#!POPCORN leaderboard test_board\nprint('test')",
+        file_name="test.py",
+        user_id=5,
+        user_name="test_user",
+        gpus=None,
+        leaderboard=None,
+    )
+
+    result = submission.prepare_submission(req, mock_backend)
+
+    assert result.gpus == ["H100"]
+    mock_backend.db.is_user_allowed_to_submit.assert_called_once_with(5, "test_board", ["H100"])
 
 
 def test_compute_score():
@@ -376,9 +450,7 @@ def test_generate_run_verdict(mock_backend):
     assert result == "> 5th place on A100: 1500 ms"
 
     # Test personal best (rank > 10)
-    mock_backend.db.get_leaderboard_submissions.return_value = [
-        {"submission_id": 123, "user_id": 42, "rank": 15}
-    ]
+    mock_backend.db.get_leaderboard_submissions.return_value = [{"submission_id": 123, "user_id": 42, "rank": 15}]
     result = generate_run_verdict(mock_backend, run_item, sub_data)
     assert result == "> Personal best on A100: 1500 ms"
 
