@@ -225,21 +225,6 @@ async def to_submit_info(
 
     try:
         with db_context as db:
-            # Per-user rate limit: max 1 submission per hour on Modal B200 for leaderboard 730
-            if gpu_type == "B200":
-                lb_id = db.get_leaderboard_id(leaderboard_name)
-                if lb_id == 730:
-                    last_submission_time = db.check_user_rate_limit(user_id)
-                    if last_submission_time:
-                        raise HTTPException(
-                            status_code=429,
-                            detail=(
-                                f"Rate limit exceeded. You can submit once per hour. "
-                                f"Last submission: {last_submission_time.isoformat()}. "
-                                f"Consider using the NVIDIA runner instead of Modal for faster iteration."
-                            ),
-                        )
-
             leaderboard_item = db.get_leaderboard(leaderboard_name)
             gpus = leaderboard_item.get("gpu_types", [])
             if gpu_type not in gpus:
@@ -254,7 +239,7 @@ async def to_submit_info(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error while validating submission: {e}",
+            detail=f"Internal server error while validating leaderboard/GPU: {e}",
         ) from e
 
     try:
