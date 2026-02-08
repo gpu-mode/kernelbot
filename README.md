@@ -9,13 +9,13 @@
 | src/libkernelbot/background\_submission\_manager.py |      160 |       31 |     81% |36, 38-40, 42, 45, 47, 176-177, 203-206, 224-229, 246-271 |
 | src/libkernelbot/consts.py                          |       65 |        1 |     98% |        48 |
 | src/libkernelbot/db\_types.py                       |       14 |        1 |     93% |         7 |
-| src/libkernelbot/leaderboard\_db.py                 |      321 |       48 |     85% |65, 99, 373-383, 396-414, 719-721, 790-811, 1052-1076, 1088-1127, 1134-1155, 1162-1169, 1202-1211 |
+| src/libkernelbot/leaderboard\_db.py                 |      317 |       48 |     85% |65, 99, 373-383, 396-414, 719-721, 790-811, 1052-1076, 1088-1127, 1134-1155, 1162-1169, 1185-1194 |
 | src/libkernelbot/problem\_sync.py                   |      128 |      105 |     18% |72-101, 121-206, 234-300 |
 | src/libkernelbot/report.py                          |      269 |        9 |     97% |75, 326, 345, 356, 395, 422, 429-430, 437 |
 | src/libkernelbot/submission.py                      |      121 |        1 |     99% |        18 |
 | src/libkernelbot/task.py                            |      112 |        6 |     95% |68, 121, 126-128, 165 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
-| **TOTAL**                                           | **1376** |  **222** | **84%** |           |
+| **TOTAL**                                           | **1372** |  **222** | **84%** |           |
 
 
 ## Setup coverage badge
