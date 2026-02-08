@@ -1172,6 +1172,218 @@ class LeaderboardDB:
             logger.exception("Could not cleanup temp users", exc_info=e)
             raise KernelBotError("Database error while cleaning up temp users") from e
 
+    def get_user_rate_limit(self, user_id: str) -> Optional[dict]:
+        """
+        Get the rate limit override for a specific user.
+
+        Returns:
+            Optional[dict]: Rate limit info or None if no override exists.
+        """
+        try:
+            self.cursor.execute(
+                """
+                SELECT user_id, max_submissions_per_hour, max_submissions_per_day,
+                       note, created_at, updated_at
+                FROM leaderboard.user_rate_limits
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                return None
+            return {
+                "user_id": row[0],
+                "max_submissions_per_hour": row[1],
+                "max_submissions_per_day": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5],
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error fetching user rate limit") from e
+
+    def get_all_user_rate_limits(self) -> list[dict]:
+        """
+        Get all user rate limit overrides.
+
+        Returns:
+            list[dict]: All user rate limit entries.
+        """
+        try:
+            self.cursor.execute(
+                """
+                SELECT rl.user_id, rl.max_submissions_per_hour, rl.max_submissions_per_day,
+                       rl.note, rl.created_at, rl.updated_at, ui.user_name
+                FROM leaderboard.user_rate_limits rl
+                LEFT JOIN leaderboard.user_info ui ON rl.user_id = ui.id
+                ORDER BY rl.updated_at DESC
+                """
+            )
+            return [
+                {
+                    "user_id": row[0],
+                    "max_submissions_per_hour": row[1],
+                    "max_submissions_per_day": row[2],
+                    "note": row[3],
+                    "created_at": row[4],
+                    "updated_at": row[5],
+                    "user_name": row[6],
+                }
+                for row in self.cursor.fetchall()
+            ]
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching all user rate limits", exc_info=e)
+            raise KernelBotError("Error fetching user rate limits") from e
+
+    def set_user_rate_limit(
+        self,
+        user_id: str,
+        max_submissions_per_hour: Optional[int] = None,
+        max_submissions_per_day: Optional[int] = None,
+        note: Optional[str] = None,
+    ) -> dict:
+        """
+        Set or update rate limit for a user (upsert).
+
+        Returns:
+            dict: The created/updated rate limit entry.
+        """
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.user_rate_limits
+                    (user_id, max_submissions_per_hour, max_submissions_per_day, note)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    max_submissions_per_hour = EXCLUDED.max_submissions_per_hour,
+                    max_submissions_per_day = EXCLUDED.max_submissions_per_day,
+                    note = EXCLUDED.note,
+                    updated_at = NOW()
+                RETURNING user_id, max_submissions_per_hour, max_submissions_per_day,
+                          note, created_at, updated_at
+                """,
+                (user_id, max_submissions_per_hour, max_submissions_per_day, note),
+            )
+            row = self.cursor.fetchone()
+            self.connection.commit()
+            return {
+                "user_id": row[0],
+                "max_submissions_per_hour": row[1],
+                "max_submissions_per_day": row[2],
+                "note": row[3],
+                "created_at": row[4],
+                "updated_at": row[5],
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error setting rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error setting user rate limit") from e
+
+    def delete_user_rate_limit(self, user_id: str) -> bool:
+        """
+        Delete a user's rate limit override.
+
+        Returns:
+            bool: True if a row was deleted, False if no override existed.
+        """
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.user_rate_limits
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            deleted = self.cursor.rowcount > 0
+            self.connection.commit()
+            return deleted
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error deleting rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error deleting user rate limit") from e
+
+    def check_user_submission_rate(self, user_id: str) -> dict:
+        """
+        Check a user's current submission counts against their rate limits.
+
+        Returns:
+            dict with keys:
+                - allowed: bool, whether the user can submit
+                - hourly_count: int, submissions in the last hour
+                - daily_count: int, submissions in the last day
+                - hourly_limit: int or None
+                - daily_limit: int or None
+                - retry_after: str or None, human-readable wait time if blocked
+        """
+        try:
+            # Get user's rate limits (None means no override)
+            rate_limit = self.get_user_rate_limit(user_id)
+            if rate_limit is None:
+                return {
+                    "allowed": True,
+                    "hourly_count": 0,
+                    "daily_count": 0,
+                    "hourly_limit": None,
+                    "daily_limit": None,
+                    "retry_after": None,
+                }
+
+            hourly_limit = rate_limit["max_submissions_per_hour"]
+            daily_limit = rate_limit["max_submissions_per_day"]
+
+            # If both limits are None, user is unrestricted
+            if hourly_limit is None and daily_limit is None:
+                return {
+                    "allowed": True,
+                    "hourly_count": 0,
+                    "daily_count": 0,
+                    "hourly_limit": None,
+                    "daily_limit": None,
+                    "retry_after": None,
+                }
+
+            # Count submissions in the last hour and day
+            self.cursor.execute(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE submission_time > NOW() - INTERVAL '1 hour') AS hourly_count,
+                    COUNT(*) FILTER (WHERE submission_time > NOW() - INTERVAL '1 day') AS daily_count
+                FROM leaderboard.submission
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = self.cursor.fetchone()
+            hourly_count = row[0]
+            daily_count = row[1]
+
+            # Check limits
+            hourly_exceeded = hourly_limit is not None and hourly_count >= hourly_limit
+            daily_exceeded = daily_limit is not None and daily_count >= daily_limit
+
+            retry_after = None
+            if hourly_exceeded:
+                retry_after = "Try again in up to 1 hour"
+            if daily_exceeded:
+                retry_after = "Try again in up to 24 hours"
+
+            return {
+                "allowed": not (hourly_exceeded or daily_exceeded),
+                "hourly_count": hourly_count,
+                "daily_count": daily_count,
+                "hourly_limit": hourly_limit,
+                "daily_limit": daily_limit,
+                "retry_after": retry_after,
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking rate limit for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error checking user rate limit") from e
+
     def validate_cli_id(self, cli_id: str) -> Optional[dict[str, str]]:
         """
         Validates a CLI ID and returns the associated user ID if valid.

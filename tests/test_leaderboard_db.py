@@ -775,3 +775,121 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+def test_user_rate_limit_crud(database, submit_leaderboard):
+    """Test basic CRUD operations for user rate limits."""
+    with database as db:
+        # Create a user first
+        db.cursor.execute(
+            "INSERT INTO leaderboard.user_info (id, user_name) VALUES (%s, %s)",
+            ("rate-user-1", "rate_user"),
+        )
+        db.connection.commit()
+
+        # No rate limit initially
+        assert db.get_user_rate_limit("rate-user-1") is None
+        assert db.get_all_user_rate_limits() == []
+
+        # Set rate limit
+        result = db.set_user_rate_limit("rate-user-1", max_submissions_per_hour=10, max_submissions_per_day=50)
+        assert result["user_id"] == "rate-user-1"
+        assert result["max_submissions_per_hour"] == 10
+        assert result["max_submissions_per_day"] == 50
+        assert result["note"] is None
+
+        # Read it back
+        rl = db.get_user_rate_limit("rate-user-1")
+        assert rl["user_id"] == "rate-user-1"
+        assert rl["max_submissions_per_hour"] == 10
+        assert rl["max_submissions_per_day"] == 50
+
+        # List all
+        all_limits = db.get_all_user_rate_limits()
+        assert len(all_limits) == 1
+        assert all_limits[0]["user_name"] == "rate_user"
+
+        # Update (upsert)
+        updated = db.set_user_rate_limit("rate-user-1", max_submissions_per_hour=5, note="reduced limit")
+        assert updated["max_submissions_per_hour"] == 5
+        assert updated["max_submissions_per_day"] is None
+        assert updated["note"] == "reduced limit"
+
+        # Delete
+        assert db.delete_user_rate_limit("rate-user-1") is True
+        assert db.get_user_rate_limit("rate-user-1") is None
+
+        # Delete non-existent returns False
+        assert db.delete_user_rate_limit("rate-user-1") is False
+
+
+def test_user_rate_limit_no_override(database, submit_leaderboard):
+    """Users without a rate limit override are always allowed."""
+    with database as db:
+        result = db.check_user_submission_rate("nonexistent-user")
+        assert result["allowed"] is True
+
+
+def test_user_rate_limit_enforcement(database, submit_leaderboard):
+    """Test that rate limit enforcement blocks users who exceed limits."""
+    with database as db:
+        # Create a user
+        db.cursor.execute(
+            "INSERT INTO leaderboard.user_info (id, user_name) VALUES (%s, %s)",
+            ("limited-user", "limited"),
+        )
+        db.connection.commit()
+
+        # Set a tight limit: 2 per hour
+        db.set_user_rate_limit("limited-user", max_submissions_per_hour=2, max_submissions_per_day=100)
+
+        # No submissions yet, should be allowed
+        check = db.check_user_submission_rate("limited-user")
+        assert check["allowed"] is True
+        assert check["hourly_count"] == 0
+        assert check["hourly_limit"] == 2
+
+        # Create 2 submissions
+        for i in range(2):
+            db.create_submission(
+                "submit-leaderboard",
+                f"file_{i}.py",
+                "limited-user",
+                f"code {i}",
+                datetime.datetime.now(tz=datetime.timezone.utc),
+                user_name="limited",
+            )
+
+        # Now should be blocked
+        check = db.check_user_submission_rate("limited-user")
+        assert check["allowed"] is False
+        assert check["hourly_count"] == 2
+        assert check["retry_after"] is not None
+
+
+def test_user_rate_limit_daily(database, submit_leaderboard):
+    """Test daily rate limit enforcement."""
+    with database as db:
+        db.cursor.execute(
+            "INSERT INTO leaderboard.user_info (id, user_name) VALUES (%s, %s)",
+            ("daily-user", "daily"),
+        )
+        db.connection.commit()
+
+        # Set a daily limit only
+        db.set_user_rate_limit("daily-user", max_submissions_per_day=1)
+
+        # Create 1 submission
+        db.create_submission(
+            "submit-leaderboard",
+            "file.py",
+            "daily-user",
+            "code",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="daily",
+        )
+
+        check = db.check_user_submission_rate("daily-user")
+        assert check["allowed"] is False
+        assert check["daily_count"] == 1
+        assert check["daily_limit"] == 1
+
