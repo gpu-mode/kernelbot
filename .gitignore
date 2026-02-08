@@ -11,3 +11,4 @@ reference-kernels/
 yoyo.ini
 .venv
 .claude/
+*.egg-info/
