@@ -405,3 +405,135 @@ class TestAdminUpdateProblems:
             assert data["status"] == "ok"
             assert len(data["errors"]) == 1
             assert data["errors"][0]["name"] == "bad-problem"
+
+
+class TestAdminRateLimits:
+    """Test admin rate limit endpoints."""
+
+    def _setup_db_mock(self, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+    def test_get_all_rate_limits(self, test_client, mock_backend):
+        """GET /admin/rate-limits returns all rate limits."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_all_user_rate_limits = MagicMock(return_value=[
+            {"user_id": "123", "max_submissions_per_hour": 10, "max_submissions_per_day": 50,
+             "note": None, "created_at": None, "updated_at": None, "user_name": "testuser"},
+        ])
+
+        response = test_client.get(
+            "/admin/rate-limits",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert len(data["rate_limits"]) == 1
+        assert data["rate_limits"][0]["user_id"] == "123"
+
+    def test_get_all_rate_limits_requires_auth(self, test_client):
+        """GET /admin/rate-limits requires authentication."""
+        response = test_client.get("/admin/rate-limits")
+        assert response.status_code == 401
+
+    def test_get_user_rate_limit(self, test_client, mock_backend):
+        """GET /admin/rate-limits/{user_id} returns user's rate limit."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_user_rate_limit = MagicMock(return_value={
+            "user_id": "123", "max_submissions_per_hour": 10, "max_submissions_per_day": 50,
+            "note": "heavy user", "created_at": None, "updated_at": None,
+        })
+
+        response = test_client.get(
+            "/admin/rate-limits/123",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["rate_limit"]["user_id"] == "123"
+        assert data["rate_limit"]["note"] == "heavy user"
+
+    def test_get_user_rate_limit_not_found(self, test_client, mock_backend):
+        """GET /admin/rate-limits/{user_id} returns 404 for missing."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_user_rate_limit = MagicMock(return_value=None)
+
+        response = test_client.get(
+            "/admin/rate-limits/999",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 404
+
+    def test_set_user_rate_limit(self, test_client, mock_backend):
+        """PUT /admin/rate-limits/{user_id} sets rate limit."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.set_user_rate_limit = MagicMock(return_value={
+            "user_id": "123", "max_submissions_per_hour": 5, "max_submissions_per_day": 20,
+            "note": "restricted", "created_at": None, "updated_at": None,
+        })
+
+        response = test_client.put(
+            "/admin/rate-limits/123",
+            headers={"Authorization": "Bearer test_token"},
+            json={"max_submissions_per_hour": 5, "max_submissions_per_day": 20, "note": "restricted"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["rate_limit"]["max_submissions_per_hour"] == 5
+        mock_backend.db.set_user_rate_limit.assert_called_once_with(
+            user_id="123",
+            max_submissions_per_hour=5,
+            max_submissions_per_day=20,
+            note="restricted",
+        )
+
+    def test_set_user_rate_limit_requires_at_least_one_limit(self, test_client, mock_backend):
+        """PUT /admin/rate-limits/{user_id} requires at least one limit field."""
+        self._setup_db_mock(mock_backend)
+
+        response = test_client.put(
+            "/admin/rate-limits/123",
+            headers={"Authorization": "Bearer test_token"},
+            json={"note": "just a note"},
+        )
+        assert response.status_code == 400
+        assert "At least one of" in response.json()["detail"]
+
+    def test_set_user_rate_limit_validates_negative(self, test_client, mock_backend):
+        """PUT /admin/rate-limits/{user_id} rejects negative values."""
+        self._setup_db_mock(mock_backend)
+
+        response = test_client.put(
+            "/admin/rate-limits/123",
+            headers={"Authorization": "Bearer test_token"},
+            json={"max_submissions_per_hour": -1},
+        )
+        assert response.status_code == 400
+        assert "non-negative integer" in response.json()["detail"]
+
+    def test_delete_user_rate_limit(self, test_client, mock_backend):
+        """DELETE /admin/rate-limits/{user_id} deletes rate limit."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.delete_user_rate_limit = MagicMock(return_value=True)
+
+        response = test_client.delete(
+            "/admin/rate-limits/123",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert response.json()["user_id"] == "123"
+
+    def test_delete_user_rate_limit_not_found(self, test_client, mock_backend):
+        """DELETE /admin/rate-limits/{user_id} returns 404 when not found."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.delete_user_rate_limit = MagicMock(return_value=False)
+
+        response = test_client.delete(
+            "/admin/rate-limits/999",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 404
