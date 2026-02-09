@@ -14,7 +14,24 @@ flavor = "devel"
 operating_sys = "ubuntu24.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
-# Move this to another file later:
+# === Image Definition ===
+#
+# Adding new C++ library dependencies:
+#   1. Add a .run_commands() step that installs headers to /opt/<library_name>
+#      Use `git clone --depth 1 --branch <tag>` for header-only libs to keep the image small.
+#   2. Add the include paths to CPLUS_INCLUDE_PATH in the .env() block at the bottom
+#      so that nvcc finds them automatically without -I flags.
+#   3. Test changes with test_cutlass_image.py (or a similar script) before deploying:
+#        cd src/runners && modal run test_cutlass_image.py
+#
+# For users writing submissions with torch.utils.cpp_extension.load_inline:
+#   C++ headers installed on the image (like CUTLASS) require explicit include paths:
+#     load_inline(
+#         ...
+#         extra_include_paths=["/opt/cutlass/include", "/opt/cutlass/tools/util/include"],
+#     )
+#   For raw nvcc compilation, CPLUS_INCLUDE_PATH is set so includes work automatically.
+#
 cuda_image = (
     Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.13")
     .run_commands("ln -sf $(which python) /usr/local/bin/python3")
@@ -52,6 +69,14 @@ cuda_image = (
         # "nvmath-python[cu13]~=0.4",
         # "numba-cuda[cu13]~=0.15",
     )
+    # CUTLASS C++ headers for #include <cutlass/...>
+    .run_commands(
+        "git clone --depth 1 --branch v4.3.5 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
+    )
+    .env({
+        "CUTLASS_PATH": "/opt/cutlass",
+        "CPLUS_INCLUDE_PATH": "/opt/cutlass/include:/opt/cutlass/tools/util/include",
+    })
 )
 
 cuda_image = cuda_image.add_local_python_source(
