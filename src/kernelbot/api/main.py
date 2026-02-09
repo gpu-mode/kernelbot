@@ -388,6 +388,13 @@ async def run_submission(  # noqa: C901
         StreamingResponse: A streaming response containing the status and results of the submission.
     """
     await simple_rate_limit()
+
+    # Check user-specific rate limits
+    with db_context as db:
+        rate_check = db.check_user_submission_rate(user_info["user_id"])
+    if not rate_check["allowed"]:
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded. {rate_check['retry_after']}")
+
     submission_request, submission_mode_enum = await to_submit_info(
         user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
     )
@@ -449,6 +456,11 @@ async def run_submission_async(
         await simple_rate_limit()
         logger.info(f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}")
 
+        # Check user-specific rate limits
+        with db_context as db:
+            rate_check = db.check_user_submission_rate(user_info["user_id"])
+        if not rate_check["allowed"]:
+            raise HTTPException(status_code=429, detail=f"Rate limit exceeded. {rate_check['retry_after']}")
 
         # throw error if submission request is invalid
         try:
@@ -641,6 +653,85 @@ async def admin_update_problems(
         "skipped": result.skipped,
         "errors": result.errors,
     }
+
+
+@app.get("/admin/rate-limits")
+async def get_all_rate_limits(
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Get all user rate limit overrides."""
+    with db_context as db:
+        rate_limits = db.get_all_user_rate_limits()
+    return {"status": "ok", "rate_limits": rate_limits}
+
+
+@app.get("/admin/rate-limits/{user_id}")
+async def get_user_rate_limit(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Get rate limit for a specific user."""
+    with db_context as db:
+        rate_limit = db.get_user_rate_limit(user_id)
+    if rate_limit is None:
+        raise HTTPException(status_code=404, detail="No rate limit override found for this user")
+    return {"status": "ok", "rate_limit": rate_limit}
+
+
+@app.put("/admin/rate-limits/{user_id}")
+async def set_user_rate_limit(
+    user_id: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Set or update rate limit for a user.
+
+    Payload fields:
+        max_submissions_per_hour (int, optional): Max submissions per hour
+        max_submissions_per_day (int, optional): Max submissions per day
+        note (str, optional): Admin note about why the limit was set
+    """
+    max_per_hour = payload.get("max_submissions_per_hour")
+    max_per_day = payload.get("max_submissions_per_day")
+    note = payload.get("note")
+
+    if max_per_hour is None and max_per_day is None:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of max_submissions_per_hour or max_submissions_per_day is required",
+        )
+
+    if max_per_hour is not None and (not isinstance(max_per_hour, int) or max_per_hour < 0):
+        raise HTTPException(status_code=400, detail="max_submissions_per_hour must be a non-negative integer")
+
+    if max_per_day is not None and (not isinstance(max_per_day, int) or max_per_day < 0):
+        raise HTTPException(status_code=400, detail="max_submissions_per_day must be a non-negative integer")
+
+    with db_context as db:
+        rate_limit = db.set_user_rate_limit(
+            user_id=user_id,
+            max_submissions_per_hour=max_per_hour,
+            max_submissions_per_day=max_per_day,
+            note=note,
+        )
+    return {"status": "ok", "rate_limit": rate_limit}
+
+
+@app.delete("/admin/rate-limits/{user_id}")
+async def delete_user_rate_limit(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Delete a user's rate limit override."""
+    with db_context as db:
+        deleted = db.delete_user_rate_limit(user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No rate limit override found for this user")
+    return {"status": "ok", "user_id": user_id}
 
 
 @app.get("/leaderboards")
