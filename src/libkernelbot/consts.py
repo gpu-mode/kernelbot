@@ -33,6 +33,14 @@ class ModalGPU(Enum):
     L4x4 = "L4x4"
 
 
+class BuildkiteGPU(Enum):
+    """GPUs available via Buildkite-managed infrastructure."""
+    B200_BK = "B200_BK"
+    H100_BK = "H100_BK"
+    MI300_BK = "MI300_BK"
+    L40S_BK = "L40S_BK"  # Test infrastructure
+
+
 @dataclasses.dataclass
 class GPU:
     name: str
@@ -50,7 +58,7 @@ def _make_gpu_lookup(runner_map: dict[str, Type[Enum]]):
     return lookup
 
 
-_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU})
+_GPU_LOOKUP = _make_gpu_lookup({"Modal": ModalGPU, "GitHub": GitHubGPU, "Buildkite": BuildkiteGPU})
 
 
 def get_gpu_by_name(name: str) -> GPU:
@@ -121,6 +129,11 @@ GPU_TO_SM = {
     "MI300": None,
     "MI300x8": None,
     "MI250": None,
+    # Buildkite-managed GPUs
+    "B200_BK": "100",
+    "H100_BK": "90a",
+    "MI300_BK": None,
+    "L40S_BK": "89",  # Ada Lovelace
 }
 
 
