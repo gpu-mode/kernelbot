@@ -59,6 +59,7 @@ cuda_image = (
     # other frameworks
     .uv_pip_install(
         "tinygrad~=0.10",
+        "helion",
     )
     # nvidia cuda packages
     .uv_pip_install(
