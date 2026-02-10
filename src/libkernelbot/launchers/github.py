@@ -46,6 +46,16 @@ logger = setup_logging()
 
 
 def get_timeout(config: dict) -> int:
+    # Model submissions compute timeout from their own config
+    if config.get("lang") == "model":
+        mc = config.get("model_config", {})
+        total_seconds = (
+            mc.get("install_timeout", 600)
+            + mc.get("server_startup_timeout", 300)
+            + mc.get("benchmark_timeout", 1200)
+        )
+        return math.ceil(total_seconds / 60)
+
     mode = config.get("mode")
     sec_map = {
         SubmissionMode.TEST.value: config.get("test_timeout"),
@@ -114,11 +124,30 @@ class GitHubLauncher(Launcher):
             # TODO implement HIP
             raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")
 
-        lang_name = {"py": "Python", "cu": "CUDA"}[lang]
+        if lang == "model" and gpu_vendor == "AMD":
+            raise NotImplementedError("Model competitions are not supported on AMD GPUs")
+
+        # Override workflow for model submissions
+        if lang == "model":
+            selected_workflow = "nvidia_model_workflow.yml"
+
+        lang_name = {"py": "Python", "cu": "CUDA", "model": "Model"}[lang]
 
         logger.info(f"Attempting to trigger GitHub action for {lang_name} on {selected_workflow}")
         run = GitHubRun(self.repo, self._next_token(), self.branch, selected_workflow)
         logger.info(f"Successfully created GitHub run: {run.run_id}")
+
+        # For model submissions, the archive is too large for workflow dispatch inputs.
+        # Upload it as a Git blob and pass the SHA reference instead.
+        archive_blob_sha = None
+        if lang == "model" and "submission_archive" in config:
+            archive_b64 = config.pop("submission_archive")
+            blob = await asyncio.to_thread(
+                run.repo.create_git_blob, archive_b64, "base64"
+            )
+            archive_blob_sha = blob.sha  # noqa: F841
+            config["archive_blob_sha"] = blob.sha
+            logger.info(f"Uploaded submission archive as blob {blob.sha}")
 
         payload = base64.b64encode(zlib.compress(json.dumps(config).encode("utf-8"))).decode(
             "utf-8"
@@ -285,7 +314,7 @@ class GitHubRun:
         _WORKFLOW_FILE_CACHE[cache_key] = workflow
         return workflow
 
-    async def trigger(self, inputs: dict) -> bool:
+    async def trigger(self, inputs: dict) -> bool:  # noqa: C901
         """
         Trigger this run with the provided inputs.
         Sets `self.run` to the new WorkflowRun on success.
@@ -300,6 +329,8 @@ class GitHubRun:
             expected_run_name = f"AMD Job - {run_id}"
         elif self.workflow_file == "nvidia_workflow.yml":
             expected_run_name = f"NVIDIA Job - {run_id}"
+        elif self.workflow_file == "nvidia_model_workflow.yml":
+            expected_run_name = f"Model Job - {run_id}"
         else:
             raise ValueError(f"Unknown workflow file: {self.workflow_file}")
 
