@@ -23,8 +23,13 @@ class ModalLauncher(Launcher):
         loop = asyncio.get_event_loop()
         if config["lang"] == "cu":
             config["include_dirs"] = config.get("include_dirs", []) + self.additional_include_dirs
-        func_type = "pytorch" if config["lang"] == "py" else "cuda"
-        func_name = f"run_{func_type}_script_{gpu_type.value.lower()}"
+
+        if config["lang"] == "model":
+            func_name = f"run_model_benchmark_{gpu_type.value.lower()}"
+        elif config["lang"] == "py":
+            func_name = f"run_pytorch_script_{gpu_type.value.lower()}"
+        else:
+            func_name = f"run_cuda_script_{gpu_type.value.lower()}"
 
         logger.info(f"Starting Modal run using {func_name}")
 

@@ -834,6 +834,9 @@ def build_test_string(tests: list[dict]):
 
 
 def run_config(config: dict):
+    if config["lang"] == "model":
+        return run_model_benchmark(config)
+
     system = make_system_info()
     common_args = {
         "system": system,
@@ -866,3 +869,400 @@ def run_config(config: dict):
 
     results = run_evaluation(runner, config["mode"], common_args)
     return FullResult(success=True, error="", runs=results, system=system)
+
+
+# ---------------------------------------------------------------------------
+# Model competition support
+# ---------------------------------------------------------------------------
+
+
+def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple[bool, str, str]:
+    """Decode a base64 tarball, extract it, and pip install it.
+
+    Returns (success, stdout, stderr).
+    """
+    archive_bytes = base64.b64decode(archive_b64)
+
+    work_dir = tempfile.mkdtemp(prefix="model_submission_")
+    archive_path = os.path.join(work_dir, "submission.tar.gz")
+
+    with open(archive_path, "wb") as f:
+        f.write(archive_bytes)
+
+    # Extract
+    import tarfile
+    import zipfile
+
+    extract_dir = os.path.join(work_dir, "src")
+    os.makedirs(extract_dir, exist_ok=True)
+
+    if tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path, "r:*") as tar:
+            tar.extractall(path=extract_dir)
+    elif zipfile.is_zipfile(archive_path):
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(path=extract_dir)
+    else:
+        return False, "", "Submission archive is not a valid tar.gz or zip file"
+
+    # Find the actual package directory (may be nested one level)
+    entries = os.listdir(extract_dir)
+    if len(entries) == 1 and os.path.isdir(os.path.join(extract_dir, entries[0])):
+        pkg_dir = os.path.join(extract_dir, entries[0])
+    else:
+        pkg_dir = extract_dir
+
+    # pip install
+    result = subprocess.run(
+        ["pip", "install", "-e", pkg_dir],
+        capture_output=True,
+        text=True,
+        timeout=install_timeout,
+    )
+
+    return result.returncode == 0, _limit_length(result.stdout), _limit_length(result.stderr)
+
+
+def _start_vllm_server(
+    model_name: str,
+    tensor_parallel: int,
+    port: int,
+    vllm_args: list[str],
+) -> subprocess.Popen:
+    """Start a vLLM OpenAI-compatible server as a subprocess."""
+    cmd = [
+        "python3", "-m", "vllm.entrypoints.openai.api_server",
+        "--model", model_name,
+        "--tensor-parallel-size", str(tensor_parallel),
+        "--port", str(port),
+        "--download-dir", "/models",
+    ] + vllm_args
+
+    return subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def _wait_for_server(port: int, timeout: int) -> bool:
+    """Poll the vLLM health endpoint until ready or timeout."""
+    import urllib.error
+    import urllib.request
+
+    deadline = time.time() + timeout
+    url = f"http://localhost:{port}/health"
+
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                if resp.status == 200:
+                    return True
+        except (urllib.error.URLError, OSError, ConnectionRefusedError):
+            pass
+        time.sleep(2)
+
+    return False
+
+
+def _run_serving_benchmark(
+    model_name: str,
+    port: int,
+    shapes: list[dict],
+    benchmark_timeout: int,
+) -> dict:
+    """Run vLLM benchmark_serving.py and parse the output metrics."""
+    all_metrics = {}
+
+    for i, shape in enumerate(shapes):
+        cmd = [
+            "python3", "-m", "vllm.entrypoints.openai.run_batch",
+        ]
+
+        # Prefer the benchmark_serving script approach
+        cmd = [
+            "python3", "-m", "vllm.benchmarks.benchmark_serving",
+            "--backend", "openai-chat",
+            "--base-url", f"http://localhost:{port}",
+            "--model", model_name,
+            "--endpoint", "/v1/chat/completions",
+            "--num-prompts", str(shape.get("num_prompts", 100)),
+            "--random-input-len", str(shape.get("input_len", 512)),
+            "--random-output-len", str(shape.get("output_len", 128)),
+            "--save-result",
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=benchmark_timeout,
+        )
+
+        if result.returncode != 0:
+            all_metrics[f"shape_{i}_error"] = _limit_length(result.stderr)
+            continue
+
+        # Parse the saved JSON result file
+        # vLLM saves to a json file in current directory
+        import glob
+        json_files = sorted(glob.glob("*.json"), key=os.path.getmtime, reverse=True)
+        if json_files:
+            try:
+                with open(json_files[0]) as f:
+                    bench_result = json.load(f)
+                for key in [
+                    "request_throughput",
+                    "output_throughput",
+                    "mean_ttft_ms",
+                    "median_ttft_ms",
+                    "p99_ttft_ms",
+                    "mean_tpot_ms",
+                    "median_tpot_ms",
+                    "p99_tpot_ms",
+                    "mean_itl_ms",
+                    "median_itl_ms",
+                    "p99_itl_ms",
+                ]:
+                    if key in bench_result:
+                        all_metrics[key] = bench_result[key]
+                os.remove(json_files[0])
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        all_metrics[f"shape_{i}_stdout"] = _limit_length(result.stdout)
+
+    return all_metrics
+
+
+def _check_perplexity(
+    model_name: str,
+    port: int,
+    baseline: float,
+    tolerance: float,
+) -> tuple[bool, float]:
+    """Check model perplexity via the running server's logprobs endpoint.
+
+    Returns (passed, measured_perplexity).
+    """
+    import math
+    import urllib.request
+
+    # Fixed eval prompts for reproducible perplexity measurement
+    eval_prompts = [
+        "The capital of France is",
+        "In the beginning, there was",
+        "Machine learning is a subset of",
+        "The speed of light in a vacuum is approximately",
+        "Water boils at a temperature of",
+        "The largest planet in our solar system is",
+        "Photosynthesis is the process by which",
+        "The theory of relativity was proposed by",
+        "DNA stands for deoxyribonucleic acid and it",
+        "The periodic table organizes elements by their",
+    ]
+
+    total_log_prob = 0.0
+    total_tokens = 0
+    url = f"http://localhost:{port}/v1/completions"
+
+    for prompt in eval_prompts:
+        payload = json.dumps({
+            "model": model_name,
+            "prompt": prompt,
+            "max_tokens": 50,
+            "logprobs": 1,
+            "temperature": 0.0,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+                logprobs = data["choices"][0].get("logprobs", {})
+                token_logprobs = logprobs.get("token_logprobs", [])
+                for lp in token_logprobs:
+                    if lp is not None:
+                        total_log_prob += lp
+                        total_tokens += 1
+        except Exception:
+            continue
+
+    if total_tokens == 0:
+        return False, float("inf")
+
+    measured_ppl = math.exp(-total_log_prob / total_tokens)
+    relative_diff = abs(measured_ppl - baseline) / baseline
+    passed = relative_diff <= tolerance
+
+    return passed, measured_ppl
+
+
+def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
+    """End-to-end model benchmark runner.
+
+    Installs the user's vLLM fork, starts a server, benchmarks it, and
+    checks perplexity against a baseline.
+    """
+    system = make_system_info()
+    model_config = config["model_config"]
+    archive_b64 = config["submission_archive"]
+    mode = config.get("mode", "leaderboard")
+
+    port = 8321
+    server_proc = None
+    start = datetime.datetime.now()
+
+    try:
+        # Phase 1: Install
+        install_ok, install_stdout, install_stderr = _install_submission_archive(
+            archive_b64, model_config.get("install_timeout", 600)
+        )
+        if not install_ok:
+            end = datetime.datetime.now()
+            run = RunResult(
+                success=False, passed=False,
+                command="pip install submission",
+                stdout=install_stdout, stderr=install_stderr,
+                exit_code=1, duration=(end - start).total_seconds(),
+                result={"error": "pip install failed"},
+            )
+            results = {"test": EvalResult(start=start, end=end, compilation=None, run=run, profile=None)}
+            return FullResult(success=True, error="", runs=results, system=system)
+
+        # Phase 2: Start server
+        server_proc = _start_vllm_server(
+            model_name=model_config["model_name"],
+            tensor_parallel=model_config.get("tensor_parallel", 1),
+            port=port,
+            vllm_args=model_config.get("vllm_args", []),
+        )
+
+        server_ready = _wait_for_server(port, model_config.get("server_startup_timeout", 300))
+        if not server_ready:
+            end = datetime.datetime.now()
+            stderr = ""
+            try:
+                server_proc.kill()
+                _, stderr = server_proc.communicate(timeout=10)
+            except Exception:
+                pass
+            run = RunResult(
+                success=False, passed=False,
+                command="vllm server startup",
+                stdout="", stderr=_limit_length(stderr or ""),
+                exit_code=1, duration=(end - start).total_seconds(),
+                result={"error": "vLLM server failed to start within timeout"},
+            )
+            results = {"test": EvalResult(start=start, end=end, compilation=None, run=run, profile=None)}
+            return FullResult(success=True, error="", runs=results, system=system)
+
+        results = {}
+
+        # Phase 3: Perplexity check (acts as the "test" phase)
+        ppl_passed, measured_ppl = _check_perplexity(
+            model_name=model_config["model_name"],
+            port=port,
+            baseline=model_config["perplexity_baseline"],
+            tolerance=model_config["perplexity_tolerance"],
+        )
+
+        test_end = datetime.datetime.now()
+        test_run = RunResult(
+            success=True, passed=ppl_passed,
+            command="perplexity check",
+            stdout=f"Measured perplexity: {measured_ppl:.4f} (baseline: {model_config['perplexity_baseline']})",
+            stderr="",
+            exit_code=0 if ppl_passed else ExitCode.VALIDATE_FAIL,
+            duration=(test_end - start).total_seconds(),
+            result={
+                "check": "pass" if ppl_passed else "fail",
+                "measured_perplexity": measured_ppl,
+                "baseline_perplexity": model_config["perplexity_baseline"],
+                "tolerance": model_config["perplexity_tolerance"],
+            },
+        )
+        results["test"] = EvalResult(start=start, end=test_end, compilation=None, run=test_run, profile=None)
+
+        if not ppl_passed:
+            return FullResult(success=True, error="", runs=results, system=system)
+
+        if mode in ["test"]:
+            return FullResult(success=True, error="", runs=results, system=system)
+
+        # Phase 4: Benchmark
+        bench_start = datetime.datetime.now()
+        metrics = _run_serving_benchmark(
+            model_name=model_config["model_name"],
+            port=port,
+            shapes=model_config.get("benchmark_shapes", []),
+            benchmark_timeout=model_config.get("benchmark_timeout", 1200),
+        )
+        bench_end = datetime.datetime.now()
+
+        has_ranking_metric = model_config.get("ranking_metric", "") in metrics
+        bench_run = RunResult(
+            success=True, passed=has_ranking_metric,
+            command="benchmark_serving",
+            stdout=json.dumps(metrics, indent=2),
+            stderr="",
+            exit_code=0 if has_ranking_metric else 1,
+            duration=(bench_end - bench_start).total_seconds(),
+            result=metrics,
+        )
+
+        if mode in ["benchmark"]:
+            results["benchmark"] = EvalResult(
+                start=bench_start, end=bench_end, compilation=None, run=bench_run, profile=None
+            )
+            return FullResult(success=True, error="", runs=results, system=system)
+
+        # For leaderboard/private mode, store benchmark as both "benchmark" and "leaderboard"
+        results["benchmark"] = EvalResult(
+            start=bench_start, end=bench_end, compilation=None, run=bench_run, profile=None
+        )
+        results["leaderboard"] = EvalResult(
+            start=bench_start, end=bench_end, compilation=None, run=bench_run, profile=None
+        )
+
+        return FullResult(success=True, error="", runs=results, system=system)
+
+    except subprocess.TimeoutExpired as e:
+        end = datetime.datetime.now()
+        return FullResult(
+            success=True, error="",
+            runs={"test": EvalResult(
+                start=start, end=end, compilation=None,
+                run=RunResult(
+                    success=False, passed=False,
+                    command=str(e.cmd) if e.cmd else "model benchmark",
+                    stdout="", stderr=f"Timeout: {e}",
+                    exit_code=ExitCode.TIMEOUT_EXPIRED,
+                    duration=(end - start).total_seconds(),
+                    result={"error": "timeout"},
+                ),
+                profile=None,
+            )},
+            system=system,
+        )
+    except Exception as e:
+        end = datetime.datetime.now()
+        return FullResult(
+            success=False,
+            error=f"Model benchmark error: {e}",
+            runs={},
+            system=system,
+        )
+    finally:
+        if server_proc is not None:
+            try:
+                server_proc.kill()
+                server_proc.wait(timeout=10)
+            except Exception:
+                pass

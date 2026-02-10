@@ -5,7 +5,7 @@ from fastapi import HTTPException, UploadFile
 
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
-from libkernelbot.consts import SubmissionMode
+from libkernelbot.consts import Language, SubmissionMode
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     Log,
@@ -242,6 +242,10 @@ async def to_submit_info(
             detail=f"Internal server error while validating leaderboard/GPU: {e}",
         ) from e
 
+    is_model = leaderboard_item["task"].lang == Language.Model
+    size_limit = 50_000_000 if is_model else 1_000_000
+    size_label = "50MB" if is_model else "1MB"
+
     try:
         submission_content = await file.read()
         if not submission_content:
@@ -249,10 +253,10 @@ async def to_submit_info(
                 status_code=400,
                 detail="Empty file submitted. Please provide a file with code.",
             )
-        if len(submission_content) > 1_000_000:
+        if len(submission_content) > size_limit:
             raise HTTPException(
                 status_code=413,
-                detail="Submission file is too large (limit: 1MB).",
+                detail=f"Submission file is too large (limit: {size_label}).",
             )
 
     except HTTPException:
@@ -260,32 +264,48 @@ async def to_submit_info(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading submission file: {e}") from e
 
-    try:
-        submission_code = submission_content.decode("utf-8")
-        if "stream" in submission_code.lower():
+    if is_model:
+        # Model submissions are binary archives — no UTF-8 decode or content checks
+        if not (file.filename or "").endswith((".tar.gz", ".tgz", ".zip")):
             raise HTTPException(
-                status_code=500,
-                detail="Your code contains work on another stream. This is not allowed and may result in your disqualification. If you think this is a mistake, please contact us.",  # noqa: E501
+                status_code=400,
+                detail="Model submissions must be a .tar.gz or .zip archive.",
             )
         submission_request = SubmissionRequest(
-            code=submission_code,
-            file_name=file.filename or "submission.py",
+            code=submission_content,
+            file_name=file.filename or "submission.tar.gz",
             user_id=user_id,
             user_name=user_name,
             gpus=[gpu_type],
             leaderboard=leaderboard_name,
         )
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to decode submission file content as UTF-8.",
-        ) from None
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error creating submission request: {e}",
-        ) from e
+    else:
+        try:
+            submission_code = submission_content.decode("utf-8")
+            if "stream" in submission_code.lower():
+                raise HTTPException(
+                    status_code=500,
+                    detail="Your code contains work on another stream. This is not allowed and may result in your disqualification. If you think this is a mistake, please contact us.",  # noqa: E501
+                )
+            submission_request = SubmissionRequest(
+                code=submission_code,
+                file_name=file.filename or "submission.py",
+                user_id=user_id,
+                user_name=user_name,
+                gpus=[gpu_type],
+                leaderboard=leaderboard_name,
+            )
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to decode submission file content as UTF-8.",
+            ) from None
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error creating submission request: {e}",
+            ) from e
 
     return submission_request, submission_mode_enum

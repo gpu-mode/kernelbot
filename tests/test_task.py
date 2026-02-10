@@ -154,6 +154,7 @@ def test_build_task_config_python(leaderboard_task):
         "benchmark_timeout": 180,
         "ranked_timeout": 180,
         "ranking_by": "geom",
+        "score_ascending": True,
         "seed": None,
     }
 
@@ -208,6 +209,7 @@ def test_build_task_config_cuda():
         "benchmark_timeout": 180,
         "ranked_timeout": 180,
         "ranking_by": "geom",
+        "score_ascending": True,
         "seed": None,
         "compile_flags": [],
         "defines": {"DEBUG": "1"},

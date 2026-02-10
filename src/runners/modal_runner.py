@@ -2,7 +2,7 @@ import signal
 import traceback
 from contextlib import contextmanager
 
-from modal import App, Image
+from modal import App, Image, Volume
 
 from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 
@@ -85,6 +85,58 @@ cuda_image = cuda_image.add_local_python_source(
     "modal_runner",
     "modal_runner_archs",
 )
+
+# === Model Competition Image ===
+#
+# For e2e model competitions where users submit vLLM forks.
+# Includes all vLLM dependencies but NOT vllm itself (the user's fork replaces it).
+# sccache caches CUDA extension compilation across submissions.
+#
+model_image = (
+    Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.13")
+    .run_commands("ln -sf $(which python) /usr/local/bin/python3")
+    .apt_install("git", "gcc-13", "g++-13")
+    .pip_install(
+        "torch==2.9.1",
+        index_url="https://download.pytorch.org/whl/cu130",
+    )
+    .pip_install(
+        "numpy",
+        "transformers",
+        "tokenizers",
+        "huggingface_hub",
+        "ray",
+        "uvicorn",
+        "fastapi",
+        "pydantic",
+        "aiohttp",
+        "requests",
+        "packaging",
+        "ninja",
+        "wheel",
+        "sccache",
+    )
+    # Install vLLM to pull in all transitive deps, then uninstall vllm itself.
+    # The user's fork will be pip installed at runtime.
+    .run_commands(
+        "pip install vllm && pip uninstall vllm -y",
+    )
+    .env({
+        "SCCACHE_DIR": "/sccache",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+    })
+)
+
+model_image = model_image.add_local_python_source(
+    "libkernelbot",
+    "modal_runner",
+    "modal_runner_archs",
+)
+
+# === Volumes ===
+model_weights = Volume.from_name("model-weights", create_if_missing=True)
+sccache_vol = Volume.from_name("sccache", create_if_missing=True)
 
 
 class TimeoutException(Exception):
