@@ -1,0 +1,23 @@
+lang: "model"
+description: |
+  Optimize vLLM inference serving for Llama-3.1-8B on H100.
+  Submit your vLLM fork as a .tar.gz archive.
+  Your fork will be pip installed and benchmarked on standard serving workloads.
+  Perplexity must remain within 1% of the baseline.
+config:
+  model_name: "meta-llama/Llama-3.1-8B"
+  tensor_parallel: 1
+  ranking_metric: "request_throughput"
+  perplexity_baseline: 6.14
+  perplexity_tolerance: 0.01
+  install_timeout: 600
+  server_startup_timeout: 300
+  benchmark_timeout: 1200
+  benchmark_shapes:
+    - {num_prompts: 1000, input_len: 512, output_len: 128}
+ranking_by: "custom"
+score_ascending: false
+gpus: ["H100"]
+files: {}
+tests: []
+benchmarks: []

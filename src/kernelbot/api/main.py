@@ -691,9 +691,11 @@ async def get_submissions(
     await simple_rate_limit()
     try:
         with db_context as db:
-            # Add validation for leaderboard and GPU? Might be redundant if DB handles it.
+            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            score_asc = leaderboard_item["task"].score_ascending
             return db.get_leaderboard_submissions(
-                leaderboard_name, gpu_name, limit=limit, offset=offset
+                leaderboard_name, gpu_name, limit=limit, offset=offset,
+                score_ascending=score_asc,
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching submissions: {e}") from e
