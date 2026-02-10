@@ -176,8 +176,8 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
     elif full:
         result.append("❌ Tests missing")
 
-    if "benchmark" in runs:
-        bench_run = runs["benchmark"].run
+    if "private" in runs:
+        bench_run = runs["private"].run
         if not bench_run.success:
             result.append("❌ Running benchmarks failed" + _short_fail_reason(bench_run))
             return result
@@ -202,16 +202,18 @@ def make_short_report(runs: dict[str, EvalResult], full=True) -> list[str]:  # n
             else:
                 result.append("✅ Profiling successful")
 
-    if "leaderboard" in runs:
-        lb_run = runs["leaderboard"].run
+    # Check for public or secret run results
+    ranked_key = "public" if "public" in runs else ("secret" if "secret" in runs else None)
+    if ranked_key:
+        lb_run = runs[ranked_key].run
         if not lb_run.success:
-            result.append("❌ Running leaderboard failed" + _short_fail_reason(lb_run))
+            result.append("❌ Running ranked submission failed" + _short_fail_reason(lb_run))
         elif not lb_run.passed:
-            result.append("❌ Leaderboard run failed")
+            result.append("❌ Ranked submission failed")
         else:
-            result.append("✅ Leaderboard run successful")
+            result.append("✅ Ranked submission successful")
     elif full:
-        result.append("❌ Leaderboard missing")
+        result.append("❌ Ranked submission missing")
     return result
 
 
@@ -339,8 +341,8 @@ def generate_report(result: FullResult, extra_text: str = "") -> RunResultReport
             num_tests = int(test_run.result.get("test-count", 0))
             report.add_log(f"✅ Passed {num_tests}/{num_tests} tests", make_test_log(test_run))
 
-    if "benchmark" in runs:
-        bench_run = runs["benchmark"]
+    if "private" in runs:
+        bench_run = runs["private"]
         if _handle_crash_report(report, bench_run):
             return report
 
@@ -378,8 +380,10 @@ def generate_report(result: FullResult, extra_text: str = "") -> RunResultReport
                         base64.b64decode(prof_run.profile.trace),
                     )
 
-    if "leaderboard" in runs:
-        bench_run = runs["leaderboard"]
+    # Check for public or secret run results
+    ranked_key = "public" if "public" in runs else ("secret" if "secret" in runs else None)
+    if ranked_key:
+        bench_run = runs[ranked_key]
         if _handle_crash_report(report, bench_run):
             return report
 

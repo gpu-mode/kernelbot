@@ -303,7 +303,7 @@ def test_compute_score():
     # Test LAST ranking with single benchmark
     mock_task.ranking_by = RankCriterion.LAST
     mock_result.runs = {
-        "leaderboard": mock.Mock(
+        "public": mock.Mock(
             run=mock.Mock(
                 result={
                     "benchmark-count": "1",
@@ -317,7 +317,7 @@ def test_compute_score():
 
     # Test MEAN ranking with multiple benchmarks
     mock_task.ranking_by = RankCriterion.MEAN
-    mock_result.runs["leaderboard"].run.result = {
+    mock_result.runs["public"].run.result = {
         "benchmark-count": "2",
         "benchmark.0.mean": "1000000000",  # 1 second
         "benchmark.1.mean": "3000000000",  # 3 seconds
@@ -327,7 +327,7 @@ def test_compute_score():
 
     # Test GEOM ranking with multiple benchmarks
     mock_task.ranking_by = RankCriterion.GEOM
-    mock_result.runs["leaderboard"].run.result = {
+    mock_result.runs["public"].run.result = {
         "benchmark-count": "2",
         "benchmark.0.mean": "4000000000",  # 4 seconds
         "benchmark.1.mean": "9000000000",  # 9 seconds
@@ -337,7 +337,7 @@ def test_compute_score():
 
     # Test LAST with multiple benchmarks (should raise error)
     mock_task.ranking_by = RankCriterion.LAST
-    mock_result.runs["leaderboard"].run.result["benchmark-count"] = "2"
+    mock_result.runs["public"].run.result["benchmark-count"] = "2"
     with pytest.raises(KernelBotError, match="exactly one benchmark"):
         submission.compute_score(mock_result, mock_task, 1)
 

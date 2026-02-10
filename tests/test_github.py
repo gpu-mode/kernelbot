@@ -179,7 +179,7 @@ async def test_github_launcher_failing_script(project_root: Path, github_config:
         task=task_definition.task,
         submission_content=submission_content,
         arch=0,
-        mode=SubmissionMode.LEADERBOARD,
+        mode=SubmissionMode.PUBLIC,
     )
 
     result = await launcher.run_submission(config, gpu_type, reporter)
@@ -190,9 +190,9 @@ async def test_github_launcher_failing_script(project_root: Path, github_config:
 
     # But the actual test or benchmark should fail
     test_passed = result.runs.get("test", {}).run.passed if "test" in result.runs else True
-    benchmark_passed = result.runs.get("benchmark", {}).run.passed if "benchmark" in result.runs else True
+    private_passed = result.runs.get("private", {}).run.passed if "private" in result.runs else True
 
-    assert not (test_passed and benchmark_passed), "Expected at least one run to fail for cheating script"
+    assert not (test_passed and private_passed), "Expected at least one run to fail for cheating script"
 
 
 

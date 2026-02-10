@@ -58,6 +58,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     env:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      GITHUB_BRANCH: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
