@@ -876,7 +876,7 @@ def run_config(config: dict):
 # ---------------------------------------------------------------------------
 
 
-def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple[bool, str, str]:
+def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple[bool, str, str]:  # noqa: C901
     """Decode a base64 tarball, extract it, and pip install it.
 
     Returns (success, stdout, stderr).
@@ -896,14 +896,30 @@ def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple
     extract_dir = os.path.join(work_dir, "src")
     os.makedirs(extract_dir, exist_ok=True)
 
-    if tarfile.is_tarfile(archive_path):
-        with tarfile.open(archive_path, "r:*") as tar:
-            tar.extractall(path=extract_dir)
-    elif zipfile.is_zipfile(archive_path):
-        with zipfile.ZipFile(archive_path, "r") as zf:
-            zf.extractall(path=extract_dir)
-    else:
-        return False, "", "Submission archive is not a valid tar.gz or zip file"
+    def _validate_archive_member(name: str, dest_dir: str) -> None:
+        if os.path.isabs(name):
+            raise ValueError(f"Unsafe absolute path in archive: {name!r}")
+        if ".." in Path(name).parts:
+            raise ValueError(f"Unsafe relative path in archive: {name!r}")
+        target = os.path.abspath(os.path.join(dest_dir, name))
+        if os.path.commonpath([os.path.abspath(dest_dir), target]) != os.path.abspath(dest_dir):
+            raise ValueError(f"Archive path escapes destination directory: {name!r}")
+
+    try:
+        if tarfile.is_tarfile(archive_path):
+            with tarfile.open(archive_path, "r:*") as tar:
+                for member in tar.getmembers():
+                    _validate_archive_member(member.name, extract_dir)
+                tar.extractall(path=extract_dir)
+        elif zipfile.is_zipfile(archive_path):
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                for name in zf.namelist():
+                    _validate_archive_member(name, extract_dir)
+                zf.extractall(path=extract_dir)
+        else:
+            return False, "", "Submission archive is not a valid tar.gz or zip file"
+    except ValueError as e:
+        return False, "", f"Submission archive contains unsafe paths: {e}"
 
     # Find the actual package directory (may be nested one level)
     entries = os.listdir(extract_dir)
@@ -940,9 +956,8 @@ def _start_vllm_server(
 
     return subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
 
@@ -977,11 +992,6 @@ def _run_serving_benchmark(
 
     for i, shape in enumerate(shapes):
         cmd = [
-            "python3", "-m", "vllm.entrypoints.openai.run_batch",
-        ]
-
-        # Prefer the benchmark_serving script approach
-        cmd = [
             "python3", "-m", "vllm.benchmarks.benchmark_serving",
             "--backend", "openai-chat",
             "--base-url", f"http://localhost:{port}",
@@ -993,11 +1003,14 @@ def _run_serving_benchmark(
             "--save-result",
         ]
 
+        # Run in a per-shape temp directory so JSON results are isolated
+        shape_dir = tempfile.mkdtemp(prefix=f"bench_shape_{i}_")
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=benchmark_timeout,
+            cwd=shape_dir,
         )
 
         if result.returncode != 0:
@@ -1005,9 +1018,13 @@ def _run_serving_benchmark(
             continue
 
         # Parse the saved JSON result file
-        # vLLM saves to a json file in current directory
         import glob
-        json_files = sorted(glob.glob("*.json"), key=os.path.getmtime, reverse=True)
+
+        json_files = sorted(
+            glob.glob(os.path.join(shape_dir, "*.json")),
+            key=os.path.getmtime,
+            reverse=True,
+        )
         if json_files:
             try:
                 with open(json_files[0]) as f:
@@ -1026,8 +1043,10 @@ def _run_serving_benchmark(
                     "p99_itl_ms",
                 ]:
                     if key in bench_result:
-                        all_metrics[key] = bench_result[key]
-                os.remove(json_files[0])
+                        all_metrics[f"shape_{i}_{key}"] = bench_result[key]
+                        # Also store first shape's metrics at top level for ranking
+                        if i == 0:
+                            all_metrics[key] = bench_result[key]
             except (json.JSONDecodeError, OSError):
                 pass
 
@@ -1065,6 +1084,7 @@ def _check_perplexity(
 
     total_log_prob = 0.0
     total_tokens = 0
+    errors = 0
     url = f"http://localhost:{port}/v1/completions"
 
     for prompt in eval_prompts:
@@ -1092,7 +1112,11 @@ def _check_perplexity(
                         total_log_prob += lp
                         total_tokens += 1
         except Exception:
-            continue
+            errors += 1
+
+    # Require at least half the prompts to succeed
+    if errors > len(eval_prompts) // 2:
+        return False, float("inf")
 
     if total_tokens == 0:
         return False, float("inf")

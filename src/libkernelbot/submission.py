@@ -175,6 +175,11 @@ def _get_popcorn_directives(submission: str) -> dict:  # noqa: C901
 
 def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int) -> float:
     if task.ranking_by == RankCriterion.CUSTOM:
+        if not hasattr(task.config, "ranking_metric"):
+            raise KernelBotError(
+                f"RankCriterion.CUSTOM requires a config with 'ranking_metric', "
+                f"got {type(task.config).__name__}"
+            )
         ranking_metric = task.config.ranking_metric
         leaderboard_result = result.runs["leaderboard"].run.result
         if ranking_metric not in leaderboard_result:
