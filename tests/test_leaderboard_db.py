@@ -604,6 +604,29 @@ def test_generate_stats(database, submit_leaderboard):
             "total_runtime.A100": datetime.timedelta(seconds=35),
         }
 
+        # Same results when filtering by the correct leaderboard
+        assert db.generate_stats(False, leaderboard_name="submit-leaderboard") == {
+            "avg_delay.A100": datetime.timedelta(seconds=10),
+            "max_delay.A100": datetime.timedelta(seconds=20),
+            "num_run.A100": 3,
+            "num_submissions": 1,
+            "num_unique_codes": 1,
+            "num_users": 1,
+            "runs_passed.A100": 3,
+            "runs_scored.A100": 3,
+            "runs_secret.A100": 1,
+            "sub_waiting": 0,
+            "total_runtime.A100": datetime.timedelta(seconds=35),
+        }
+
+        # Empty results when filtering by a non-existent leaderboard
+        assert db.generate_stats(False, leaderboard_name="nonexistent") == {
+            "num_submissions": 0,
+            "sub_waiting": 0,
+            "num_users": 0,
+            "num_unique_codes": 0,
+        }
+
 
 def test_get_user_submissions_empty(database, submit_leaderboard):
     """Test get_user_submissions returns empty list for user with no submissions"""

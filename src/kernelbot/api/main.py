@@ -586,9 +586,10 @@ async def admin_stats(
     _: Annotated[None, Depends(require_admin)],
     db_context=Depends(get_db),
     last_day_only: bool = False,
+    leaderboard_name: Optional[str] = None,
 ) -> dict:
     with db_context as db:
-        stats = db.generate_stats(last_day_only)
+        stats = db.generate_stats(last_day_only, leaderboard_name)
     return {"status": "ok", "stats": stats}
 
 
