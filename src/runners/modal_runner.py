@@ -89,16 +89,24 @@ cuda_image = cuda_image.add_local_python_source(
 # === Model Competition Image ===
 #
 # For e2e model competitions where users submit vLLM forks.
-# Includes all vLLM dependencies but NOT vllm itself (the user's fork replaces it).
-# sccache caches CUDA extension compilation across submissions.
+# Uses CUDA 12.8 base image so the vLLM wheel (compiled for CUDA 12)
+# works natively — no source compilation or compat libraries needed.
+# At runtime we overlay the user's Python changes on top of the
+# installed package (fast path) and only fall back to a full source
+# rebuild when C++/CUDA files are modified.
 #
+# CUDA 12.8 supports both H100 (SM 9.0) and B200 (SM 10.0).
+#
+model_cuda_tag = "12.8.1-devel-ubuntu24.04"
 model_image = (
-    Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.13")
+    Image.from_registry(f"nvidia/cuda:{model_cuda_tag}", add_python="3.13")
     .run_commands("ln -sf $(which python) /usr/local/bin/python3")
     .apt_install("git", "gcc-13", "g++-13")
     .pip_install(
         "torch==2.9.1",
-        index_url="https://download.pytorch.org/whl/cu130",
+        "torchvision",
+        "torchaudio",
+        index_url="https://download.pytorch.org/whl/cu128",
     )
     .pip_install(
         "numpy",
@@ -114,13 +122,10 @@ model_image = (
         "packaging",
         "ninja",
         "wheel",
-        "sccache",
+        "cmake",
     )
-    # Install vLLM to pull in all transitive deps, then uninstall vllm itself.
-    # The user's fork will be pip installed at runtime.
-    .run_commands(
-        "pip install vllm && pip uninstall vllm -y",
-    )
+    # vLLM wheel is compiled for CUDA 12 — matches this image's CUDA 12.8.
+    .pip_install("vllm")
     .env({
         "SCCACHE_DIR": "/sccache",
         "CMAKE_C_COMPILER_LAUNCHER": "sccache",

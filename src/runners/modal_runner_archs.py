@@ -1,5 +1,6 @@
 # This file contains wrapper functions for running
 # Modal apps on specific devices. We will fix this later.
+import modal
 from modal_runner import app, cuda_image, modal_run_config, model_image, model_weights, sccache_vol
 
 gpus = ["T4", "L4", "L4:4", "A100-80GB", "H100!", "B200"]
@@ -20,6 +21,7 @@ for gpu in model_gpus:
         gpu=gpu,
         image=model_image,
         volumes={"/models": model_weights, "/sccache": sccache_vol},
+        secrets=[modal.Secret.from_name("huggingface-secret")],
         name=f"run_model_benchmark_{gpu_slug}",
         serialized=True,
         timeout=3600,

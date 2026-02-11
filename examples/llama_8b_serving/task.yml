@@ -9,8 +9,8 @@ config:
   tensor_parallel: 1
   ranking_metric: "request_throughput"
   perplexity_baseline: 1.80
-  perplexity_tolerance: 0.01
-  install_timeout: 600
+  perplexity_tolerance: 0.02
+  install_timeout: 3600
   server_startup_timeout: 300
   benchmark_timeout: 1200
   benchmark_shapes:

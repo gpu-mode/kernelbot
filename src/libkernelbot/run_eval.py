@@ -3,10 +3,12 @@ import copy
 import dataclasses
 import datetime
 import functools
+import glob
 import json
 import os
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -876,10 +878,10 @@ def run_config(config: dict):
 # ---------------------------------------------------------------------------
 
 
-def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple[bool, str, str]:  # noqa: C901
-    """Decode a base64 tarball, extract it, and pip install it.
+def _extract_submission_archive(archive_b64: str) -> tuple[bool, str, str]:  # noqa: C901
+    """Decode and extract a base64-encoded submission archive.
 
-    Returns (success, stdout, stderr).
+    Returns (success, pkg_dir, error_msg).
     """
     archive_bytes = base64.b64decode(archive_b64)
 
@@ -928,12 +930,113 @@ def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple
     else:
         pkg_dir = extract_dir
 
-    # pip install (prefer uv if available for speed)
-    import shutil
+    return True, pkg_dir, ""
 
-    pip_cmd = ["uv", "pip", "install", "-e", pkg_dir] if shutil.which("uv") else ["pip", "install", "-e", pkg_dir]
+
+def _has_native_changes(pkg_dir: str) -> bool:
+    """Check if the submission contains C++/CUDA source files."""
+    csrc_dir = os.path.join(pkg_dir, "csrc")
+    if not os.path.isdir(csrc_dir):
+        return False
+    for _root, _dirs, files in os.walk(csrc_dir):
+        for f in files:
+            if f.endswith((".cpp", ".cu", ".cuh", ".c", ".h", ".hpp")):
+                return True
+    return False
+
+
+def _overlay_python_files(src_dir: str, dst_dir: str) -> tuple[int, dict[str, str]]:
+    """Copy .py files from src_dir to dst_dir, preserving directory structure.
+
+    Backs up any existing files before overwriting so they can be restored
+    if the overlay breaks the package.
+
+    Returns (number_of_files_copied, backups_dict) where backups_dict maps
+    destination paths to backup paths.
+    """
+    copied = 0
+    backups: dict[str, str] = {}
+    for root, _dirs, files in os.walk(src_dir):
+        for f in files:
+            if f.endswith(".py"):
+                src = os.path.join(root, f)
+                rel = os.path.relpath(src, src_dir)
+                dst = os.path.join(dst_dir, rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                # Back up existing file before overwriting
+                if os.path.exists(dst):
+                    backup = dst + ".popcorn_backup"
+                    shutil.copy2(dst, backup)
+                    backups[dst] = backup
+                shutil.copy2(src, dst)
+                copied += 1
+    return copied, backups
+
+
+def _restore_overlay_backups(backups: dict[str, str]) -> None:
+    """Restore backed-up files after a failed overlay."""
+    for dst, backup in backups.items():
+        try:
+            shutil.copy2(backup, dst)
+            os.unlink(backup)
+        except OSError:
+            pass
+
+
+def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple[bool, str, str]:  # noqa: C901
+    """Install a model competition submission.
+
+    Fast path (vLLM pre-installed in image): overlays user's Python files
+    on top of the installed vLLM package.  No compilation needed.
+
+    Slow path (vLLM not pre-installed, or C++/CUDA changes): full pip
+    install from source.
+
+    Returns (success, stdout, stderr).
+    """
+    ok, pkg_dir, err = _extract_submission_archive(archive_b64)
+    if not ok:
+        return False, "", err
+
+    user_vllm_dir = os.path.join(pkg_dir, "vllm")
+
+    # --- Fast path: overlay onto pre-installed vLLM ---
+    if os.path.isdir(user_vllm_dir) and not _has_native_changes(pkg_dir):
+        try:
+            import vllm as _vllm
+
+            installed_vllm = os.path.dirname(_vllm.__file__)
+        except ImportError:
+            installed_vllm = None
+
+        if installed_vllm and os.path.isdir(installed_vllm):
+            n, backups = _overlay_python_files(user_vllm_dir, installed_vllm)
+            # Verify vLLM still imports after overlay (catches broken __init__.py etc.)
+            import importlib
+            import sys
+
+            # Force reimport to pick up overlaid files
+            mods_to_remove = [k for k in sys.modules if k == "vllm" or k.startswith("vllm.")]
+            for mod in mods_to_remove:
+                del sys.modules[mod]
+            try:
+                importlib.import_module("vllm")
+            except Exception:
+                # Overlay broke vLLM — restore backups
+                _restore_overlay_backups(backups)
+                # Re-clear module cache so restored files take effect
+                mods_to_remove = [k for k in sys.modules if k == "vllm" or k.startswith("vllm.")]
+                for mod in mods_to_remove:
+                    del sys.modules[mod]
+                return False, "", "Overlay broke vLLM import — restored original files"
+            return True, f"Fast overlay: copied {n} Python files onto base vLLM", ""
+
+    # --- Slow path: full source install ---
+    if shutil.which("uv"):
+        pip_cmd = ["uv", "pip", "install", "--system", "-e", pkg_dir]
+    else:
+        pip_cmd = ["pip", "install", "-e", pkg_dir]
     env = os.environ.copy()
-    # Allow building from tarballs without .git metadata
     env.setdefault("SETUPTOOLS_SCM_PRETEND_VERSION", "0.0.1.dev0")
     result = subprocess.run(
         pip_cmd,
@@ -946,6 +1049,12 @@ def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple
     return result.returncode == 0, _limit_length(result.stdout), _limit_length(result.stderr)
 
 
+def _resolve_model_ref(model_name: str) -> str:
+    """Return a local path if pre-downloaded weights exist, else the HF name."""
+    model_local = os.path.join("/models", model_name)
+    return model_local if os.path.isdir(model_local) else model_name
+
+
 def _start_vllm_server(
     model_name: str,
     tensor_parallel: int,
@@ -953,16 +1062,27 @@ def _start_vllm_server(
     vllm_args: list[str],
 ) -> subprocess.Popen:
     """Start a vLLM OpenAI-compatible server as a subprocess."""
+    # Kill any leftover vLLM processes and free GPU memory (container reuse).
+    # vLLM spawns child processes (EngineCore_DP0, etc.) that may survive
+    # parent termination, keeping GPU memory allocated.
+    subprocess.run(["pkill", "-9", "-f", "vllm"], capture_output=True)
+    time.sleep(1)
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+    model_ref = _resolve_model_ref(model_name)
+
     cmd = [
         "python3", "-m", "vllm.entrypoints.openai.api_server",
-        "--model", model_name,
+        "--model", model_ref,
         "--tensor-parallel-size", str(tensor_parallel),
         "--port", str(port),
     ]
-
-    # Only use /models if it exists (Modal volume), otherwise let vLLM use HF cache default
-    if os.path.isdir("/models"):
-        cmd += ["--download-dir", "/models"]
 
     cmd += vllm_args
 
@@ -974,10 +1094,11 @@ def _start_vllm_server(
         cmd,
         stdout=log_file,
         stderr=log_file,
+        preexec_fn=os.setsid,  # New process group so we can kill all children
     )
 
 
-def _wait_for_server(port: int, timeout: int) -> bool:
+def _wait_for_server(port: int, timeout: int, proc: subprocess.Popen | None = None) -> bool:
     """Poll the vLLM health endpoint until ready or timeout."""
     import urllib.error
     import urllib.request
@@ -986,6 +1107,10 @@ def _wait_for_server(port: int, timeout: int) -> bool:
     url = f"http://localhost:{port}/health"
 
     while time.time() < deadline:
+        # If the server process died, stop waiting immediately
+        if proc is not None and proc.poll() is not None:
+            print(f"[model_benchmark] Server process exited with rc={proc.returncode}")
+            return False
         try:
             with urllib.request.urlopen(url, timeout=5) as resp:
                 if resp.status == 200:
@@ -1003,16 +1128,20 @@ def _run_serving_benchmark(
     shapes: list[dict],
     benchmark_timeout: int,
 ) -> dict:
-    """Run vLLM benchmark_serving.py and parse the output metrics."""
+    """Run vLLM benchmark_serving and parse the output metrics."""
     all_metrics = {}
 
+    # vLLM v0.15+ moved benchmarks to `vllm bench serve` CLI.
+    # Use the CLI main module directly since `python3 -m vllm` has no __main__.py.
+    bench_cmd = ["python3", "-m", "vllm.entrypoints.cli.main", "bench", "serve"]
+
     for i, shape in enumerate(shapes):
-        cmd = [
-            "python3", "-m", "vllm.benchmarks.benchmark_serving",
-            "--backend", "openai-chat",
+        cmd = bench_cmd + [
+            "--backend", "openai",
             "--base-url", f"http://localhost:{port}",
             "--model", model_name,
-            "--endpoint", "/v1/chat/completions",
+            "--endpoint", "/v1/completions",
+            "--dataset-name", "random",
             "--num-prompts", str(shape.get("num_prompts", 100)),
             "--random-input-len", str(shape.get("input_len", 512)),
             "--random-output-len", str(shape.get("output_len", 128)),
@@ -1030,12 +1159,14 @@ def _run_serving_benchmark(
         )
 
         if result.returncode != 0:
-            all_metrics[f"shape_{i}_error"] = _limit_length(result.stderr)
+            err_output = _limit_length(result.stderr) or _limit_length(result.stdout)
+            all_metrics[f"shape_{i}_error"] = err_output
+            print(f"[benchmark] shape {i} failed (rc={result.returncode})")
+            print(f"[benchmark]   stdout: {result.stdout[:1000]}")
+            print(f"[benchmark]   stderr: {result.stderr[:1000]}")
             continue
 
         # Parse the saved JSON result file
-        import glob
-
         json_files = sorted(
             glob.glob(os.path.join(shape_dir, "*.json")),
             key=os.path.getmtime,
@@ -1158,12 +1289,46 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
     port = 8321
     server_proc = None
     start = datetime.datetime.now()
+    # Resolve model reference once — used consistently for server, perplexity, and benchmark.
+    model_ref = _resolve_model_ref(model_config["model_name"])
+
+    # --- Diagnostics ---
+    print(f"[model_benchmark] model_ref={model_ref}")
+    print(f"[model_benchmark] mode={mode}")
+    model_dir = os.path.join("/models", model_config["model_name"])
+    print(f"[model_benchmark] Model dir {model_dir}: exists={os.path.isdir(model_dir)}")
+    if os.path.isdir(model_dir):
+        try:
+            entries = os.listdir(model_dir)
+            print(f"[model_benchmark]   {len(entries)} entries: {entries[:10]}")
+        except OSError as e:
+            print(f"[model_benchmark]   listdir error: {e}")
+    try:
+        import torch
+        print(f"[model_benchmark] torch={torch.__version__}, cuda={torch.version.cuda}, "
+              f"available={torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"[model_benchmark] GPU: {torch.cuda.get_device_name()}")
+    except Exception as e:
+        print(f"[model_benchmark] torch check failed: {e}")
+    try:
+        import vllm as _vllm
+        print(f"[model_benchmark] vllm={_vllm.__version__} at {_vllm.__file__}")
+    except Exception as e:
+        print(f"[model_benchmark] vllm import failed: {e}")
 
     try:
         # Phase 1: Install
+        t0 = time.time()
+        print("[model_benchmark] Phase 1: Installing submission...")
         install_ok, install_stdout, install_stderr = _install_submission_archive(
             archive_b64, model_config.get("install_timeout", 600)
         )
+        print(f"[model_benchmark] Phase 1 done in {time.time()-t0:.1f}s: ok={install_ok}")
+        if install_stdout:
+            print(f"[model_benchmark]   stdout: {install_stdout[:500]}")
+        if install_stderr:
+            print(f"[model_benchmark]   stderr: {install_stderr[:500]}")
         if not install_ok:
             end = datetime.datetime.now()
             run = RunResult(
@@ -1177,6 +1342,8 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
             return FullResult(success=True, error="", runs=results, system=system)
 
         # Phase 2: Start server
+        t1 = time.time()
+        print("[model_benchmark] Phase 2: Starting vLLM server...")
         server_proc = _start_vllm_server(
             model_name=model_config["model_name"],
             tensor_parallel=model_config.get("tensor_parallel", 1),
@@ -1184,22 +1351,26 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
             vllm_args=model_config.get("vllm_args", []),
         )
 
-        server_ready = _wait_for_server(port, model_config.get("server_startup_timeout", 300))
+        server_ready = _wait_for_server(
+            port, model_config.get("server_startup_timeout", 300), proc=server_proc
+        )
+        print(f"[model_benchmark] Phase 2 done in {time.time()-t1:.1f}s: ready={server_ready}")
         if not server_ready:
             end = datetime.datetime.now()
             stderr = ""
             try:
-                server_proc.kill()
+                os.killpg(os.getpgid(server_proc.pid), signal.SIGKILL)
                 server_proc.wait(timeout=10)
             except Exception:
                 pass
-            # Read server log for debugging
             log_path = os.path.join(tempfile.gettempdir(), "vllm_server.log")
             try:
                 with open(log_path) as f:
                     stderr = f.read()
             except OSError:
                 pass
+            print(f"[model_benchmark] Server log ({len(stderr)} chars):")
+            print(stderr[-2000:] if len(stderr) > 2000 else stderr)
             run = RunResult(
                 success=False, passed=False,
                 command="vllm server startup",
@@ -1213,14 +1384,18 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
         results = {}
 
         # Phase 3: Perplexity check (acts as the "test" phase)
+        t2 = time.time()
+        print("[model_benchmark] Phase 3: Perplexity check...")
         ppl_passed, measured_ppl = _check_perplexity(
-            model_name=model_config["model_name"],
+            model_name=model_ref,
             port=port,
             baseline=model_config["perplexity_baseline"],
             tolerance=model_config["perplexity_tolerance"],
         )
 
         test_end = datetime.datetime.now()
+        print(f"[model_benchmark] Phase 3 done in {time.time()-t2:.1f}s: "
+              f"passed={ppl_passed}, ppl={measured_ppl:.4f}")
         test_run = RunResult(
             success=True, passed=ppl_passed,
             command="perplexity check",
@@ -1245,13 +1420,17 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
 
         # Phase 4: Benchmark
         bench_start = datetime.datetime.now()
+        t3 = time.time()
+        print("[model_benchmark] Phase 4: Benchmark...")
         metrics = _run_serving_benchmark(
-            model_name=model_config["model_name"],
+            model_name=model_ref,
             port=port,
             shapes=model_config.get("benchmark_shapes", []),
             benchmark_timeout=model_config.get("benchmark_timeout", 1200),
         )
         bench_end = datetime.datetime.now()
+        print(f"[model_benchmark] Phase 4 done in {time.time()-t3:.1f}s")
+        print(f"[model_benchmark]   metrics keys: {list(metrics.keys())}")
 
         has_ranking_metric = model_config.get("ranking_metric", "") in metrics
         bench_run = RunResult(
@@ -1309,7 +1488,14 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
     finally:
         if server_proc is not None:
             try:
-                server_proc.kill()
+                # Kill the entire process group (server + child workers like EngineCore)
+                os.killpg(os.getpgid(server_proc.pid), signal.SIGKILL)
                 server_proc.wait(timeout=10)
-            except Exception:
+            except (ProcessLookupError, OSError):
                 pass
+            except Exception:
+                try:
+                    server_proc.kill()
+                    server_proc.wait(timeout=10)
+                except Exception:
+                    pass
