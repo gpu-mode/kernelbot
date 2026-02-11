@@ -8,7 +8,7 @@ config:
   model_name: "meta-llama/Llama-3.1-8B"
   tensor_parallel: 1
   ranking_metric: "request_throughput"
-  perplexity_baseline: 6.14
+  perplexity_baseline: 1.80
   perplexity_tolerance: 0.01
   install_timeout: 600
   server_startup_timeout: 300
