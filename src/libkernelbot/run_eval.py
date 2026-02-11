@@ -928,9 +928,12 @@ def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple
     else:
         pkg_dir = extract_dir
 
-    # pip install
+    # pip install (prefer uv if available for speed)
+    import shutil
+
+    pip_cmd = ["uv", "pip", "install", "-e", pkg_dir] if shutil.which("uv") else ["pip", "install", "-e", pkg_dir]
     result = subprocess.run(
-        ["pip", "install", "-e", pkg_dir],
+        pip_cmd,
         capture_output=True,
         text=True,
         timeout=install_timeout,

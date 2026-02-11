@@ -36,12 +36,17 @@ jobs:
         # Now write to file (won't be logged since it's masked)
         echo "$PAYLOAD" > payload.json
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
     - name: Setup Virtual Environment and Install Dependencies
       shell: bash
       run: |
-        pip install --upgrade pip
-        pip install -r "requirements-dev.txt"
-        pip install -e .
+        uv venv .venv
+        echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
+        echo "$PWD/.venv/bin" >> $GITHUB_PATH
+        uv pip install -r "requirements-dev.txt"
+        uv pip install -e .
 
     - name: Run model benchmark
       shell: bash
