@@ -20,6 +20,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
     - uses: actions/checkout@v3
 
