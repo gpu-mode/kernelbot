@@ -115,7 +115,23 @@ class TestAdminStats:
             headers={"Authorization": "Bearer test_token"}
         )
         assert response.status_code == 200
-        mock_backend.db.generate_stats.assert_called_once_with(True)
+        mock_backend.db.generate_stats.assert_called_once_with(True, None)
+
+    def test_admin_stats_with_leaderboard_name(self, test_client, mock_backend):
+        """GET /admin/stats with leaderboard_name parameter."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.generate_stats = MagicMock(return_value={
+            "num_submissions": 5,
+            "num_users": 3,
+        })
+
+        response = test_client.get(
+            "/admin/stats?leaderboard_name=my-leaderboard",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 200
+        mock_backend.db.generate_stats.assert_called_once_with(False, "my-leaderboard")
 
 
 class TestAdminSubmissions:
