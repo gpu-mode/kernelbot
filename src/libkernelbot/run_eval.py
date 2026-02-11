@@ -958,13 +958,22 @@ def _start_vllm_server(
         "--model", model_name,
         "--tensor-parallel-size", str(tensor_parallel),
         "--port", str(port),
-        "--download-dir", "/models",
-    ] + vllm_args
+    ]
+
+    # Only use /models if it exists (Modal volume), otherwise let vLLM use HF cache default
+    if os.path.isdir("/models"):
+        cmd += ["--download-dir", "/models"]
+
+    cmd += vllm_args
+
+    # Capture stderr to a log file for debugging server startup failures
+    log_path = os.path.join(tempfile.gettempdir(), "vllm_server.log")
+    log_file = open(log_path, "w")  # noqa: SIM115
 
     return subprocess.Popen(
         cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=log_file,
     )
 
 
@@ -1181,8 +1190,15 @@ def run_model_benchmark(config: dict) -> FullResult:  # noqa: C901
             stderr = ""
             try:
                 server_proc.kill()
-                _, stderr = server_proc.communicate(timeout=10)
+                server_proc.wait(timeout=10)
             except Exception:
+                pass
+            # Read server log for debugging
+            log_path = os.path.join(tempfile.gettempdir(), "vllm_server.log")
+            try:
+                with open(log_path) as f:
+                    stderr = f.read()
+            except OSError:
                 pass
             run = RunResult(
                 success=False, passed=False,
