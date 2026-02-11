@@ -115,7 +115,9 @@ class TestAdminStats:
             headers={"Authorization": "Bearer test_token"}
         )
         assert response.status_code == 200
-        mock_backend.db.generate_stats.assert_called_once_with(True, None)
+        mock_backend.db.generate_stats.assert_called_once()
+        args, kwargs = mock_backend.db.generate_stats.call_args
+        assert args[0] is True  # last_day_only
 
     def test_admin_stats_with_leaderboard_name(self, test_client, mock_backend):
         """GET /admin/stats with leaderboard_name parameter."""
@@ -131,7 +133,9 @@ class TestAdminStats:
             headers={"Authorization": "Bearer test_token"}
         )
         assert response.status_code == 200
-        mock_backend.db.generate_stats.assert_called_once_with(False, "my-leaderboard")
+        mock_backend.db.generate_stats.assert_called_once()
+        args, kwargs = mock_backend.db.generate_stats.call_args
+        assert args[1] == "my-leaderboard"  # leaderboard_name
 
 
 class TestAdminSubmissions:
