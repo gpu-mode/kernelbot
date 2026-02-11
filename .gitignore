@@ -10,4 +10,5 @@ package-lock.json
 reference-kernels/
 yoyo.ini
 .venv
-.claude/
+.claude/*
+!.claude/skills/
