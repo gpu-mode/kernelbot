@@ -20,6 +20,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
+      # Persistent venv with torch + vLLM deps (survives across runs).
+      # Bootstrap once, then reuse. The user's vLLM fork is installed fresh each run.
+      MODEL_VENV: /opt/model-venv
     steps:
     - uses: actions/checkout@v3
 
@@ -39,17 +42,40 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v4
 
-    - name: Setup Virtual Environment and Install Dependencies
+    - name: Setup persistent model venv
       shell: bash
       run: |
-        uv venv .venv
-        echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
-        echo "$PWD/.venv/bin" >> $GITHUB_PATH
+        # Create persistent venv if it doesn't exist, with torch + vLLM deps pre-installed.
+        # Mirrors the Modal model_image: install vllm to get all deps, then uninstall vllm.
+        if [ ! -f "$MODEL_VENV/bin/activate" ]; then
+          echo "Bootstrapping persistent model venv..."
+          uv venv "$MODEL_VENV" --python 3.10
+          export VIRTUAL_ENV="$MODEL_VENV"
+          export PATH="$MODEL_VENV/bin:$PATH"
+          uv pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu130
+          uv pip install numpy transformers tokenizers huggingface_hub ray \
+            uvicorn fastapi pydantic aiohttp requests packaging ninja wheel sccache
+          uv pip install vllm && uv pip uninstall vllm
+          echo "Persistent model venv bootstrapped."
+        else
+          echo "Reusing existing persistent model venv."
+        fi
+
+        # Activate for subsequent steps
+        echo "VIRTUAL_ENV=$MODEL_VENV" >> $GITHUB_ENV
+        echo "$MODEL_VENV/bin" >> $GITHUB_PATH
+
+    - name: Install kernelbot
+      shell: bash
+      run: |
         uv pip install -r "requirements-dev.txt"
         uv pip install -e .
 
     - name: Run model benchmark
       shell: bash
+      env:
+        SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.1.dev0"
+        SCCACHE_DIR: /opt/sccache
       run: |
         python3 src/runners/github-runner.py
 
