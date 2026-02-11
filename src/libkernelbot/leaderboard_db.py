@@ -720,20 +720,25 @@ class LeaderboardDB:
             logger.exception("error generating stats", exc_info=e)
             raise
 
-    def _generate_runner_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
+    @staticmethod
+    def _stats_filter(last_day: bool, leaderboard_name: Optional[str], submission_alias: str = "s"):
         joins = ""
         conditions = []
         params = []
 
         if leaderboard_name:
-            joins = "JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id"
+            joins = f"JOIN leaderboard.leaderboard lb ON {submission_alias}.leaderboard_id = lb.id"
             conditions.append("lb.name = %s")
             params.append(leaderboard_name)
 
         if last_day:
-            conditions.append("NOW() - s.submission_time <= interval '24 hours'")
+            conditions.append(f"NOW() - {submission_alias}.submission_time <= interval '24 hours'")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        return joins, where_clause, params
+
+    def _generate_runner_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
+        joins, where_clause, params = self._stats_filter(last_day, leaderboard_name)
 
         # per-runner stats
         self.cursor.execute(
@@ -768,27 +773,15 @@ class LeaderboardDB:
         return result
 
     def _generate_submission_stats(self, last_day: bool = False, leaderboard_name: Optional[str] = None):
-        joins = ""
-        conditions = []
-        params = []
-
-        if leaderboard_name:
-            joins = "JOIN leaderboard.leaderboard lb ON leaderboard.submission.leaderboard_id = lb.id"
-            conditions.append("lb.name = %s")
-            params.append(leaderboard_name)
-
-        if last_day:
-            conditions.append("NOW() - submission_time <= interval '24 hours'")
-
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        joins, where_clause, params = self._stats_filter(last_day, leaderboard_name)
 
         self.cursor.execute(
             f"""
             SELECT
                 COUNT(*),
-                COUNT(*) FILTER (WHERE NOT done),
-                COUNT(DISTINCT user_id)
-            FROM leaderboard.submission
+                COUNT(*) FILTER (WHERE NOT s.done),
+                COUNT(DISTINCT s.user_id)
+            FROM leaderboard.submission s
             {joins}
             {where_clause}
             ;
@@ -828,16 +821,7 @@ class LeaderboardDB:
 
         else:
             # calculate heavy hitters
-            joins = ""
-            conditions = ["NOW() - s.submission_time <= interval '24 hours'"]
-            params = []
-
-            if leaderboard_name:
-                joins = "JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id"
-                conditions.append("lb.name = %s")
-                params.append(leaderboard_name)
-
-            where_clause = f"WHERE {' AND '.join(conditions)}"
+            joins, where_clause, params = self._stats_filter(last_day, leaderboard_name)
 
             self.cursor.execute(
                 f"""
