@@ -932,11 +932,15 @@ def _install_submission_archive(archive_b64: str, install_timeout: int) -> tuple
     import shutil
 
     pip_cmd = ["uv", "pip", "install", "-e", pkg_dir] if shutil.which("uv") else ["pip", "install", "-e", pkg_dir]
+    env = os.environ.copy()
+    # Allow building from tarballs without .git metadata
+    env.setdefault("SETUPTOOLS_SCM_PRETEND_VERSION", "0.0.1.dev0")
     result = subprocess.run(
         pip_cmd,
         capture_output=True,
         text=True,
         timeout=install_timeout,
+        env=env,
     )
 
     return result.returncode == 0, _limit_length(result.stdout), _limit_length(result.stderr)
