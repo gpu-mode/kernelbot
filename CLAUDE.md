@@ -179,7 +179,7 @@ Reuse existing patterns:
 
 ## Local Development
 
-See `SKILLS/test_bot.md` for local testing setup instructions.
+See `.claude/skills/test_bot.md` for local testing setup instructions.
 
 ## Architecture
 
