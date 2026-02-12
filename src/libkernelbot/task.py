@@ -180,6 +180,8 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
         del raw["templates"]
     description = raw["description"]
     del raw["description"]
+    # Extract gpus before from_dict (not a LeaderboardTask field)
+    gpus = raw.pop("gpus", [])
     task = LeaderboardTask.from_dict(raw)
 
     # basic validation:
@@ -190,9 +192,6 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
         for benchmark in task.benchmarks:
             if "world_size" not in benchmark:
                 raise KernelBotError(f"multi-gpu benchmark {benchmark} does not specify world_size")
-
-    # Read gpus if specified in task.yml
-    gpus = raw.get("gpus", [])
 
     return LeaderboardDefinition(task=task, templates=templates, description=description, gpus=gpus)
 
