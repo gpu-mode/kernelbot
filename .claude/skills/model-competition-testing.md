@@ -98,7 +98,7 @@ print('Created /tmp/test_submission.tar.gz')
 
 **Important:** Use `vllm-fork/vllm/` structure, not bare `vllm/`. A bare `vllm/` directory would overlay vLLM's own package files and break imports.
 
-### 5. Submit
+### 5. Submit via curl (async endpoint)
 
 ```bash
 curl -X POST "http://localhost:8000/submission/llama_8b_serving-dev/H100/leaderboard" \
@@ -109,7 +109,28 @@ curl -X POST "http://localhost:8000/submission/llama_8b_serving-dev/H100/leaderb
 
 Modes: `test` (perplexity only), `benchmark` (perplexity + benchmark), `leaderboard` (full scoring).
 
-### 6. Poll for Completion
+### 5b. Submit via popcorn-cli (streaming endpoint)
+
+```bash
+# Backup your config and set test CLI ID
+cp ~/.popcorn.yaml ~/.popcorn.yaml.bak
+echo "cli_id: test-cli-id-123" > ~/.popcorn.yaml
+
+# Build popcorn-cli (from popcorn-cli/ dir)
+cargo build --release
+
+# Submit (--no-tui for non-interactive terminals)
+POPCORN_API_URL=http://127.0.0.1:8000 \
+  ./target/release/popcorn-cli submit /tmp/test_submission.tar.gz \
+  --gpu H100 --leaderboard llama_8b_serving-dev --mode leaderboard --no-tui
+
+# Restore your config
+cp ~/.popcorn.yaml.bak ~/.popcorn.yaml && rm ~/.popcorn.yaml.bak
+```
+
+The CLI uses the streaming SSE endpoint (`POST /{leaderboard}/{gpu}/{mode}`) and prints status updates every 15s followed by the full result.
+
+### 6. Poll for Completion (curl only — CLI streams automatically)
 
 The Modal job runs 4 phases (~3-10 min on H100):
 1. Install submission archive
