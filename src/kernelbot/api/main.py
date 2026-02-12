@@ -92,6 +92,11 @@ async def kernel_bot_error_handler(req: Request, exc: KernelBotError):
     return JSONResponse(status_code=exc.http_code, content={"message": str(exc)})
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 def get_db():
     """Database context manager with guaranteed error handling"""
     if not backend_instance:
