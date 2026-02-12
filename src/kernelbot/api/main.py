@@ -7,7 +7,7 @@ import time
 from dataclasses import asdict
 from typing import Annotated, Any, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from kernelbot.env import env
@@ -90,6 +90,11 @@ def init_background_submission_manager(_manager: BackgroundSubmissionManager):
 @app.exception_handler(KernelBotError)
 async def kernel_bot_error_handler(req: Request, exc: KernelBotError):
     return JSONResponse(status_code=exc.http_code, content={"message": str(exc)})
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 def get_db():
@@ -586,9 +591,10 @@ async def admin_stats(
     _: Annotated[None, Depends(require_admin)],
     db_context=Depends(get_db),
     last_day_only: bool = False,
+    leaderboard_name: Optional[str] = Query(None, description="Filter stats to a specific leaderboard name"),
 ) -> dict:
     with db_context as db:
-        stats = db.generate_stats(last_day_only)
+        stats = db.generate_stats(last_day_only, leaderboard_name)
     return {"status": "ok", "stats": stats}
 
 
