@@ -8,6 +8,13 @@ How to test the model competition (vLLM fork benchmarking) end-to-end: API submi
 - Modal profile set to the workspace where `discord-bot-runner` is deployed
 - Modal app deployed with model benchmark functions
 
+## Runners
+
+There are two paths for running model benchmarks:
+
+1. **Modal (H100)**: Uses `ModalLauncher` — dispatches to Modal functions. Image has CUDA 12.8, vLLM pre-installed from pip wheel, model weights on a persistent volume.
+2. **GitHub Actions (B200)**: Uses `GitHubLauncher` — dispatches `nvidia_model_workflow.yml` to the self-hosted B200 runner (`l-bgx-01`). vLLM is installed from source once; the fast overlay path works for subsequent Python-only submissions. Model weights pre-downloaded at `/models/meta-llama/Llama-3.1-8B`.
+
 ## Modal Setup
 
 ### Check Active Profile
@@ -213,3 +220,54 @@ The `compute_score()` function in `submission.py` extracts `request_throughput` 
 - **`UnicodeDecodeError` on admin submission view**: Binary tar.gz archive can't be UTF-8 decoded. Fixed with `errors="replace"` in `leaderboard_db.py`.
 - **Overlay breaks vLLM imports**: Test archive has bare `vllm/` dir that overwrites vLLM's package. Use `vllm-fork/vllm/` structure.
 - **Benchmark 400 errors**: Using `openai-chat` backend with base model. Must use `--backend openai --endpoint /v1/completions`.
+
+## GitHub Actions B200 Testing
+
+### B200 Machine Setup (one-time)
+
+The self-hosted runner `l-bgx-01` (`ubuntu@154.57.34.106`) needs a persistent environment with vLLM and model weights pre-installed. See `remote-gpu-testing.md` for SSH details.
+
+```bash
+SSH="ssh -i /Users/marksaroufim/Dev/kernelbot/.ssh_key_tmp -o IdentitiesOnly=yes"
+
+# Set up environment (GPUs 0-3 may be occupied)
+$SSH ubuntu@154.57.34.106 "
+  export CUDA_VISIBLE_DEVICES=4,5,6,7
+  cd /home/ubuntu/kernelbot
+  uv venv .venv --python 3.10 && source .venv/bin/activate
+  uv pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+  uv pip install vllm  # pip wheel needs cu128 for libcudart.so.12
+  uv pip install -r requirements-dev.txt && uv pip install -e .
+"
+
+# Pre-download model weights (one-time)
+$SSH ubuntu@154.57.34.106 "
+  sudo mkdir -p /models/meta-llama
+  HF_TOKEN=<token> python3 -c '
+from huggingface_hub import snapshot_download
+snapshot_download(\"meta-llama/Llama-3.1-8B\", local_dir=\"/models/meta-llama/Llama-3.1-8B\")
+'
+"
+```
+
+### Manual Benchmark Test on B200
+
+To test the benchmark runner directly on the B200 (bypassing GH Actions):
+
+1. Rsync code: `rsync -avz --exclude .git -e "$SSH" ./ ubuntu@154.57.34.106:/home/ubuntu/kernelbot/`
+2. Create test payload on the machine (see step 4 in the Modal section for archive format)
+3. Run: `CUDA_VISIBLE_DEVICES=4,5,6,7 SETUPTOOLS_SCM_PRETEND_VERSION=0.0.1.dev0 HF_TOKEN=<token> python3 src/runners/github-runner.py`
+
+Expected phases:
+- Phase 1 (Install): Fast overlay (~instant if vLLM pre-installed, Python-only submission)
+- Phase 2 (Server start): ~30s with local weights
+- Phase 3 (Perplexity): ~30s
+- Phase 4 (Benchmark): ~2-3 min (1000 prompts)
+
+### GH Actions Workflow
+
+The workflow (`.github/workflows/nvidia_model_workflow.yml`) runs on label `nvidia-docker-b200-8-x86-64`. Key design:
+- Torch cu128 (vLLM pip wheel needs libcudart.so.12)
+- vLLM stays installed (not uninstalled) — enables fast overlay for Python-only submissions
+- `CUDA_VISIBLE_DEVICES=4,5,6,7` to avoid occupied GPUs
+- Model weights at `/models/meta-llama/Llama-3.1-8B` (persistent on runner)

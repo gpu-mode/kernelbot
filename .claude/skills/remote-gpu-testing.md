@@ -4,9 +4,12 @@ Local machine is macOS with no GPUs. To test GitHub Action workflows and GPU cod
 
 ## Machines
 
-<!-- Add machines here, e.g.: -->
-<!-- - **gpu-box**: `ssh user@10.0.0.1` -->
-<!-- - **train-server**: `ssh -i ~/.ssh/key user@hostname.com` -->
+- **l-bgx-01 (B200 x8)**: `ssh -i /Users/marksaroufim/Dev/kernelbot/.ssh_key_tmp -o IdentitiesOnly=yes ubuntu@154.57.34.106`
+  - 8x NVIDIA B200 (183GB each), sm_100, CUDA 13.0, Driver 580.95.05
+  - GPUs 0-3 may be occupied — use `CUDA_VISIBLE_DEVICES=4,5,6,7`
+  - GH Actions runner label: `nvidia-docker-b200-8-x86-64`
+  - Persistent vLLM + model weights at `/models/meta-llama/Llama-3.1-8B`
+  - Working dir: `/home/ubuntu/kernelbot`
 
 ## How to run remote commands
 

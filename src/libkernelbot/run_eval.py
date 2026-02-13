@@ -11,6 +11,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -1078,7 +1079,7 @@ def _start_vllm_server(
     model_ref = _resolve_model_ref(model_name)
 
     cmd = [
-        "python3", "-m", "vllm.entrypoints.openai.api_server",
+        sys.executable, "-m", "vllm.entrypoints.openai.api_server",
         "--model", model_ref,
         "--tensor-parallel-size", str(tensor_parallel),
         "--port", str(port),
@@ -1133,7 +1134,7 @@ def _run_serving_benchmark(
 
     # vLLM v0.15+ moved benchmarks to `vllm bench serve` CLI.
     # Use the CLI main module directly since `python3 -m vllm` has no __main__.py.
-    bench_cmd = ["python3", "-m", "vllm.entrypoints.cli.main", "bench", "serve"]
+    bench_cmd = [sys.executable, "-m", "vllm.entrypoints.cli.main", "bench", "serve"]
 
     for i, shape in enumerate(shapes):
         cmd = bench_cmd + [
