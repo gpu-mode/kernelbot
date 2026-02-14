@@ -272,11 +272,13 @@ class LeaderboardDB:
         leaderboard: str,
         file_name: str,
         user_id: int,
-        code: str,
+        code: str | bytes,
         time: datetime.datetime,
         user_name: str = None,
     ) -> Optional[int]:
         try:
+            code_bytes = code.encode("utf-8") if isinstance(code, str) else code
+
             # check if we already have the code
             self.cursor.execute(
                 """
@@ -284,12 +286,12 @@ class LeaderboardDB:
                 FROM leaderboard.code_files
                 WHERE hash = encode(sha256(%s), 'hex')
                 """,
-                (code.encode("utf-8"),),
+                (code_bytes,),
             )
 
             code_id = None
             for candidate in self.cursor.fetchall():
-                if bytes(candidate[1]).decode("utf-8") == code:
+                if bytes(candidate[1]) == code_bytes:
                     code_id = candidate[0]
                     break
 
@@ -301,7 +303,7 @@ class LeaderboardDB:
                     VALUES (%s)
                     RETURNING id
                     """,
-                    (code.encode("utf-8"),),
+                    (code_bytes,),
                 )
                 code_id = self.cursor.fetchone()
             # Check if user exists in user_info, if not add them
@@ -620,11 +622,13 @@ class LeaderboardDB:
         user_id: Optional[str] = None,
         limit: int = None,
         offset: int = 0,
+        score_ascending: bool = True,
     ) -> list["LeaderboardRankedEntry"]:
+        score_dir = "ASC" if score_ascending else "DESC"
         # separate cases, for personal we want all submissions, for general we want best per user
         if user_id:
             # Query all if user_id (means called from show-personal)
-            query = """
+            query = f"""
                 SELECT
                     s.file_name,
                     s.id,
@@ -633,7 +637,7 @@ class LeaderboardDB:
                     r.score,
                     r.runner,
                     ui.user_name,
-                    RANK() OVER (ORDER BY r.score ASC) as rank
+                    RANK() OVER (ORDER BY r.score {score_dir}) as rank
                 FROM leaderboard.runs r
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
@@ -644,13 +648,13 @@ class LeaderboardDB:
                     AND r.score IS NOT NULL
                     AND r.passed
                     AND s.user_id = %s
-                ORDER BY r.score ASC
+                ORDER BY r.score {score_dir}
                 LIMIT %s OFFSET %s
                 """
             args = (leaderboard_name, gpu_name, user_id, limit, offset)
         else:
             # Query best submission per user if no user_id (means called from show)
-            query = """
+            query = f"""
                 WITH best_submissions AS (
                     SELECT DISTINCT ON (s.user_id)
                         s.id as submission_id,
@@ -665,7 +669,7 @@ class LeaderboardDB:
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
-                    ORDER BY s.user_id, r.score ASC
+                    ORDER BY s.user_id, r.score {score_dir}
                 )
                 SELECT
                     bs.file_name,
@@ -675,10 +679,10 @@ class LeaderboardDB:
                     bs.score,
                     bs.runner,
                     ui.user_name,
-                    RANK() OVER (ORDER BY bs.score ASC) as rank
+                    RANK() OVER (ORDER BY bs.score {score_dir}) as rank
                 FROM best_submissions bs
                 JOIN leaderboard.user_info ui ON bs.user_id = ui.id
-                ORDER BY bs.score ASC
+                ORDER BY bs.score {score_dir}
                 LIMIT %s OFFSET %s
                 """
             args = (leaderboard_name, gpu_name, limit, offset)
@@ -1019,7 +1023,7 @@ class LeaderboardDB:
             user_id=submission[3],
             submission_time=submission[4],
             done=submission[5],
-            code=bytes(submission[6]).decode("utf-8"),
+            code=bytes(submission[6]).decode("utf-8", errors="replace"),
             runs=runs,
         )
 

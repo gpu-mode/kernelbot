@@ -12,3 +12,5 @@ yoyo.ini
 .venv
 .claude/*
 !.claude/skills/
+popcorn-cli/
+.ssh_key_tmp

@@ -102,12 +102,14 @@ class SubmissionMode(Enum):
 class Language(Enum):
     Python = "py"
     CUDA = "cu"
+    Model = "model"
 
 
 class RankCriterion(Enum):
     LAST = "last"  # only last benchmark counts
     MEAN = "mean"  # arithmetic mean of all benchmarks
     GEOM = "geom"  # geometric mean of all benchmarks
+    CUSTOM = "custom"  # use ranking_metric from ModelTaskData
 
 
 GPU_TO_SM = {
