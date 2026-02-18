@@ -835,3 +835,35 @@ async def delete_user_submission(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting submission: {e}") from e
+
+
+@app.delete("/admin/submissions/{submission_id}")
+async def admin_delete_submission(
+    submission_id: int,
+    x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Secret"),
+    db_context=Depends(get_db),
+) -> dict:
+    """Admin-only: delete any submission by ID, regardless of ownership.
+
+    Protected by a shared secret between kernelboard and kernelbot.
+    Kernelboard verifies admin identity (whitelist) before calling this.
+    """
+    await simple_rate_limit()
+
+    if not env.ADMIN_API_SECRET or x_admin_secret != env.ADMIN_API_SECRET:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    try:
+        with db_context as db:
+            submission = db.get_submission_by_id(submission_id)
+            if submission is None:
+                raise HTTPException(status_code=404, detail="Submission not found")
+
+            db.delete_submission(submission_id)
+            return {"message": f"Submission {submission_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error deleting submission: {e}"
+        ) from e

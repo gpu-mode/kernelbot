@@ -17,6 +17,7 @@ env.DISCORD_CLUSTER_STAGING_ID = os.getenv("DISCORD_CLUSTER_STAGING_ID")
 env.DISCORD_DEBUG_CLUSTER_STAGING_ID = os.getenv("DISCORD_DEBUG_CLUSTER_STAGING_ID")
 
 env.ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+env.ADMIN_API_SECRET = os.getenv("ADMIN_API_SECRET", "")
 
 # Only required to run the CLI against this instance
 # setting these is required only to run the CLI against local instance
