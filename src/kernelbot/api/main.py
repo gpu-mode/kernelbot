@@ -43,6 +43,7 @@ logger = setup_logging(__name__)
 
 app = FastAPI()
 
+
 def json_serializer(obj):
     """JSON serializer for objects not serializable by default json code"""
     if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
@@ -253,7 +254,9 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         raise HTTPException(status_code=400, detail=f"Invalid state parameter: {e}") from None
 
     # Determine API URL (handle potential None value)
-    api_base_url = os.environ.get("DISCORD_CLUSTER_MANAGER_API_BASE_URL") or os.getenv("POPCORN_API_URL")
+    api_base_url = os.environ.get("DISCORD_CLUSTER_MANAGER_API_BASE_URL") or os.getenv(
+        "POPCORN_API_URL"
+    )
     if not api_base_url:
         raise HTTPException(
             status_code=500,
@@ -266,6 +269,8 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
     user_id = None
     user_name = None
 
+    print(redirect_uri)
+
     try:
         if auth_provider == "discord":
             user_id, user_name = await _handle_discord_oauth(code, redirect_uri)
@@ -277,10 +282,15 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         raise e
     except Exception as e:
         # Catch unexpected errors during OAuth handling
-        raise HTTPException(status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error during {auth_provider} OAuth flow: {e}"
+        ) from e
 
     if not user_id or not user_name:
-        raise HTTPException(status_code=500,detail="Failed to retrieve user ID or username from provider.",)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve user ID or username from provider.",
+        )
 
     try:
         with db_context as db:
@@ -290,7 +300,9 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
                 db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
 
     except AttributeError as e:
-        raise HTTPException(status_code=500, detail=f"Database interface error during update: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Database interface error during update: {e}"
+        ) from e
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Database update failed: {e}") from e
 
@@ -301,6 +313,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         "user_name": user_name,
         "is_reset": is_reset,
     }
+
 
 async def _stream_submission_response(
     submission_request: SubmissionRequest,
@@ -365,6 +378,7 @@ async def _stream_submission_response(
             except asyncio.CancelledError:
                 pass
 
+
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
     leaderboard_name: str,
@@ -403,13 +417,13 @@ async def run_submission(  # noqa: C901
     )
     return StreamingResponse(generator, media_type="text/event-stream")
 
+
 async def enqueue_background_job(
     req: ProcessedSubmissionRequest,
     mode: SubmissionMode,
     backend: KernelBackend,
     manager: BackgroundSubmissionManager,
 ):
-
     # pre-create the submission for api returns
     with backend.db as db:
         sub_id = db.create_submission(
@@ -423,7 +437,8 @@ async def enqueue_background_job(
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
-    return sub_id,job_id
+    return sub_id, job_id
+
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission_async(
@@ -450,34 +465,39 @@ async def run_submission_async(
         JSONResponse: A JSON response containing job_id and and submission_id for the client to poll for status.
     """
     try:
-
         await simple_rate_limit()
-        logger.info(f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}")
-
+        logger.info(
+            f"Received submission request for {leaderboard_name} {gpu_type} {submission_mode}"
+        )
 
         # throw error if submission request is invalid
         try:
             submission_request, submission_mode_enum = await to_submit_info(
-            user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+                user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
             )
 
             req = prepare_submission(submission_request, backend_instance)
 
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"failed to prepare submission request: {str(e)}") from e
+            raise HTTPException(
+                status_code=400, detail=f"failed to prepare submission request: {str(e)}"
+            ) from e
 
         # prepare submission request before the submission is started
         if not req.gpus or len(req.gpus) != 1:
             raise HTTPException(status_code=400, detail="Invalid GPU type")
 
         # put submission request to background manager to run in background
-        sub_id,job_status_id = await enqueue_background_job(
+        sub_id, job_status_id = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
 
         return JSONResponse(
             status_code=202,
-            content={"details":{"id": sub_id, "job_status_id": job_status_id}, "status": "accepted"},
+            content={
+                "details": {"id": sub_id, "job_status_id": job_status_id},
+                "status": "accepted",
+            },
         )
         # Preserve FastAPI HTTPException as-is
     except HTTPException:
@@ -542,7 +562,7 @@ async def create_dev_leaderboard(
     if not definition.gpus:
         raise HTTPException(
             status_code=400,
-            detail="No gpus specified in task.yml. Add 'gpus:' field with list of GPU types."
+            detail="No gpus specified in task.yml. Add 'gpus:' field with list of GPU types.",
         )
 
     with db_context as db:
@@ -591,7 +611,9 @@ async def admin_stats(
     _: Annotated[None, Depends(require_admin)],
     db_context=Depends(get_db),
     last_day_only: bool = False,
-    leaderboard_name: Optional[str] = Query(None, description="Filter stats to a specific leaderboard name"),
+    leaderboard_name: Optional[str] = Query(
+        None, description="Filter stats to a specific leaderboard name"
+    ),
 ) -> dict:
     with db_context as db:
         stats = db.generate_stats(last_day_only, leaderboard_name)
@@ -635,7 +657,7 @@ async def admin_update_problems(
             branch=branch,
             force=force,
             creator_id=0,  # API-created
-            forum_id=-1,   # No Discord forum
+            forum_id=-1,  # No Discord forum
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -781,7 +803,9 @@ async def get_user_submission(
 
             # Verify ownership
             if str(submission["user_id"]) != str(user_info["user_id"]):
-                raise HTTPException(status_code=403, detail="Not authorized to view this submission")
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to view this submission"
+                )
 
             # RunItem is a TypedDict (already a dict), select fields to expose
             run_fields = ("start_time", "end_time", "mode", "secret", "runner", "score", "passed")
@@ -826,7 +850,9 @@ async def delete_user_submission(
 
             # Verify ownership
             if str(submission["user_id"]) != str(user_info["user_id"]):
-                raise HTTPException(status_code=403, detail="Not authorized to delete this submission")
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to delete this submission"
+                )
 
             db.delete_submission(submission_id)
 
