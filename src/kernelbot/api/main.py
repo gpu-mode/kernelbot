@@ -264,12 +264,10 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
             "Set DISCORD_CLUSTER_MANAGER_API_BASE_URL or POPCORN_API_URL.",
         )
     redirect_uri_base = api_base_url.rstrip("/")
-    redirect_uri = f"https://{redirect_uri_base}/auth/cli/{auth_provider}"
+    redirect_uri = f"{redirect_uri_base}/auth/cli/{auth_provider}"
 
     user_id = None
     user_name = None
-
-    print(redirect_uri)
 
     try:
         if auth_provider == "discord":
@@ -333,18 +331,24 @@ async def _stream_submission_response(
 
         while not task.done():
             elapsed_time = time.time() - start_time
-            yield f"event: status\ndata: {json.dumps({'status': 'processing',
-                                                      'elapsed_time': round(elapsed_time, 2)},
-                                                      default=json_serializer)}\n\n"
+            yield f"event: status\ndata: {
+                json.dumps(
+                    {'status': 'processing', 'elapsed_time': round(elapsed_time, 2)},
+                    default=json_serializer,
+                )
+            }\n\n"
 
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=15.0)
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                yield f"event: error\ndata: {json.dumps(
-                    {'status': 'error', 'detail': 'Submission cancelled'},
-                    default=json_serializer)}\n\n"
+                yield f"event: error\ndata: {
+                    json.dumps(
+                        {'status': 'error', 'detail': 'Submission cancelled'},
+                        default=json_serializer,
+                    )
+                }\n\n"
                 return
 
         result, reports = await task
