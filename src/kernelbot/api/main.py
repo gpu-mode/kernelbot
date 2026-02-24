@@ -253,12 +253,12 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
         raise HTTPException(status_code=400, detail=f"Invalid state parameter: {e}") from None
 
     # Determine API URL (handle potential None value)
-    api_base_url = os.environ.get("HEROKU_APP_DEFAULT_DOMAIN_NAME") or os.getenv("POPCORN_API_URL")
+    api_base_url = os.environ.get("DISCORD_CLUSTER_MANAGER_API_BASE_URL") or os.getenv("POPCORN_API_URL")
     if not api_base_url:
         raise HTTPException(
             status_code=500,
             detail="Redirect URI base not configured."
-            "Set HEROKU_APP_DEFAULT_DOMAIN_NAME or POPCORN_API_URL.",
+            "Set DISCORD_CLUSTER_MANAGER_API_BASE_URL or POPCORN_API_URL.",
         )
     redirect_uri_base = api_base_url.rstrip("/")
     redirect_uri = f"https://{redirect_uri_base}/auth/cli/{auth_provider}"
