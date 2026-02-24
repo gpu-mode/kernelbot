@@ -42,6 +42,9 @@ async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]
         "redirect_uri": redirect_uri,
     }
 
+    print(token_data)
+    print(token_url)
+
     try:
         token_response = requests.post(token_url, data=token_data)
         token_response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
