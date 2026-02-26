@@ -23,7 +23,7 @@ dependencies = [
     "fastapi[all]",
     "uvicorn",
     "jinja2",
-    "anthropic",
+    "openai",
 ]
 
 [project.optional-dependencies]

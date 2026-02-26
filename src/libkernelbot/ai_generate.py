@@ -1,6 +1,6 @@
 import re
 
-import anthropic
+from openai import AsyncOpenAI
 
 from libkernelbot.consts import Language
 from libkernelbot.task import LeaderboardTask
@@ -15,7 +15,7 @@ async def generate_kernel(
     description: str,
     templates: dict[str, str],
 ) -> tuple[str, str]:
-    """Generate kernel code from a natural language prompt using Claude.
+    """Generate kernel code from a natural language prompt using OpenAI.
 
     Args:
         prompt: The user's natural language description of the kernel to generate.
@@ -51,15 +51,17 @@ async def generate_kernel(
 
     system_prompt = "\n\n".join(system_parts)
 
-    client = anthropic.AsyncAnthropic()
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": prompt}],
+    client = AsyncOpenAI()
+    response = await client.chat.completions.create(
+        model="o3",
+        max_completion_tokens=4096,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
     )
 
-    raw = response.content[0].text
+    raw = response.choices[0].message.content
 
     # Extract code from a fenced code block if present
     match = re.search(r"```(?:\w+)?\n(.*?)```", raw, re.DOTALL)
