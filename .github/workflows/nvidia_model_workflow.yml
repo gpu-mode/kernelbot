@@ -21,6 +21,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      CUDA_VISIBLE_DEVICES: "4,5,6,7"
     steps:
     - uses: actions/checkout@v3
 
@@ -47,12 +48,14 @@ jobs:
         echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
         echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-        # Install torch first (build dep for vLLM)
-        uv pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu130
+        # Install torch with CUDA 12.8 — the vLLM pip wheel is compiled
+        # against CUDA 12, so we need cu128 torch for libcudart.so.12.
+        uv pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
 
-        # Install vLLM to pull in all transitive deps, then remove vllm itself.
-        # The user's fork gets installed fresh by the benchmark runner.
-        uv pip install vllm && uv pip uninstall vllm
+        # Keep vLLM installed so the benchmark runner can use the fast overlay
+        # path: user's Python files are copied on top of the installed package
+        # (~instant) instead of a full pip install from source (~20 min).
+        uv pip install vllm
 
         # Install kernelbot
         uv pip install -r "requirements-dev.txt"

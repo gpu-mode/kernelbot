@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 from better_profanity import profanity
 
-from libkernelbot.consts import RankCriterion
+from libkernelbot.consts import Language, RankCriterion
 from libkernelbot.db_types import RunItem, SubmissionItem
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
 from libkernelbot.run_eval import FullResult
@@ -24,7 +24,7 @@ logger = setup_logging(__name__)
 @dataclasses.dataclass
 class SubmissionRequest:
     # to be filled in when making the request
-    code: str
+    code: str | bytes
     file_name: str
     user_id: int
     user_name: str
@@ -47,21 +47,25 @@ def prepare_submission(
             "The bot is currently not accepting any new submissions, please try again later."
         )
 
-    if profanity.contains_profanity(req.file_name):
-        raise KernelBotError("Please provide a non-rude filename")
-
-    # check file extension
-    if not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
-        raise KernelBotError(
-            "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
-        )
-
-    # process file directives
-    req = handle_popcorn_directives(req)
-    assert req.leaderboard is not None
-
     with backend.db as db:
         leaderboard = db.get_leaderboard(req.leaderboard)
+
+    is_model = leaderboard["task"].lang == Language.Model
+
+    if not is_model:
+        if profanity.contains_profanity(req.file_name):
+            raise KernelBotError("Please provide a non-rude filename")
+
+        # check file extension
+        if not req.file_name.endswith((".py", ".cu", ".cuh", ".cpp")):
+            raise KernelBotError(
+                "Please provide a Python (.py) or CUDA (.cu / .cuh / .cpp) file",
+            )
+
+        # process file directives
+        req = handle_popcorn_directives(req)
+
+    assert req.leaderboard is not None
     check_deadline(leaderboard)
 
     task_gpus = get_avail_gpus(req.leaderboard, backend.db)
@@ -170,6 +174,21 @@ def _get_popcorn_directives(submission: str) -> dict:  # noqa: C901
 
 
 def compute_score(result: FullResult, task: LeaderboardTask, submission_id: int) -> float:
+    if task.ranking_by == RankCriterion.CUSTOM:
+        if not hasattr(task.config, "ranking_metric"):
+            raise KernelBotError(
+                f"RankCriterion.CUSTOM requires a config with 'ranking_metric', "
+                f"got {type(task.config).__name__}"
+            )
+        ranking_metric = task.config.ranking_metric
+        leaderboard_result = result.runs["leaderboard"].run.result
+        if ranking_metric not in leaderboard_result:
+            raise KernelBotError(
+                f"Ranking metric '{ranking_metric}' not found in result. "
+                f"Available keys: {list(leaderboard_result.keys())}"
+            )
+        return float(leaderboard_result[ranking_metric])
+
     num_benchmarks = int(result.runs["leaderboard"].run.result["benchmark-count"])
     if task.ranking_by == RankCriterion.LAST:
         if num_benchmarks != 1:
@@ -202,11 +221,18 @@ def generate_run_verdict(backend: "KernelBackend", run: RunItem, sub_data: Submi
 
     # get the competition
     with backend.db as db:
-        competition = db.get_leaderboard_submissions(sub_data["leaderboard_name"], run["runner"])
+        leaderboard = db.get_leaderboard(sub_data["leaderboard_name"])
+        score_asc = leaderboard["task"].score_ascending
+        competition = db.get_leaderboard_submissions(
+            sub_data["leaderboard_name"], run["runner"], score_ascending=score_asc
+        )
     # compare against the competition
     other_by_user = False
-    run_time = float(run["score"])
-    score_text = format_time(run_time * 1e9)
+    run_score = float(run["score"])
+    if score_asc:
+        score_text = format_time(run_score * 1e9)
+    else:
+        score_text = f"{run_score:.2f}"
 
     for entry in competition:
         # can we find our own run? Only if it is the fastest submission by this user

@@ -24,6 +24,20 @@ class PythonTaskData:
     main: str
 
 
+@dataclasses.dataclass
+class ModelTaskData:
+    model_name: str
+    tensor_parallel: int
+    benchmark_shapes: list[dict]
+    ranking_metric: str
+    perplexity_baseline: float
+    perplexity_tolerance: float
+    install_timeout: int = 600
+    server_startup_timeout: int = 300
+    benchmark_timeout: int = 1200
+    vllm_args: list[str] = dataclasses.field(default_factory=list)
+
+
 TestCaseType = Dict[str, Union[int, str]]
 
 
@@ -52,7 +66,7 @@ class LeaderboardTask:
 
     lang: Language
     files: dict[str, str]
-    config: CudaTaskData | PythonTaskData
+    config: CudaTaskData | PythonTaskData | ModelTaskData
     libraries: list[str] = dataclasses.field(default_factory=list)
     tests: list[TestCaseType] = dataclasses.field(default_factory=list)
     test_timeout: int = 180
@@ -62,12 +76,15 @@ class LeaderboardTask:
     ranking_by: RankCriterion = RankCriterion.LAST
     seed: Optional[int] = None
     multi_gpu: bool = False
+    score_ascending: bool = True
 
     def __post_init__(self):
         if self.lang == Language.Python and not isinstance(self.config, PythonTaskData):
             raise TypeError("Python language requires PythonTaskData config")
         if self.lang == Language.CUDA and not isinstance(self.config, CudaTaskData):
             raise TypeError("CUDA language requires CudaTaskData config")
+        if self.lang == Language.Model and not isinstance(self.config, ModelTaskData):
+            raise TypeError("Model language requires ModelTaskData config")
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -77,8 +94,11 @@ class LeaderboardTask:
         data_["lang"] = lang
         data_["ranking_by"] = criterion
         data_["multi_gpu"] = data.get("multi_gpu", False)
+        data_["score_ascending"] = data.get("score_ascending", True)
         if lang == Language.Python:
             data_["config"] = PythonTaskData(**data["config"])
+        elif lang == Language.Model:
+            data_["config"] = ModelTaskData(**data["config"])
         else:
             data_["config"] = CudaTaskData(**data["config"])
 
@@ -129,30 +149,39 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
 
     root = Path(yaml_file).parent
 
-    # now, build file dict
-    file_dict = {}
-    for file_spec in raw["files"]:
-        name = file_spec["name"]
-        source = file_spec["source"]
+    lang = raw.get("lang", "py")
 
-        # handle special files
-        if source == "@SUBMISSION@":
-            file_dict[name] = "@SUBMISSION@"
-        else:
-            file_dict[name] = (root / source).read_text()
+    # Model tasks don't use files or templates
+    if lang == "model":
+        raw.setdefault("files", {})
+    else:
+        # build file dict for kernel tasks
+        file_dict = {}
+        for file_spec in raw["files"]:
+            name = file_spec["name"]
+            source = file_spec["source"]
 
-    raw["files"] = file_dict
+            # handle special files
+            if source == "@SUBMISSION@":
+                file_dict[name] = "@SUBMISSION@"
+            else:
+                file_dict[name] = (root / source).read_text()
+
+        raw["files"] = file_dict
 
     # load template files
     templates = {}
-    for lang, source in raw.get("templates", {}).items():
-        assert lang in ["CUDA", "Python", "Triton", "HIP", "CuteDSL"]
-        templates[lang] = (root / source).read_text()
+    if lang != "model":
+        for tpl_lang, source in raw.get("templates", {}).items():
+            assert tpl_lang in ["CUDA", "Python", "Triton", "HIP", "CuteDSL"]
+            templates[tpl_lang] = (root / source).read_text()
 
-    if templates:
+    if "templates" in raw:
         del raw["templates"]
     description = raw["description"]
     del raw["description"]
+    # Extract gpus before from_dict (not a LeaderboardTask field)
+    gpus = raw.pop("gpus", [])
     task = LeaderboardTask.from_dict(raw)
 
     # basic validation:
@@ -164,25 +193,15 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
             if "world_size" not in benchmark:
                 raise KernelBotError(f"multi-gpu benchmark {benchmark} does not specify world_size")
 
-    # Read gpus if specified in task.yml
-    gpus = raw.get("gpus", [])
-
     return LeaderboardDefinition(task=task, templates=templates, description=description, gpus=gpus)
 
 
 def build_task_config(
     task: LeaderboardTask = None,
-    submission_content: str = None,
+    submission_content: str | bytes = None,
     arch: str = None,
     mode: SubmissionMode = None,
 ) -> dict:
-    all_files = {}
-    for n, c in task.files.items():
-        if c == "@SUBMISSION@":
-            all_files[n] = submission_content
-        else:
-            all_files[n] = c
-
     common = {
         "lang": task.lang.value,
         "arch": arch,
@@ -195,7 +214,22 @@ def build_task_config(
         "ranking_by": task.ranking_by.value,
         "seed": task.seed,
         "multi_gpu": task.multi_gpu,
+        "score_ascending": task.score_ascending,
     }
+
+    if task.lang == Language.Model:
+        return {
+            "submission_archive": submission_content,
+            "model_config": dataclasses.asdict(task.config),
+            **common,
+        }
+
+    all_files = {}
+    for n, c in task.files.items():
+        if c == "@SUBMISSION@":
+            all_files[n] = submission_content
+        else:
+            all_files[n] = c
 
     if task.lang == Language.Python:
         return {
