@@ -40,6 +40,9 @@ env.PROBLEM_DEV_DIR = os.getenv("PROBLEM_DEV_DIR", "examples")
 env.DATABASE_URL = os.getenv("DATABASE_URL")
 env.DISABLE_SSL = os.getenv("DISABLE_SSL")
 
+# OpenAI API key for AI kernel generation
+env.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 def init_environment(skip_discord: bool = False):
     """Validate required environment variables."""
