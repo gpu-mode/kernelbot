@@ -19,6 +19,7 @@ steps = [
         DROP INDEX CONCURRENTLY IF EXISTS leaderboard.idx_runs_valid_scores;
         """
     ),
+    # Secondary: index on submission.leaderboard_id
     step(
         """
         CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_submission_leaderboard_id
@@ -28,6 +29,7 @@ steps = [
         DROP INDEX CONCURRENTLY IF EXISTS leaderboard.idx_submission_leaderboard_id;
         """
     ),
+    # Secondary: index on submission.user_id
     step(
         """
         CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_submission_user_id
