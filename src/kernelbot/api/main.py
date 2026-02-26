@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Upl
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from kernelbot.env import env
+from libkernelbot.ai_generate import generate_kernel
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
@@ -442,6 +443,99 @@ async def enqueue_background_job(
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
     return sub_id, job_id
+
+
+@app.post("/ai/{leaderboard_name}/{gpu_type}/{submission_mode}")
+async def run_ai_submission(
+    leaderboard_name: str,
+    gpu_type: str,
+    submission_mode: str,
+    payload: dict,
+    user_info: Annotated[dict, Depends(validate_user_header)],
+    db_context=Depends(get_db),
+) -> Any:
+    """Generate kernel code from a prompt using AI, then submit it for evaluation.
+
+    Requires a valid X-Popcorn-Cli-Id or X-Web-Auth-Id header.
+
+    Args:
+        leaderboard_name: The leaderboard to submit to.
+        gpu_type: The GPU type to run on.
+        submission_mode: The submission mode (test, benchmark, etc.).
+        payload: JSON body with a "prompt" field.
+    """
+    try:
+        await simple_rate_limit()
+
+        prompt = payload.get("prompt")
+        if not prompt or not isinstance(prompt, str):
+            raise HTTPException(status_code=400, detail="Missing or invalid 'prompt' in request body")
+        if len(prompt) > 10000:
+            raise HTTPException(status_code=400, detail="Prompt too long (max 10000 characters)")
+
+        try:
+            submission_mode_enum = SubmissionMode(submission_mode.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid submission mode: '{submission_mode}'"
+            ) from None
+
+        # Fetch leaderboard info, templates, and validate GPU
+        with db_context as db:
+            leaderboard_item = db.get_leaderboard(leaderboard_name)
+            gpus = leaderboard_item.get("gpu_types", [])
+            if gpu_type not in gpus:
+                supported = ", ".join(gpus) if gpus else "None"
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"GPU '{gpu_type}' not supported. Supported: {supported}",
+                )
+            templates = db.get_leaderboard_templates(leaderboard_name)
+
+        task = leaderboard_item["task"]
+        description = leaderboard_item.get("description", "")
+
+        # Generate code via AI
+        try:
+            code, file_name = await generate_kernel(prompt, task, description, templates)
+        except Exception as e:
+            logger.error(f"AI generation failed: {e}")
+            raise HTTPException(status_code=502, detail=f"AI code generation failed: {e}") from e
+
+        # Build submission request and enqueue
+        submission_request = SubmissionRequest(
+            code=code,
+            file_name=file_name,
+            user_id=user_info["user_id"],
+            user_name=user_info["user_name"],
+            gpus=[gpu_type],
+            leaderboard=leaderboard_name,
+        )
+
+        req = prepare_submission(submission_request, backend_instance)
+        if not req.gpus or len(req.gpus) != 1:
+            raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+        sub_id, job_status_id = await enqueue_background_job(
+            req, submission_mode_enum, backend_instance, background_submission_manager
+        )
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "details": {"id": sub_id, "job_status_id": job_status_id},
+                "generated_code": code,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except KernelBotError as e:
+        raise HTTPException(status_code=getattr(e, "http_code", 400), detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"Unexpected error in AI submission: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
