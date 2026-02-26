@@ -29,7 +29,7 @@ RUN uv pip install --system \
 
 # PyTorch (CUDA 13.0 wheels)
 RUN uv pip install --system \
-    torch==2.9.1 \
+    torch==2.10.0 \
     --index-url https://download.pytorch.org/whl/cu130
 
 # Helion
