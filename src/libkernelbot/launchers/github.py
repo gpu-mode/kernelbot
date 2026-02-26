@@ -15,7 +15,7 @@ from typing import Awaitable, Callable, Optional
 
 import github
 import requests
-from github import Github, UnknownObjectException
+from github import Auth, Github, UnknownObjectException
 from github.GithubObject import NotSet, Opt
 from github.Workflow import Workflow
 from github.WorkflowRun import WorkflowRun
@@ -240,7 +240,7 @@ def patched_create_dispatch(
 
 class GitHubRun:
     def __init__(self, repo: str, token: str, branch: str, workflow_file: str):
-        gh = Github(token)
+        gh = Github(auth=Auth.Token(token))
         try:
             self.repo = gh.get_repo(repo)
         except UnknownObjectException as e:
