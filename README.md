@@ -81,6 +81,7 @@ To donate a GPU, contact us to become a CI admin and add an org-level runner at 
 ## Acknowledgements
 
 - Modal for credits
+- Northflank for hosting the kernelbot service
 - AMD for sponsoring an MI250 node
 - NVIDIA for sponsoring an H100 node
 - Nebius for credits and an H100 node
