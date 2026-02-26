@@ -11,32 +11,32 @@ steps = [
     # Most critical: partial composite index on runs
     step(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_runs_valid_scores
+        CREATE INDEX IF NOT EXISTS idx_runs_valid_scores
         ON leaderboard.runs (submission_id, runner, score)
         WHERE NOT secret AND score IS NOT NULL AND passed;
         """,
         """
-        DROP INDEX CONCURRENTLY IF EXISTS leaderboard.idx_runs_valid_scores;
+        DROP INDEX IF EXISTS leaderboard.idx_runs_valid_scores;
         """
     ),
     # Secondary: index on submission.leaderboard_id
     step(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_submission_leaderboard_id
+        CREATE INDEX IF NOT EXISTS idx_submission_leaderboard_id
         ON leaderboard.submission (leaderboard_id);
         """,
         """
-        DROP INDEX CONCURRENTLY IF EXISTS leaderboard.idx_submission_leaderboard_id;
+        DROP INDEX IF EXISTS leaderboard.idx_submission_leaderboard_id;
         """
     ),
     # Secondary: index on submission.user_id
     step(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_submission_user_id
+        CREATE INDEX IF NOT EXISTS idx_submission_user_id
         ON leaderboard.submission (user_id);
         """,
         """
-        DROP INDEX CONCURRENTLY IF EXISTS leaderboard.idx_submission_user_id;
+        DROP INDEX IF EXISTS leaderboard.idx_submission_user_id;
         """
     ),
 ]
