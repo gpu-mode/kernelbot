@@ -35,8 +35,8 @@ RUN sudo ln -sf /usr/bin/python3.13 /usr/local/bin/python3 \
     && sudo ln -sf /usr/bin/python3.13 /usr/local/bin/python
 
 # Install pip and uv
-RUN python3 -m ensurepip --upgrade \
-    && python3 -m pip install --no-cache-dir uv
+RUN sudo python3 -m ensurepip --upgrade \
+    && sudo python3 -m pip install --no-cache-dir uv
 
 # Core build tools
 RUN sudo uv pip install --system \
