@@ -171,8 +171,8 @@ class VerifyRunCog(commands.Cog):
     @app_commands.choices(
         mode=[
             Choice(name=SubmissionMode.TEST.name, value=SubmissionMode.TEST.value),
-            Choice(name=SubmissionMode.BENCHMARK.name, value=SubmissionMode.BENCHMARK.value),
-            Choice(name=SubmissionMode.LEADERBOARD.name, value=SubmissionMode.LEADERBOARD.value),
+            Choice(name=SubmissionMode.PRIVATE.name, value=SubmissionMode.PRIVATE.value),
+            Choice(name=SubmissionMode.PUBLIC.name, value=SubmissionMode.PUBLIC.value),
             Choice(name="All", value="all"),
         ]
     )
@@ -194,9 +194,9 @@ class VerifyRunCog(commands.Cog):
 
         modes = []
         if mode is None:
-            modes = [SubmissionMode.LEADERBOARD]
+            modes = [SubmissionMode.PUBLIC]
         elif mode.value == "all":
-            modes = [SubmissionMode.TEST, SubmissionMode.BENCHMARK, SubmissionMode.LEADERBOARD]
+            modes = [SubmissionMode.TEST, SubmissionMode.PRIVATE, SubmissionMode.PUBLIC]
         else:
             modes = [SubmissionMode(mode.value)]
 

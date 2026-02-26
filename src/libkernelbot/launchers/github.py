@@ -49,8 +49,8 @@ def get_timeout(config: dict) -> int:
     mode = config.get("mode")
     sec_map = {
         SubmissionMode.TEST.value: config.get("test_timeout"),
-        SubmissionMode.BENCHMARK.value: config.get("benchmark_timeout"),
-        SubmissionMode.LEADERBOARD.value: config.get("ranked_timeout"),
+        SubmissionMode.PRIVATE.value: config.get("benchmark_timeout"),
+        SubmissionMode.PUBLIC.value: config.get("ranked_timeout"),
     }
     seconds = sec_map.get(mode) or DEFAULT_GITHUB_TIMEOUT_MINUTES * 60
     return math.ceil(seconds / 60)

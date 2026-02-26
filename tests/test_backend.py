@@ -55,7 +55,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "pass",
         "submit.py",
         task,
-        consts.SubmissionMode.LEADERBOARD,
+        consts.SubmissionMode.PUBLIC,
         -1,
     )
 
@@ -64,7 +64,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "> ✅ Compilation successful",
         "> ✅ Testing successful",
         "> ❌ Benchmarks missing",
-        "> ❌ Leaderboard missing",
+        "> ❌ Ranked submission missing",
     ]
 
     call_args = reporter.display_report.call_args[0]
@@ -101,7 +101,7 @@ async def test_handle_submission(bot: backend.KernelBackend, task_directory):
         "benchmarks": [{"dtype": "float32", "input_size": 10000}],
         "lang": "py",
         "main": "kernel.py",
-        "mode": "leaderboard",
+        "mode": "public",
         "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
@@ -130,7 +130,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
             submit_time,
         )
     eval_result = create_eval_result("benchmark")
-    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
+    mock_launcher = _mock_launcher(bot, {"secret": eval_result})
 
     reporter = MockProgressReporter("report")
 
@@ -141,7 +141,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
         consts.ModalGPU.A100,
         reporter,
         task,
-        consts.SubmissionMode.LEADERBOARD,
+        consts.SubmissionMode.SECRET,
         seed=1337,
     )
 
@@ -155,7 +155,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
         "benchmarks": [{"dtype": "float32", "input_size": 10000}],
         "lang": "py",
         "main": "kernel.py",
-        "mode": "leaderboard",
+        "mode": "secret",
         "multi_gpu": False,
         "ranked_timeout": 180,
         "ranking_by": "geom",
@@ -193,7 +193,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "secret",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
@@ -206,7 +206,7 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
                     },
                     "runner": "A100",
                     "score": Decimal("1.5e-9"),
-                    "secret": False,
+                    "secret": True,
                     "start_time": eval_result.start.replace(tzinfo=datetime.timezone.utc),
                     "system": {
                         "cpu": "Intel i9-12900K",
@@ -232,7 +232,18 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
         task = db.get_leaderboard("submit-leaderboard")["task"]
 
     eval_result = create_eval_result("benchmark")
-    mock_launcher = _mock_launcher(bot, {"leaderboard": eval_result})
+    # Use side_effect to return different results for each call
+    # First call (PUBLIC mode) returns {"public": ...}, second call (SECRET mode) returns {"secret": ...}
+    mock_launcher = MagicMock(spec=backend.Launcher)
+    mock_launcher.name = "launcher"
+    mock_launcher.gpus = [consts.ModalGPU.A100]
+    mock_launcher.run_submission = AsyncMock(
+        side_effect=[
+            FullResult(success=True, error="", system=sample_system_info(), runs={"public": eval_result}),
+            FullResult(success=True, error="", system=sample_system_info(), runs={"secret": eval_result}),
+        ]
+    )
+    bot.register_launcher(mock_launcher)
 
     from libkernelbot.submission import ProcessedSubmissionRequest
 
@@ -249,25 +260,31 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
     )
     reporter = MockMultReporter()
     s_id, results = await bot.submit_full(
-        req, mode=consts.SubmissionMode.LEADERBOARD, reporter=reporter
+        req, mode=consts.SubmissionMode.PUBLIC, reporter=reporter
     )
 
-    expected_result = mock_launcher.run_submission.return_value
+    expected_result_public = FullResult(
+        success=True, error="", system=sample_system_info(), runs={"public": eval_result}
+    )
+    expected_result_secret = FullResult(
+        success=True, error="", system=sample_system_info(), runs={"secret": eval_result}
+    )
     assert len(results) == 2
-    assert results == [expected_result, expected_result]
+    assert results[0].success == expected_result_public.success
+    assert results[1].success == expected_result_secret.success
 
     r1, r2 = reporter.reporter_list
     assert r1.lines == [
         "> ✅ Compilation successful",
         "> ❌ Tests missing",
         "> ❌ Benchmarks missing",
-        "> ✅ Leaderboard run successful",
+        "> ✅ Ranked submission successful",
     ]
     assert r2.lines == [
         "> ✅ Compilation successful",
         "> ❌ Tests missing",
         "> ❌ Benchmarks missing",
-        "> ✅ Leaderboard run successful",
+        "> ✅ Ranked submission successful",
     ]
     assert r1.title == "A100 on Modal ✅ success"
     assert r2.title == "A100 on Modal (secret) ✅ success"
@@ -300,7 +317,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "public",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
@@ -344,7 +361,7 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
                         "stdout": "log stdout",
                         "success": True,
                     },
-                    "mode": "leaderboard",
+                    "mode": "secret",
                     "passed": True,
                     "result": {
                         "benchmark-count": "1",
