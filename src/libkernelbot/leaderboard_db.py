@@ -1235,6 +1235,117 @@ class LeaderboardDB:
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
             raise KernelBotError("Error validating CLI ID") from e
 
+    # ── Submission audit methods ──────────────────────────────────────
+
+    def get_leaderboard_task_by_id(self, leaderboard_id: int) -> Optional[dict]:
+        """Fetch the task JSONB for a leaderboard by its ID."""
+        try:
+            self.cursor.execute(
+                "SELECT task FROM leaderboard.leaderboard WHERE id = %s",
+                (leaderboard_id,),
+            )
+            row = self.cursor.fetchone()
+            return row[0] if row else None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching task for leaderboard %s", leaderboard_id, exc_info=e)
+            return None
+
+    def create_submission_audit(
+        self, submission_id: int, is_cheating: bool, explanation: str, model: str
+    ) -> Optional[int]:
+        """Insert an audit record for a submission."""
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_audit
+                    (submission_id, is_cheating, explanation, model)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (submission_id) DO UPDATE
+                    SET is_cheating = EXCLUDED.is_cheating,
+                        explanation = EXCLUDED.explanation,
+                        model = EXCLUDED.model,
+                        created_at = NOW(),
+                        reviewed = FALSE
+                RETURNING id
+                """,
+                (submission_id, is_cheating, explanation, model),
+            )
+            self.connection.commit()
+            return self.cursor.fetchone()[0]
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error creating audit for submission %s", submission_id, exc_info=e)
+            raise KernelBotError("Error creating submission audit") from e
+
+    def get_audits(
+        self,
+        is_cheating: Optional[bool] = None,
+        reviewed: Optional[bool] = None,
+        limit: int = 50,
+    ) -> List[dict]:
+        """List audits with optional filters."""
+        conditions = []
+        params = []
+        if is_cheating is not None:
+            conditions.append("a.is_cheating = %s")
+            params.append(is_cheating)
+        if reviewed is not None:
+            conditions.append("a.reviewed = %s")
+            params.append(reviewed)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(limit)
+
+        self.cursor.execute(
+            f"""
+            SELECT a.id, a.submission_id, a.is_cheating, a.explanation,
+                   a.model, a.created_at, a.reviewed,
+                   s.file_name, s.user_id, lb.name as leaderboard_name
+            FROM leaderboard.submission_audit a
+            JOIN leaderboard.submission s ON a.submission_id = s.id
+            JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+            {where}
+            ORDER BY a.created_at DESC
+            LIMIT %s
+            """,
+            params,
+        )
+        rows = self.cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "submission_id": r[1],
+                "is_cheating": r[2],
+                "explanation": r[3],
+                "model": r[4],
+                "created_at": r[5],
+                "reviewed": r[6],
+                "file_name": r[7],
+                "user_id": r[8],
+                "leaderboard_name": r[9],
+            }
+            for r in rows
+        ]
+
+    def mark_audit_reviewed(self, submission_id: int) -> bool:
+        """Mark an audit as human-reviewed. Returns True if a row was updated."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.submission_audit
+                SET reviewed = TRUE
+                WHERE submission_id = %s
+                """,
+                (submission_id,),
+            )
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error marking audit reviewed for submission %s", submission_id, exc_info=e)
+            raise KernelBotError("Error marking audit as reviewed") from e
+
 
 class LeaderboardDoesNotExist(KernelBotError):
     def __init__(self, name: str):

@@ -107,6 +107,7 @@ class KernelBackend:
         finally:
             with self.db as db:
                 db.mark_submission_done(sub_id)
+            asyncio.create_task(self._maybe_audit(sub_id))
         return sub_id, results
 
     async def submit_leaderboard(  # noqa: C901
@@ -237,6 +238,15 @@ class KernelBackend:
                 raise
 
         return result
+
+    async def _maybe_audit(self, submission_id: int):
+        """Fire-and-forget audit of a submission. Never raises."""
+        try:
+            from libkernelbot.audit import audit_submission
+
+            await audit_submission(submission_id, self.db)
+        except Exception:
+            logger.debug("Audit skipped or failed for submission %s", submission_id, exc_info=True)
 
     def _get_arch(self, gpu_type: GPU):
         return GPU_TO_SM[gpu_type.name]

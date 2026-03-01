@@ -675,6 +675,34 @@ async def admin_update_problems(
     }
 
 
+@app.get("/admin/audits")
+async def get_audits(
+    _: Annotated[None, Depends(require_admin)],
+    is_cheating: Optional[bool] = None,
+    reviewed: Optional[bool] = None,
+    limit: int = 50,
+    db_context=Depends(get_db),
+) -> dict:
+    """List submission audits, filterable by is_cheating and reviewed status."""
+    with db_context as db:
+        audits = db.get_audits(is_cheating=is_cheating, reviewed=reviewed, limit=limit)
+    return {"status": "ok", "audits": audits}
+
+
+@app.post("/admin/audits/{submission_id}/reviewed")
+async def mark_audit_reviewed(
+    submission_id: int,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Mark a submission audit as human-reviewed."""
+    with db_context as db:
+        updated = db.mark_audit_reviewed(submission_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Audit not found for this submission")
+    return {"status": "ok", "submission_id": submission_id}
+
+
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
     """An endpoint that returns all leaderboards.
