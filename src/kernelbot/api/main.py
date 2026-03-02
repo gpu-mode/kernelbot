@@ -676,11 +676,11 @@ async def admin_update_problems(
 
 
 @app.get("/admin/audits")
-async def get_audits(
+async def admin_get_audits(
     _: Annotated[None, Depends(require_admin)],
     is_cheating: Optional[bool] = None,
     reviewed: Optional[bool] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
     db_context=Depends(get_db),
 ) -> dict:
     """List submission audits, filterable by is_cheating and reviewed status."""
@@ -690,7 +690,7 @@ async def get_audits(
 
 
 @app.post("/admin/audits/{submission_id}/reviewed")
-async def mark_audit_reviewed(
+async def admin_mark_audit_reviewed(
     submission_id: int,
     _: Annotated[None, Depends(require_admin)],
     db_context=Depends(get_db),

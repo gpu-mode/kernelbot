@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 
@@ -8,6 +9,9 @@ logger = setup_logging(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 AUDIT_MODEL = "openai/gpt-4o-mini"
+AUDIT_TIMEOUT_SECONDS = int(os.getenv("AUDIT_TIMEOUT_SECONDS", "20"))
+AUDIT_MAX_REFERENCE_CHARS = int(os.getenv("AUDIT_MAX_REFERENCE_CHARS", "120000"))
+AUDIT_MAX_SUBMISSION_CHARS = int(os.getenv("AUDIT_MAX_SUBMISSION_CHARS", "60000"))
 
 AUDIT_SYSTEM = """You are a code auditor for a GPU kernel programming competition.
 
@@ -22,6 +26,30 @@ Your job is to determine if the submission is cheating. Common cheating patterns
 
 Respond with ONLY a JSON object (no markdown, no extra text):
 {"is_cheating": true/false, "explanation": "brief explanation"}"""
+
+
+def _truncate(content: str, max_chars: int) -> str:
+    if len(content) <= max_chars:
+        return content
+    omitted = len(content) - max_chars
+    return f"{content[:max_chars]}\n\n... [TRUNCATED {omitted} CHARS] ..."
+
+
+def _parse_audit_result(raw_content: str) -> dict:
+    content = raw_content.strip()
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+        if content.startswith("json"):
+            content = content[4:].strip()
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        raise ValueError("Audit response is not a JSON object")
+    return parsed
 
 
 async def audit_submission(submission_id: int, db: LeaderboardDB) -> dict | None:
@@ -55,6 +83,8 @@ async def audit_submission(submission_id: int, db: LeaderboardDB) -> dict | None
             reference_code = json.dumps(task_json, indent=2)
 
         submission_code = submission["code"]
+        reference_code = _truncate(reference_code, AUDIT_MAX_REFERENCE_CHARS)
+        submission_code = _truncate(submission_code, AUDIT_MAX_SUBMISSION_CHARS)
         user_msg = (
             "Reference/evaluation code:\n```\n"
             + reference_code
@@ -64,28 +94,31 @@ async def audit_submission(submission_id: int, db: LeaderboardDB) -> dict | None
         )
 
         client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
-        response = await client.chat.completions.create(
-            model=AUDIT_MODEL,
-            messages=[
-                {"role": "system", "content": AUDIT_SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0,
-            max_tokens=512,
-        )
+        async with asyncio.timeout(AUDIT_TIMEOUT_SECONDS):
+            response = await client.chat.completions.create(
+                model=AUDIT_MODEL,
+                messages=[
+                    {"role": "system", "content": AUDIT_SYSTEM},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0,
+                max_tokens=512,
+            )
 
-        result_text = response.choices[0].message.content.strip()
-        result = json.loads(result_text)
+        result_text = response.choices[0].message.content
+        if not result_text:
+            logger.warning("Empty audit response for submission %s", submission_id)
+            return None
+
+        result = _parse_audit_result(result_text)
 
         is_cheating = bool(result.get("is_cheating", False))
-        explanation = result.get("explanation", "")
+        explanation = str(result.get("explanation", ""))
 
         with db:
             db.create_submission_audit(submission_id, is_cheating, explanation, AUDIT_MODEL)
 
-        logger.info(
-            "Audit for submission %s: is_cheating=%s", submission_id, is_cheating
-        )
+        logger.info("Audit for submission %s: is_cheating=%s", submission_id, is_cheating)
         return {"is_cheating": is_cheating, "explanation": explanation, "model": AUDIT_MODEL}
 
     except Exception:

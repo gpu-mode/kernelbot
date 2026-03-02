@@ -1285,48 +1285,54 @@ class LeaderboardDB:
         limit: int = 50,
     ) -> List[dict]:
         """List audits with optional filters."""
-        conditions = []
-        params = []
-        if is_cheating is not None:
-            conditions.append("a.is_cheating = %s")
-            params.append(is_cheating)
-        if reviewed is not None:
-            conditions.append("a.reviewed = %s")
-            params.append(reviewed)
+        limit = max(1, min(limit, 500))
+        try:
+            conditions = []
+            params = []
+            if is_cheating is not None:
+                conditions.append("a.is_cheating = %s")
+                params.append(is_cheating)
+            if reviewed is not None:
+                conditions.append("a.reviewed = %s")
+                params.append(reviewed)
 
-        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-        params.append(limit)
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            params.append(limit)
 
-        self.cursor.execute(
-            f"""
-            SELECT a.id, a.submission_id, a.is_cheating, a.explanation,
-                   a.model, a.created_at, a.reviewed,
-                   s.file_name, s.user_id, lb.name as leaderboard_name
-            FROM leaderboard.submission_audit a
-            JOIN leaderboard.submission s ON a.submission_id = s.id
-            JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
-            {where}
-            ORDER BY a.created_at DESC
-            LIMIT %s
-            """,
-            params,
-        )
-        rows = self.cursor.fetchall()
-        return [
-            {
-                "id": r[0],
-                "submission_id": r[1],
-                "is_cheating": r[2],
-                "explanation": r[3],
-                "model": r[4],
-                "created_at": r[5],
-                "reviewed": r[6],
-                "file_name": r[7],
-                "user_id": r[8],
-                "leaderboard_name": r[9],
-            }
-            for r in rows
-        ]
+            self.cursor.execute(
+                f"""
+                SELECT a.id, a.submission_id, a.is_cheating, a.explanation,
+                       a.model, a.created_at, a.reviewed,
+                       s.file_name, s.user_id, lb.name as leaderboard_name
+                FROM leaderboard.submission_audit a
+                JOIN leaderboard.submission s ON a.submission_id = s.id
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                {where}
+                ORDER BY a.created_at DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = self.cursor.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "submission_id": r[1],
+                    "is_cheating": r[2],
+                    "explanation": r[3],
+                    "model": r[4],
+                    "created_at": r[5],
+                    "reviewed": r[6],
+                    "file_name": r[7],
+                    "user_id": r[8],
+                    "leaderboard_name": r[9],
+                }
+                for r in rows
+            ]
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error listing submission audits", exc_info=e)
+            raise KernelBotError("Error listing submission audits") from e
 
     def mark_audit_reviewed(self, submission_id: int) -> bool:
         """Mark an audit as human-reviewed. Returns True if a row was updated."""

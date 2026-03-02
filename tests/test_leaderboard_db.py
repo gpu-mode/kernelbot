@@ -798,3 +798,82 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+def test_submission_audit_methods(database, submit_leaderboard):
+    """Test create/get/update audit methods."""
+    with database as db:
+        submission_id = db.create_submission(
+            "submit-leaderboard",
+            "audit_me.py",
+            5,
+            "print('hello')",
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            user_name="user5",
+        )
+        db.mark_submission_done(submission_id)
+
+        # Create and read audit
+        audit_id = db.create_submission_audit(
+            submission_id=submission_id,
+            is_cheating=True,
+            explanation="Hardcoded output",
+            model="test-model",
+        )
+        assert audit_id is not None
+
+        audits = db.get_audits()
+        assert len(audits) == 1
+        assert audits[0]["submission_id"] == submission_id
+        assert audits[0]["is_cheating"] is True
+        assert audits[0]["reviewed"] is False
+
+        # Update same audit via upsert and ensure reviewed resets
+        updated_id = db.create_submission_audit(
+            submission_id=submission_id,
+            is_cheating=False,
+            explanation="Looks legit",
+            model="test-model-v2",
+        )
+        assert updated_id == audit_id
+
+        audits = db.get_audits(is_cheating=False, reviewed=False)
+        assert len(audits) == 1
+        assert audits[0]["submission_id"] == submission_id
+        assert audits[0]["explanation"] == "Looks legit"
+        assert audits[0]["model"] == "test-model-v2"
+
+        # Mark as reviewed and verify filtering
+        assert db.mark_audit_reviewed(submission_id) is True
+        assert db.get_audits(reviewed=True)[0]["submission_id"] == submission_id
+        assert db.get_audits(reviewed=False) == []
+
+        # Nonexistent row
+        assert db.mark_audit_reviewed(999999) is False
+
+
+def test_get_audits_pagination(database, submit_leaderboard):
+    """Test get_audits limit and sort order."""
+    with database as db:
+        submission_ids = []
+        for i in range(3):
+            submission_id = db.create_submission(
+                "submit-leaderboard",
+                f"audit_{i}.py",
+                5,
+                f"print({i})",
+                datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=i),
+                user_name="user5",
+            )
+            db.mark_submission_done(submission_id)
+            db.create_submission_audit(
+                submission_id=submission_id,
+                is_cheating=(i % 2 == 0),
+                explanation=f"explanation {i}",
+                model="test-model",
+            )
+            submission_ids.append(submission_id)
+
+        audits = db.get_audits(limit=2)
+        assert len(audits) == 2
+        # Newest first
+        assert audits[0]["submission_id"] == submission_ids[-1]
