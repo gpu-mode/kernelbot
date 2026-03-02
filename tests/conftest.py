@@ -48,7 +48,7 @@ def docker_compose(project_root: Path):
 
 def _nuke_contents(db):
     db.cursor.execute(
-        "TRUNCATE leaderboard.code_files, leaderboard.submission, leaderboard.runs, "
+        "TRUNCATE leaderboard.code_files, leaderboard.submission, leaderboard.submission_audit, leaderboard.runs, "
         "leaderboard.leaderboard, leaderboard.user_info, leaderboard.templates, "
         "leaderboard.gpu_type RESTART IDENTITY CASCADE"
     )

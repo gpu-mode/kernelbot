@@ -425,3 +425,68 @@ class TestAdminUpdateProblems:
             assert data["status"] == "ok"
             assert len(data["errors"]) == 1
             assert data["errors"][0]["name"] == "bad-problem"
+
+
+class TestAdminAudits:
+    """Test admin audit endpoints."""
+
+    def test_get_audits_requires_auth(self, test_client):
+        """GET /admin/audits requires authorization."""
+        response = test_client.get("/admin/audits")
+        assert response.status_code == 401
+
+    def test_get_audits_success(self, test_client, mock_backend):
+        """GET /admin/audits returns audits from DB."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.get_audits = MagicMock(
+            return_value=[{"submission_id": 123, "is_cheating": False, "reviewed": False}]
+        )
+
+        response = test_client.get(
+            "/admin/audits?is_cheating=false&reviewed=false&limit=25",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert len(data["audits"]) == 1
+        assert data["audits"][0]["submission_id"] == 123
+        mock_backend.db.get_audits.assert_called_once_with(
+            is_cheating=False, reviewed=False, limit=25
+        )
+
+    def test_get_audits_validates_limit(self, test_client):
+        """GET /admin/audits validates limit query parameter."""
+        response = test_client.get(
+            "/admin/audits?limit=0",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 422
+
+    def test_mark_audit_reviewed_success(self, test_client, mock_backend):
+        """POST /admin/audits/{submission_id}/reviewed marks reviewed."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.mark_audit_reviewed = MagicMock(return_value=True)
+
+        response = test_client.post(
+            "/admin/audits/123/reviewed",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "submission_id": 123}
+        mock_backend.db.mark_audit_reviewed.assert_called_once_with(123)
+
+    def test_mark_audit_reviewed_not_found(self, test_client, mock_backend):
+        """POST /admin/audits/{submission_id}/reviewed returns 404 when missing."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.mark_audit_reviewed = MagicMock(return_value=False)
+
+        response = test_client.post(
+            "/admin/audits/999/reviewed",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Audit not found for this submission"

@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock
@@ -374,3 +375,47 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
             "submission_time": ANY,
             "user_id": "5",
         }
+
+
+@pytest.mark.asyncio
+async def test_submit_full_triggers_audit_task(bot: backend.KernelBackend, task_directory, monkeypatch):
+    _submit_leaderboard(bot.db, task_directory)
+    with bot.db as db:
+        task = db.get_leaderboard("submit-leaderboard")["task"]
+
+    _mock_launcher(bot, {"leaderboard": create_eval_result("benchmark")})
+    reporter = MockMultReporter()
+
+    from libkernelbot.submission import ProcessedSubmissionRequest
+
+    req = ProcessedSubmissionRequest(
+        code="pass",
+        file_name="submission.py",
+        user_id=5,
+        user_name="user",
+        gpus=["A100"],
+        leaderboard="submit-leaderboard",
+        task=task,
+        secret_seed=42,
+        task_gpus=["A100", "H100"],
+    )
+
+    created_tasks = []
+
+    def _fake_create_task(coro):
+        created_tasks.append(coro)
+
+        class _DummyTask:
+            pass
+
+        return _DummyTask()
+
+    monkeypatch.setattr(asyncio, "create_task", _fake_create_task)
+    maybe_audit = AsyncMock()
+    monkeypatch.setattr(bot, "_maybe_audit", maybe_audit)
+
+    sub_id, _ = await bot.submit_full(req, mode=consts.SubmissionMode.LEADERBOARD, reporter=reporter)
+
+    assert len(created_tasks) == 1
+    await created_tasks[0]
+    maybe_audit.assert_awaited_once_with(sub_id)
