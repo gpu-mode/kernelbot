@@ -1,6 +1,6 @@
 FROM ghcr.io/actions/actions-runner:latest
 
-# Install CUDA 13.1 toolkit
+# Install CUDA 13.0 toolkit (matches PyTorch cu130 wheels)
 RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -12,11 +12,11 @@ RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
     && rm cuda-keyring_1.1-1_all.deb \
     && sudo apt-get update \
     && sudo apt-get install -y --no-install-recommends \
-    cuda-toolkit-13-1 \
+    cuda-toolkit-13-0 \
     && sudo rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/usr/local/cuda-13.1/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/local/cuda-13.1/lib64:${LD_LIBRARY_PATH}"
+ENV PATH="/usr/local/cuda-13.0/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda-13.0/lib64:${LD_LIBRARY_PATH}"
 
 # Install Python 3.13
 RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
@@ -47,7 +47,7 @@ RUN sudo uv pip install --system \
 
 # PyTorch (CUDA 13.0 wheels)
 RUN sudo uv pip install --system \
-    torch==2.10.0 \
+    torch \
     --index-url https://download.pytorch.org/whl/cu130
 
 # Helion
