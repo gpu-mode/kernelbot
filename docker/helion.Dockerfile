@@ -57,7 +57,8 @@ RUN sudo uv pip install --system helion
 RUN sudo uv pip install --system flash-linear-attention
 
 # Causal Conv1d (Dao-AILab reference for benchmarking)
-RUN sudo uv pip install --system causal-conv1d
+# --no-build-isolation: use system torch (cu130) instead of build env pulling cu128 from PyPI
+RUN sudo uv pip install --system --no-build-isolation causal-conv1d
 
 # # tinygrad
 # RUN sudo uv pip install --system tinygrad~=0.10
