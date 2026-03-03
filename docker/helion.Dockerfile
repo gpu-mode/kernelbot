@@ -53,6 +53,12 @@ RUN sudo uv pip install --system \
 # Helion
 RUN sudo uv pip install --system helion
 
+# Flash Linear Attention
+RUN sudo uv pip install --system flash-linear-attention
+
+# Causal Conv1d (Dao-AILab reference for benchmarking)
+RUN sudo uv pip install --system causal-conv1d
+
 # # tinygrad
 # RUN sudo uv pip install --system tinygrad~=0.10
 
