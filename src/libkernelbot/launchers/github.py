@@ -93,12 +93,13 @@ class GitHubLauncher(Launcher):
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
     ) -> FullResult:
         gpu_vendor = None
-        if gpu_type.value in ["MI300", "MI250", "MI300x8"]:
+        if gpu_type.value in ["MI300", "MI250", "MI300x8", "MI355X"]:
             selected_workflow = "amd_workflow.yml"
             runner_name = {
                 "MI300": "amdgpu-mi300-x86-64",
                 "MI250": "amdgpu-mi250-x86-64",
                 "MI300x8": "amdgpu-mi300-8-x86-64",
+                "MI355X": "mia1-p02-g29",
             }[gpu_type.value]
             gpu_vendor = "AMD"
             requirements = AMD_REQUIREMENTS
