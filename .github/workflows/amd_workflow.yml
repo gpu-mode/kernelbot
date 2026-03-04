@@ -26,7 +26,7 @@ jobs:
   run:
     runs-on: ${{ github.event.inputs.runner }}
     container:
-      image: ghcr.io/gpu-mode/amd-runner:main
+      image: ghcr.io/gpu-mode/amd-runner:mi355
       options: --user root --device=/dev/kfd --device=/dev/dri --group-add video --shm-size 64G
     strategy:
       fail-fast: false
