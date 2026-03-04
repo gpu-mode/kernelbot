@@ -39,8 +39,6 @@ RUN sudo apt update -y \
 
 ENV ROCM_PATH=/opt/rocm
 
-RUN sudo pip install --break-system-packages --upgrade pip
-
 RUN sudo pip install --break-system-packages --no-cache-dir torch==2.10.0+rocm7.1 --index-url https://download.pytorch.org/whl/rocm7.1
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
