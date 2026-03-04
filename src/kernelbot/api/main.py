@@ -686,6 +686,17 @@ async def get_allowed_users(
     return {"leaderboard": leaderboard_name, "allowed_users": leaderboard.get("allowed_users")}
 
 
+def _normalize_usernames_payload(payload: dict) -> list[str]:
+    if "usernames" not in payload:
+        raise HTTPException(status_code=400, detail="Missing required field: usernames")
+    usernames = payload["usernames"]
+    if not isinstance(usernames, list):
+        raise HTTPException(status_code=400, detail="usernames must be a list of strings")
+    if not all(isinstance(u, str) for u in usernames):
+        raise HTTPException(status_code=400, detail="usernames must be a list of strings")
+    return sorted({u.strip() for u in usernames if u.strip()})
+
+
 @app.put("/admin/leaderboards/{leaderboard_name}/allowed-users")
 async def set_allowed_users(
     leaderboard_name: str,
@@ -699,10 +710,41 @@ async def set_allowed_users(
     usernames = payload["usernames"]
     if usernames is not None and not isinstance(usernames, list):
         raise HTTPException(status_code=400, detail="usernames must be a list of strings or null")
+    if isinstance(usernames, list) and not all(isinstance(u, str) for u in usernames):
+        raise HTTPException(status_code=400, detail="usernames must be a list of strings or null")
+
+    if isinstance(usernames, list):
+        usernames = sorted({u.strip() for u in usernames if u.strip()})
 
     with db_context as db:
         db.set_allowed_users(leaderboard_name, usernames)
     return {"status": "ok", "leaderboard": leaderboard_name, "allowed_users": usernames}
+
+
+@app.post("/admin/leaderboards/{leaderboard_name}/allowed-users")
+async def append_allowed_users(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    usernames = _normalize_usernames_payload(payload)
+    with db_context as db:
+        updated = db.append_allowed_users(leaderboard_name, usernames)
+    return {"status": "ok", "leaderboard": leaderboard_name, "allowed_users": updated}
+
+
+@app.delete("/admin/leaderboards/{leaderboard_name}/allowed-users")
+async def delete_allowed_users(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    usernames = _normalize_usernames_payload(payload)
+    with db_context as db:
+        updated = db.remove_allowed_users(leaderboard_name, usernames)
+    return {"status": "ok", "leaderboard": leaderboard_name, "allowed_users": updated}
 
 
 @app.get("/leaderboards")

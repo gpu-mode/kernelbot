@@ -228,7 +228,7 @@ async def to_submit_info(
             leaderboard_item = db.get_leaderboard(leaderboard_name)
 
             allowed = leaderboard_item.get("allowed_users")
-            if allowed and user_name not in allowed:
+            if allowed is not None and user_name not in allowed:
                 raise HTTPException(
                     status_code=403,
                     detail="You are not authorized to submit to this leaderboard.",

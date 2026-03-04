@@ -798,3 +798,37 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+def test_allowed_users_set_append_remove(database, submit_leaderboard):
+    with database as db:
+        # Default is open (NULL)
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb.get("allowed_users") is None
+
+        # Set explicit whitelist
+        db.set_allowed_users("submit-leaderboard", ["alice"])
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb["allowed_users"] == ["alice"]
+
+        # Append deduplicates and preserves sorted output
+        updated = db.append_allowed_users("submit-leaderboard", ["bob", "alice"])
+        assert updated == ["alice", "bob"]
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb["allowed_users"] == ["alice", "bob"]
+
+        # Remove a user
+        updated = db.remove_allowed_users("submit-leaderboard", ["alice"])
+        assert updated == ["bob"]
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb["allowed_users"] == ["bob"]
+
+        # Removing all users leaves an explicit empty whitelist (locked down)
+        updated = db.remove_allowed_users("submit-leaderboard", ["bob"])
+        assert updated == []
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb["allowed_users"] == []
+
+        # Setting NULL re-opens the leaderboard
+        db.set_allowed_users("submit-leaderboard", None)
+        lb = db.get_leaderboard("submit-leaderboard")
+        assert lb.get("allowed_users") is None

@@ -364,6 +364,97 @@ class TestAdminUpdateProblems:
             call_kwargs = mock_sync.call_args[1]
             assert call_kwargs["force"] is True
 
+
+class TestAdminAllowedUsers:
+    """Test admin allowed-users endpoints."""
+
+    def test_get_allowed_users(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.get_leaderboard = MagicMock(
+            return_value={"name": "test-leaderboard", "allowed_users": ["alice"]}
+        )
+
+        response = test_client.get(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "leaderboard": "test-leaderboard",
+            "allowed_users": ["alice"],
+        }
+
+    def test_set_allowed_users(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.set_allowed_users = MagicMock()
+
+        response = test_client.put(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={"usernames": ["bob", "alice", "bob"]},
+        )
+        assert response.status_code == 200
+        mock_backend.db.set_allowed_users.assert_called_once_with(
+            "test-leaderboard", ["alice", "bob"]
+        )
+
+    def test_append_allowed_users(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.append_allowed_users = MagicMock(return_value=["alice", "bob"])
+
+        response = test_client.post(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={"usernames": ["bob", "alice"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["allowed_users"] == ["alice", "bob"]
+        mock_backend.db.append_allowed_users.assert_called_once_with(
+            "test-leaderboard", ["alice", "bob"]
+        )
+
+    def test_delete_allowed_users(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.remove_allowed_users = MagicMock(return_value=["bob"])
+
+        response = test_client.request(
+            "DELETE",
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={"usernames": ["alice"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["allowed_users"] == ["bob"]
+        mock_backend.db.remove_allowed_users.assert_called_once_with(
+            "test-leaderboard", ["alice"]
+        )
+
+    def test_allowed_users_validation_errors(self, test_client, mock_backend):
+        response = test_client.post(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={},
+        )
+        assert response.status_code == 400
+
+        response = test_client.post(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={"usernames": "alice"},
+        )
+        assert response.status_code == 400
+
+        response = test_client.post(
+            "/admin/leaderboards/test-leaderboard/allowed-users",
+            headers={"Authorization": "Bearer test_token"},
+            json={"usernames": ["alice", 123]},
+        )
+        assert response.status_code == 400
+
     def test_update_problems_with_custom_repo_and_branch(self, test_client, mock_backend):
         """POST /admin/update-problems with custom repository and branch."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)

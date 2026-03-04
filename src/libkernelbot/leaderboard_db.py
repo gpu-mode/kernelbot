@@ -629,6 +629,57 @@ class LeaderboardDB:
             raise LeaderboardDoesNotExist(leaderboard_name)
         self.connection.commit()
 
+    def append_allowed_users(self, leaderboard_name: str, usernames: List[str]) -> List[str]:
+        self.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET allowed_users = CASE
+                WHEN allowed_users IS NULL THEN %s
+                ELSE (
+                    SELECT ARRAY(
+                        SELECT DISTINCT elem
+                        FROM unnest(allowed_users || %s::text[]) AS elem
+                        ORDER BY elem
+                    )
+                )
+            END
+            WHERE name = %s
+            RETURNING allowed_users
+            """,
+            (usernames, usernames, leaderboard_name),
+        )
+        res = self.cursor.fetchone()
+        if res is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        self.connection.commit()
+        return list(res[0]) if res[0] is not None else []
+
+    def remove_allowed_users(self, leaderboard_name: str, usernames: List[str]) -> List[str]:
+        self.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET allowed_users = CASE
+                WHEN allowed_users IS NULL THEN NULL
+                ELSE (
+                    SELECT ARRAY(
+                        SELECT elem
+                        FROM unnest(allowed_users) AS elem
+                        WHERE NOT (elem = ANY(%s::text[]))
+                        ORDER BY elem
+                    )
+                )
+            END
+            WHERE name = %s
+            RETURNING allowed_users
+            """,
+            (usernames, leaderboard_name),
+        )
+        res = self.cursor.fetchone()
+        if res is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        self.connection.commit()
+        return list(res[0]) if res[0] is not None else None
+
     def get_leaderboard_submissions(
         self,
         leaderboard_name: str,
