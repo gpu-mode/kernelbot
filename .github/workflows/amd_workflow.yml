@@ -48,7 +48,7 @@ jobs:
     - name: Install kernelbot
       shell: bash
       run: |
-        pip install -e .
+        pip install --break-system-packages -e .
 
     - name: Run script
       shell: bash
