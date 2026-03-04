@@ -25,6 +25,9 @@ run-name: 'AMD Job - ${{ github.event.inputs.run_id }}'
 jobs:
   run:
     runs-on: ${{ github.event.inputs.runner }}
+    container:
+      image: ghcr.io/gpu-mode/amd-runner:main
+      options: --device=/dev/kfd --device=/dev/dri --group-add video --shm-size 64G
     strategy:
       fail-fast: false
     timeout-minutes: 20

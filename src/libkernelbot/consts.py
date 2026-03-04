@@ -155,6 +155,7 @@ triton
 AMD_REQUIREMENTS = """
 --index-url https://download.pytorch.org/whl/rocm6.2.4
 torch
+numpy
 """
 
 # A buffer for timeouts to account for github setup time
