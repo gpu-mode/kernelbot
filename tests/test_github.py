@@ -83,6 +83,7 @@ def github_config():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="NVIDIA B200 runner is no longer available")
 @pytest.mark.parametrize("gpu_type", [GitHubGPU.NVIDIA])
 async def test_github_launcher_python_script(project_root: Path, github_config: GitHubConfig, gpu_type: GitHubGPU):
     """
@@ -155,6 +156,7 @@ async def test_github_launcher_python_script(project_root: Path, github_config: 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="NVIDIA B200 runner is no longer available")
 async def test_github_launcher_failing_script(project_root: Path, github_config: GitHubConfig):
     """
     Test GitHubLauncher with a script designed to fail.
