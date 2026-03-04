@@ -127,6 +127,22 @@ class LeaderboardSubmitCog(app_commands.Group):
         )
         req = prepare_submission(req, self.bot.backend)
 
+        # Check if leaderboard has an allowlist; if so, require a matching Discord role
+        with self.bot.leaderboard_db as db:
+            lb_item = db.get_leaderboard(req.leaderboard)
+        allowed_users = lb_item.get("allowed_users")
+        if allowed_users:
+            # Derive expected role name from leaderboard name prefix (e.g. "helion-foo" -> "helion")
+            role_name = req.leaderboard.split("-")[0] if "-" in req.leaderboard else req.leaderboard
+            member_roles = [r.name.lower() for r in interaction.user.roles]
+            if role_name.lower() not in member_roles:
+                await send_discord_message(
+                    interaction,
+                    f"You need the `{role_name}` role to submit to this leaderboard.",
+                    ephemeral=True,
+                )
+                return -1
+
         if req.gpus is None:
             view = await self.select_gpu_view(interaction, leaderboard_name, req.task_gpus)
             req.gpus = view.selected_gpus

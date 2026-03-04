@@ -588,7 +588,7 @@ class LeaderboardDB:
     def get_leaderboard(self, leaderboard_name: str) -> "LeaderboardItem":
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description
+            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description, allowed_users
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -599,7 +599,7 @@ class LeaderboardDB:
 
         if res:
             task = LeaderboardTask.from_dict(res[3])
-            return LeaderboardItem(
+            item = LeaderboardItem(
                 id=res[0],
                 name=res[1],
                 deadline=res[2],
@@ -610,8 +610,24 @@ class LeaderboardDB:
                 gpu_types=self.get_leaderboard_gpu_types(res[1]),
                 description=res[7],
             )
+            if res[8] is not None:
+                item["allowed_users"] = list(res[8])
+            return item
         else:
             raise LeaderboardDoesNotExist(leaderboard_name)
+
+    def set_allowed_users(self, leaderboard_name: str, usernames: Optional[List[str]]) -> None:
+        self.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET allowed_users = %s
+            WHERE name = %s
+            """,
+            (usernames, leaderboard_name),
+        )
+        if self.cursor.rowcount == 0:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        self.connection.commit()
 
     def get_leaderboard_submissions(
         self,

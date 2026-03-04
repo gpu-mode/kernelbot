@@ -226,6 +226,14 @@ async def to_submit_info(
     try:
         with db_context as db:
             leaderboard_item = db.get_leaderboard(leaderboard_name)
+
+            allowed = leaderboard_item.get("allowed_users")
+            if allowed and user_name not in allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You are not authorized to submit to this leaderboard.",
+                )
+
             gpus = leaderboard_item.get("gpu_types", [])
             if gpu_type not in gpus:
                 supported_gpus = ", ".join(gpus) if gpus else "None"

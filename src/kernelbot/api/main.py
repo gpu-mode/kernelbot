@@ -675,6 +675,36 @@ async def admin_update_problems(
     }
 
 
+@app.get("/admin/leaderboards/{leaderboard_name}/allowed-users")
+async def get_allowed_users(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        leaderboard = db.get_leaderboard(leaderboard_name)
+    return {"leaderboard": leaderboard_name, "allowed_users": leaderboard.get("allowed_users")}
+
+
+@app.put("/admin/leaderboards/{leaderboard_name}/allowed-users")
+async def set_allowed_users(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    if "usernames" not in payload:
+        raise HTTPException(status_code=400, detail="Missing required field: usernames")
+
+    usernames = payload["usernames"]
+    if usernames is not None and not isinstance(usernames, list):
+        raise HTTPException(status_code=400, detail="usernames must be a list of strings or null")
+
+    with db_context as db:
+        db.set_allowed_users(leaderboard_name, usernames)
+    return {"status": "ok", "leaderboard": leaderboard_name, "allowed_users": usernames}
+
+
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
     """An endpoint that returns all leaderboards.
