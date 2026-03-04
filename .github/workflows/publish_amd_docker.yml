@@ -16,6 +16,8 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Clean workspace
+        run: sudo rm -rf "$GITHUB_WORKSPACE"/*
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Log in to the Container registry
