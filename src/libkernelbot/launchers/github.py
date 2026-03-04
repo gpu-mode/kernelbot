@@ -53,7 +53,8 @@ def get_timeout(config: dict) -> int:
         SubmissionMode.LEADERBOARD.value: config.get("ranked_timeout"),
     }
     seconds = sec_map.get(mode) or DEFAULT_GITHUB_TIMEOUT_MINUTES * 60
-    return math.ceil(seconds / 60)
+    minutes = math.ceil(seconds / 60)
+    return max(minutes, DEFAULT_GITHUB_TIMEOUT_MINUTES)
 
 
 class GitHubLauncher(Launcher):
