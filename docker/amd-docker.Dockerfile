@@ -33,8 +33,8 @@ RUN sudo groupadd -g 109 render
 RUN sudo apt update -y \
     && sudo apt install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" \
     && sudo usermod -a -G render,video runner \
-    && wget https://repo.radeon.com/amdgpu-install/7.2/ubuntu/jammy/amdgpu-install_7.2.70200-1_all.deb \
-    && sudo apt install -y ./amdgpu-install_7.2.70200-1_all.deb \
+    && wget https://repo.radeon.com/amdgpu-install/7.1/ubuntu/jammy/amdgpu-install_7.1.70100-1_all.deb \
+    && sudo apt install -y ./amdgpu-install_7.1.70100-1_all.deb \
     && sudo apt update -y \
     && sudo apt install -y rocm
 
@@ -42,7 +42,7 @@ ENV ROCM_PATH=/opt/rocm
 
 RUN sudo pip install --upgrade pip
 
-RUN sudo pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/nightly/rocm7.2
+RUN sudo pip install --no-cache-dir torch==2.10.0+rocm7.1 --index-url https://download.pytorch.org/whl/rocm7.1
 
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
