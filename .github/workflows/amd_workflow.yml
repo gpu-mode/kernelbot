@@ -13,7 +13,7 @@ on:
       runner:
         description: 'AMD runner to run workflow on'
         required: true
-        default: "amdgpu-mi300-x86-64"
+        default: "mia1-p02-g29"
         type: string
       requirements:
         description: 'Contents for a requirements.txt file'
@@ -45,34 +45,14 @@ jobs:
         # Now write to file (won't be logged since it's masked)
         echo "$PAYLOAD" > payload.json
 
-    - name: Set venv directory based on runner
-      run: |
-        if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
-          echo "VENV_DIR=/groups/aig_sharks/pytorch_venv" >> $GITHUB_ENV
-        fi
-
-    - name: Setup Virtual Environment and Install Dependencies
+    - name: Install kernelbot
       shell: bash
       run: |
-        if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
-          python -m venv ${VENV_DIR}
-          source ${VENV_DIR}/bin/activate
-        fi
-        pip install --upgrade pip
-        if [[ -n "${{ github.event.inputs.requirements }}" ]]; then
-          cat > "requirements.txt" <<'EOL'
-          ${{ github.event.inputs.requirements }}
-        EOL
-        pip install -r "requirements.txt"
-        fi
         pip install -e .
 
     - name: Run script
       shell: bash
       run: |
-        if [[ "${{ github.event.inputs.runner }}" == "amdgpu-mi250-x86-64" ]]; then
-          source ${VENV_DIR}/bin/activate
-        fi
         python3 src/runners/github-runner.py
 
     - name: Upload training artifacts
