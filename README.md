@@ -7,7 +7,7 @@
 | src/libkernelbot/\_\_init\_\_.py                    |        0 |        0 |    100% |           |
 | src/libkernelbot/backend.py                         |       82 |        9 |     89% |38-39, 62, 203-205, 235-237 |
 | src/libkernelbot/background\_submission\_manager.py |      160 |       31 |     81% |36, 38-40, 42, 45, 47, 176-177, 203-206, 224-229, 246-271 |
-| src/libkernelbot/consts.py                          |       65 |        1 |     98% |        48 |
+| src/libkernelbot/consts.py                          |       66 |        1 |     98% |        49 |
 | src/libkernelbot/db\_types.py                       |       14 |        1 |     93% |         7 |
 | src/libkernelbot/leaderboard\_db.py                 |      333 |       50 |     85% |65, 99, 373-383, 396-414, 719-721, 735, 824-849, 1090-1114, 1126-1165, 1172-1193, 1200-1207, 1223-1232 |
 | src/libkernelbot/problem\_sync.py                   |      128 |      105 |     18% |72-101, 121-206, 234-300 |
@@ -15,7 +15,7 @@
 | src/libkernelbot/submission.py                      |      121 |        1 |     99% |        18 |
 | src/libkernelbot/task.py                            |      112 |        6 |     95% |68, 121, 126-128, 165 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
-| **TOTAL**                                           | **1388** |  **224** | **84%** |           |
+| **TOTAL**                                           | **1389** |  **224** | **84%** |           |
 
 
 ## Setup coverage badge
