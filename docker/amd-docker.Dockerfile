@@ -55,8 +55,6 @@ RUN sudo pip install --break-system-packages \
     numpy \
     packaging \
     wheel \
-    tinygrad
 
-RUN sudo pip install --break-system-packages git+https://github.com/ROCm/iris.git
 
 ENV LD_LIBRARY_PATH="/opt/rocm/lib"
