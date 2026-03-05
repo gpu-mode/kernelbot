@@ -1,0 +1,41 @@
+name: Test ARC GPU Isolation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gpu-test:
+    runs-on: arc-runner-set
+    strategy:
+      fail-fast: false
+      matrix:
+        job_id: [1, 2, 3, 4, 5, 6, 7, 8]
+    timeout-minutes: 5
+    steps:
+      - name: Report resources
+        run: |
+          echo "=== Job ${{ matrix.job_id }} ==="
+          echo ""
+          echo "--- GPU ---"
+          rocm-smi --showid 2>/dev/null || echo "rocm-smi not available"
+          echo ""
+          echo "--- ROCR_VISIBLE_DEVICES ---"
+          echo "ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-not set}"
+          echo "HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-not set}"
+          echo "GPU_DEVICE_ORDINAL=${GPU_DEVICE_ORDINAL:-not set}"
+          echo ""
+          echo "--- GPU device files ---"
+          ls -la /dev/dri/ 2>/dev/null || echo "no /dev/dri"
+          ls -la /dev/kfd 2>/dev/null || echo "no /dev/kfd"
+          echo ""
+          echo "--- CPU ---"
+          echo "CPU cores available: $(nproc)"
+          echo "CPU quota: $(cat /sys/fs/cgroup/cpu.max 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null || echo 'N/A')"
+          lscpu | grep -E "^CPU\(s\)|Thread|Core|Socket" || true
+          echo ""
+          echo "--- Memory ---"
+          echo "Memory limit: $(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo 'N/A')"
+          free -h
+          echo ""
+          echo "--- Hostname ---"
+          hostname
