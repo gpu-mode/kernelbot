@@ -94,6 +94,7 @@ class GitHubLauncher(Launcher):
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
     ) -> FullResult:
         gpu_vendor = None
+        runner_name = None
         if gpu_type.value in ["MI300", "MI250", "MI300x8", "MI355X"]:
             selected_workflow = "amd_workflow.yml"
             runner_name = {
@@ -104,8 +105,12 @@ class GitHubLauncher(Launcher):
             }[gpu_type.value]
             gpu_vendor = "AMD"
             requirements = AMD_REQUIREMENTS
-        elif gpu_type.value == "NVIDIA":
+        elif gpu_type.value in ["NVIDIA", "B200_Nebius"]:
             selected_workflow = "nvidia_workflow.yml"
+            runner_name = {
+                "NVIDIA": "nvidia-docker-b200-8-x86-64",
+                "B200_Nebius": "nebius-b200-helion-runners",
+            }[gpu_type.value]
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
         else:
@@ -129,7 +134,7 @@ class GitHubLauncher(Launcher):
         inputs = {"payload": payload}
         if lang == "py":
             inputs["requirements"] = requirements
-            if gpu_vendor == "AMD":
+            if runner_name:
                 inputs["runner"] = runner_name
 
         if not await run.trigger(inputs):

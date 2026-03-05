@@ -18,6 +18,7 @@ class SchedulerType(Enum):
 
 class GitHubGPU(Enum):
     NVIDIA = "NVIDIA"
+    B200_Nebius = "B200_Nebius"
     MI300 = "MI300"
     MI250 = "MI250"
     MI300x8 = "MI300x8"
@@ -119,6 +120,7 @@ GPU_TO_SM = {
     "H100": "90a",
     "B200": "100",
     "NVIDIA": None,
+    "B200_Nebius": "100",
     "MI300": None,
     "MI300x8": None,
     "MI250": None,
