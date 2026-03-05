@@ -2,6 +2,9 @@ FROM ghcr.io/actions/actions-runner:latest
 
 ENV CXX=clang++
 
+ARG GPU_ARCH="gfx950"
+ENV GPU_ARCH_LIST=$GPU_ARCH
+
 RUN sudo apt-get update -y \
     && sudo apt-get install -y --no-install-recommends \
     software-properties-common \
@@ -41,11 +44,13 @@ ENV ROCM_PATH=/opt/rocm
 
 RUN sudo pip install --break-system-packages --no-cache-dir torch==2.10.0+rocm7.1 --index-url https://download.pytorch.org/whl/rocm7.1
 
+ARG PREBUILD_KERNELS=1
+
 RUN git clone --recursive https://github.com/ROCm/aiter.git \
     && cd aiter \
     && git checkout f3be04a12a0cfd6b5e2c7a94edc774f1bc24460d \
     && sudo pip install --break-system-packages -r requirements.txt \
-    && sudo python3 setup.py develop
+    && sudo MAX_JOBS=64 PREBUILD_KERNELS=$PREBUILD_KERNELS GPU_ARCHS=$GPU_ARCH_LIST python3 setup.py develop
 
 RUN sudo mkdir -p /home/runner/aiter/aiter/jit/build \
     && sudo chown -R runner:runner /home/runner/aiter/aiter/jit/build
