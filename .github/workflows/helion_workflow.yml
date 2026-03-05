@@ -1,0 +1,70 @@
+name: Helion Job
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Unique identifier for this run'
+        required: true
+        type: string
+      payload:
+        description: 'Content of the user submission, as json string'
+        required: true
+        type: string
+      runner:
+        description: 'Helion runner to run workflow on'
+        required: true
+        default: "nebius-b200-helion-runners"
+        type: string
+      requirements:
+        description: 'Contents for a requirements.txt file'
+        required: false
+        type: string
+
+run-name: 'Helion Job - ${{ github.event.inputs.run_id }}'
+
+jobs:
+  run:
+    runs-on: ${{ github.event.inputs.runner }}
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Create input files
+      shell: bash
+      run: |
+        # Extract the payload content without printing it
+        sudo apt-get update && sudo apt-get install -y jq
+        PAYLOAD=$(jq -r '.inputs.payload' $GITHUB_EVENT_PATH)
+
+        # Apply mask to the extracted content
+        echo "::add-mask::$PAYLOAD"
+
+        # Now write to file (won't be logged since it's masked)
+        echo "$PAYLOAD" > payload.json
+
+    - name: Setup Virtual Environment and Install Dependencies
+      shell: bash
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install -r "requirements-dev.txt"
+        python3 -m pip install -e .
+
+    - name: Run script
+      shell: bash
+      run: |
+        python3 src/runners/github-runner.py
+
+    - name: Upload training artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: run-result
+        path: result.json
+
+    - name: Upload profiling artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: profile-data
+        path: profile_data/*
+        retention-days: 1

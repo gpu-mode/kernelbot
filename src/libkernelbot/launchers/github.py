@@ -105,12 +105,14 @@ class GitHubLauncher(Launcher):
             }[gpu_type.value]
             gpu_vendor = "AMD"
             requirements = AMD_REQUIREMENTS
-        elif gpu_type.value in ["NVIDIA", "B200_Nebius"]:
+        elif gpu_type.value == "B200_Nebius":
+            selected_workflow = "helion_workflow.yml"
+            runner_name = "nebius-b200-helion-runners"
+            gpu_vendor = "NVIDIA"
+            requirements = NVIDIA_REQUIREMENTS
+        elif gpu_type.value == "NVIDIA":
             selected_workflow = "nvidia_workflow.yml"
-            runner_name = {
-                "NVIDIA": "nvidia-docker-b200-8-x86-64",
-                "B200_Nebius": "nebius-b200-helion-runners",
-            }[gpu_type.value]
+            runner_name = "nvidia-docker-b200-8-x86-64"
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
         else:
@@ -307,6 +309,8 @@ class GitHubRun:
             expected_run_name = f"AMD Job - {run_id}"
         elif self.workflow_file == "nvidia_workflow.yml":
             expected_run_name = f"NVIDIA Job - {run_id}"
+        elif self.workflow_file == "helion_workflow.yml":
+            expected_run_name = f"Helion Job - {run_id}"
         else:
             raise ValueError(f"Unknown workflow file: {self.workflow_file}")
 
