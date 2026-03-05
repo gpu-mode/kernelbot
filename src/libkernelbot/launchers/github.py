@@ -100,7 +100,7 @@ class GitHubLauncher(Launcher):
                 "MI300": "amdgpu-mi300-x86-64",
                 "MI250": "amdgpu-mi250-x86-64",
                 "MI300x8": "amdgpu-mi300-8-x86-64",
-                "MI355X": "mia1-p02-g29",
+                "MI355X": "arc-runner-set",
             }[gpu_type.value]
             gpu_vendor = "AMD"
             requirements = AMD_REQUIREMENTS

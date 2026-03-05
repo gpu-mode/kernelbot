@@ -13,7 +13,7 @@ on:
       runner:
         description: 'AMD runner to run workflow on'
         required: true
-        default: "mia1-p02-g29"
+        default: "arc-runner-set"
         type: string
       requirements:
         description: 'Contents for a requirements.txt file'
@@ -25,9 +25,6 @@ run-name: 'AMD Job - ${{ github.event.inputs.run_id }}'
 jobs:
   run:
     runs-on: ${{ github.event.inputs.runner }}
-    container:
-      image: ghcr.io/gpu-mode/amd-runner:mi355
-      options: --user root --device=/dev/kfd --device=/dev/dri --group-add video --shm-size 64G
     strategy:
       fail-fast: false
     timeout-minutes: 20
