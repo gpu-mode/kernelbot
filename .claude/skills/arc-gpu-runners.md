@@ -108,7 +108,7 @@ sudo k3s kubectl logs -n arc-systems -l actions.github.com/scale-set-name=arc-ru
 - **GPU isolation**: The AMD device plugin exposes `amd.com/gpu` as a k8s resource. Each runner pod requests exactly 1 GPU. Kubernetes guarantees no two pods share a GPU — each gets a unique `/dev/dri/renderD*` device.
 - **CPU isolation**: Each pod gets 14 dedicated cores via cgroup limits (`nproc` reports 14 inside the container).
 - **RAM isolation**: Each pod gets a 340Gi memory limit enforced by cgroups. Exceeding it triggers OOM kill.
-- **Autoscaling**: With `minRunners: 0` and `maxRunners: 8`, runners spin up on demand when GitHub queues jobs and are destroyed after completion (ephemeral runners).
+- **Autoscaling**: With `minRunners: 0` and `maxRunners: 40`, runners spin up on demand when GitHub queues jobs and are destroyed after completion (ephemeral runners). The scheduler spreads pods across all 5 nodes.
 
 ## Resource Budget (per MI355X node)
 
@@ -120,7 +120,7 @@ The MI355X node has 126 allocatable CPUs, ~3TB RAM, and 8 GPUs.
 | RAM | 340 Gi |
 | GPU | 1x MI355X |
 
-At max capacity (8 runners): 112 cores, 2720 Gi, 8 GPUs. Remaining resources go to system pods.
+At max capacity (40 runners across 5 nodes): 8 runners per node, each using 14 cores / 340 Gi / 1 GPU.
 
 ## Using in Workflows
 
@@ -148,6 +148,32 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade arc-runner-set \
   --version 0.10.1
 ```
 
+## Adding New Nodes
+
+ARC is cluster-wide — no per-node setup is needed. When a new node joins the k3s cluster:
+
+1. The AMD GPU device plugin (DaemonSet) auto-deploys to the new node
+2. The k8s scheduler can immediately place runner pods on it
+3. No changes needed to workflows or the GitHub launcher
+
+The only thing to update is `maxRunners` to reflect the new total GPU count:
+
+```bash
+# Example: 3 nodes × 8 GPUs = 24 max runners
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade arc-runner-set \
+  --namespace arc-runners \
+  --set maxRunners=24 \
+  --reuse-values \
+  oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+  --version 0.10.1
+```
+
+Verify the new node has GPUs registered:
+
+```bash
+sudo k3s kubectl describe node <new-node-name> | grep amd.com/gpu
+```
+
 ## Troubleshooting
 
 - **403 on token**: PAT needs `repo` scope or fine-grained "Administration" read/write permission
@@ -157,7 +183,7 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade arc-runner-set \
 
 ## Current Cluster Info
 
-- **Node**: mia1-p02-g29 (+ 4 more nodes in the k3s cluster)
+- **Nodes**: mia1-p02-g29, mia1-p02-g52, mia1-p02-g53, mia1-p02-g55, mia1-p02-g56 (5-node k3s cluster)
 - **GPUs**: 8x AMD Instinct MI355X per node
 - **CPU**: AMD EPYC 9575F 64-Core (128 threads, 2 sockets)
 - **RAM**: ~3 TB per node
