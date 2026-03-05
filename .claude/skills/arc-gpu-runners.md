@@ -187,4 +187,3 @@ sudo k3s kubectl describe node <new-node-name> | grep amd.com/gpu
 - **GPUs**: 8x AMD Instinct MI355X per node
 - **CPU**: AMD EPYC 9575F 64-Core (128 threads, 2 sockets)
 - **RAM**: ~3 TB per node
-- **SSH**: `ssh -J marksaroufim@meta.com@64.139.223.122 marksaroufim@meta.com@mia1-p02-g29`
