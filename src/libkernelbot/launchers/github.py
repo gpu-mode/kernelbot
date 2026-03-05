@@ -107,12 +107,12 @@ class GitHubLauncher(Launcher):
             requirements = AMD_REQUIREMENTS
         elif gpu_type.value == "B200_Nebius":
             selected_workflow = "helion_workflow.yml"
-            runner_name = "nebius-b200-helion-runners"
+            runner_name = None
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
         elif gpu_type.value == "NVIDIA":
             selected_workflow = "nvidia_workflow.yml"
-            runner_name = "nvidia-docker-b200-8-x86-64"
+            runner_name = None
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
         else:

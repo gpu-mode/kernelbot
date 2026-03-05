@@ -10,11 +10,6 @@ on:
         description: 'Content of the user submission, as json string'
         required: true
         type: string
-      runner:
-        description: 'NVIDIA runner to run workflow on'
-        required: true
-        default: "nvidia-docker-b200-8-x86-64"
-        type: string
       requirements:
         description: 'Contents for a requirements.txt file'
         required: false
@@ -24,8 +19,8 @@ run-name: 'NVIDIA Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
   run:
-    runs-on: ${{ github.event.inputs.runner }}
-    timeout-minutes: 20
+    runs-on: [nvidia-docker-b200-8-x86-64]
+    timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
 

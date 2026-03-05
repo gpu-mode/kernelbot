@@ -10,11 +10,6 @@ on:
         description: 'Content of the user submission, as json string'
         required: true
         type: string
-      runner:
-        description: 'Helion runner to run workflow on'
-        required: true
-        default: "nebius-b200-helion-runners"
-        type: string
       requirements:
         description: 'Contents for a requirements.txt file'
         required: false
@@ -24,7 +19,7 @@ run-name: 'Helion Job - ${{ github.event.inputs.run_id }}'
 
 jobs:
   run:
-    runs-on: ${{ github.event.inputs.runner }}
+    runs-on: nebius-b200-helion-runners
     timeout-minutes: 20
     steps:
     - uses: actions/checkout@v3
