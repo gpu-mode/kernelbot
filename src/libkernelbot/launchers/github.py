@@ -294,7 +294,7 @@ class GitHubRun:
         _WORKFLOW_FILE_CACHE[cache_key] = workflow
         return workflow
 
-    async def trigger(self, inputs: dict) -> bool:
+    async def trigger(self, inputs: dict) -> bool:  # noqa: C901
         """
         Trigger this run with the provided inputs.
         Sets `self.run` to the new WorkflowRun on success.
