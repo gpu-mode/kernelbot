@@ -39,7 +39,7 @@ def create_uvicorn_server() -> uvicorn.Server:
         host="0.0.0.0",
         port=int(os.environ.get("PORT") or 8000),
         log_level="info",
-        limit_concurrency=10,
+        limit_concurrency=None,
     )
     return uvicorn.Server(config)
 
