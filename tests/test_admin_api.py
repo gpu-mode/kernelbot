@@ -425,3 +425,34 @@ class TestAdminUpdateProblems:
             assert data["status"] == "ok"
             assert len(data["errors"]) == 1
             assert data["errors"][0]["name"] == "bad-problem"
+
+
+class TestAdminExportHF:
+    """Test admin HF export endpoint."""
+
+    def test_export_hf_rejects_active_public_export(self, test_client, mock_backend):
+        """POST /admin/export-hf returns 400 for active public exports."""
+        from kernelbot.api import main as api_main
+
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+        with patch.object(api_main.env, "HF_TOKEN", "hf-token"):
+            with patch(
+                "libkernelbot.hf_export.export_to_hf",
+                side_effect=ValueError(
+                    "Cannot export active leaderboards to the public dataset: active-comp"
+                ),
+            ):
+                response = test_client.post(
+                    "/admin/export-hf",
+                    headers={"Authorization": "Bearer test_token"},
+                    json={
+                        "leaderboard_ids": [1],
+                        "filename": "active-comp.parquet",
+                        "private": False,
+                    },
+                )
+
+        assert response.status_code == 400
+        assert "Cannot export active leaderboards" in response.json()["detail"]
