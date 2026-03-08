@@ -39,6 +39,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+libkernelbot = ["sql/*.sql"]
+
 [tool.coverage.run]
 omit = ["src/libkernelbot/run_eval.py", "src/libkernelbot/launchers/*.py"]
 relative_files = true

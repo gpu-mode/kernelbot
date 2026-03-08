@@ -881,7 +881,13 @@ class AdminCog(commands.Cog):
 
     @tasks.loop(hours=24)
     async def _scheduled_hf_export(self):
-        """Daily export of active competition submissions to private HF dataset."""
+        """Daily export of active competition submissions to private HF dataset.
+
+        Once a competition expires, it drops out of the scheduled export set. If
+        there are still results settling after the deadline, a manual export is
+        needed once the queue drains. Currently public HF dataset releases are
+        handled manually.
+        """
         from libkernelbot.hf_export import export_to_hf, get_active_competition_leaderboards
 
         try:
