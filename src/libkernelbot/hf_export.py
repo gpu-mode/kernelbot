@@ -1,6 +1,7 @@
 """Export competition submissions to Hugging Face datasets as parquet files."""
 
 import io
+import tempfile
 from datetime import datetime, timezone
 from importlib.resources import files
 
@@ -153,13 +154,15 @@ def export_to_hf(
 
     rows = get_hf_export_rows(db, leaderboard_ids)
     parquet_bytes = rows_to_parquet_bytes(rows)
-    parquet_buffer = io.BytesIO(parquet_bytes)
-    api.upload_file(
-        path_or_fileobj=parquet_buffer,
-        path_in_repo=filename,
-        repo_id=repo_id,
-        repo_type="dataset",
-    )
+    with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
+        tmp.write(parquet_bytes)
+        tmp.flush()
+        api.upload_file(
+            path_or_fileobj=tmp.name,
+            path_in_repo=filename,
+            repo_id=repo_id,
+            repo_type="dataset",
+        )
 
     logger.info("Exported %d rows to %s/%s", len(rows), repo_id, filename)
     return {"rows": len(rows), "repo_id": repo_id, "filename": filename}

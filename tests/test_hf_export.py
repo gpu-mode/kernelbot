@@ -254,11 +254,18 @@ class TestEnsurePublicExportAllowed:
 # ---------------------------------------------------------------------------
 
 class TestExportToHF:
-    def test_uploads_from_in_memory_buffer(self):
+    def test_uploads_from_temp_parquet_file(self):
         db = MagicMock()
+        observed = {}
 
         with patch("libkernelbot.hf_export.HfApi") as mock_api_cls:
             mock_api = mock_api_cls.return_value
+            def _capture_upload(**kwargs):
+                path = kwargs["path_or_fileobj"]
+                observed["path"] = path
+                observed["size"] = __import__("os").path.getsize(path)
+
+            mock_api.upload_file.side_effect = _capture_upload
             with patch("libkernelbot.hf_export.get_hf_export_rows", return_value=[_row()]):
                 result = export_to_hf(
                     db=db,
@@ -270,6 +277,7 @@ class TestExportToHF:
                 )
 
         upload_arg = mock_api.upload_file.call_args.kwargs["path_or_fileobj"]
-        assert isinstance(upload_arg, io.BytesIO)
-        assert upload_arg.getbuffer().nbytes > 0
+        assert isinstance(upload_arg, str)
+        assert upload_arg.endswith(".parquet")
+        assert observed["size"] > 0
         assert result["rows"] == 1
