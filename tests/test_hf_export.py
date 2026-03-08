@@ -3,7 +3,7 @@
 import io
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pyarrow.parquet as pq
 import pytest
@@ -11,6 +11,7 @@ import pytest
 from libkernelbot.hf_export import (
     SUBMISSIONS_SCHEMA,
     ensure_public_export_allowed,
+    export_to_hf,
     get_active_competition_leaderboards,
     get_hf_export_rows,
     rows_to_parquet_bytes,
@@ -246,3 +247,29 @@ class TestEnsurePublicExportAllowed:
         ]
         with pytest.raises(ValueError, match="amd-moe-mxfp4.*amd-mxfp4-mm"):
             ensure_public_export_allowed(db, [763, 764], now=NOW)
+
+
+# ---------------------------------------------------------------------------
+# export_to_hf
+# ---------------------------------------------------------------------------
+
+class TestExportToHF:
+    def test_uploads_from_in_memory_buffer(self):
+        db = MagicMock()
+
+        with patch("libkernelbot.hf_export.HfApi") as mock_api_cls:
+            mock_api = mock_api_cls.return_value
+            with patch("libkernelbot.hf_export.get_hf_export_rows", return_value=[_row()]):
+                result = export_to_hf(
+                    db=db,
+                    leaderboard_ids=[763],
+                    repo_id="GPUMODE/kernelbot-data-live",
+                    filename="active_submissions.parquet",
+                    token="hf-token",
+                    private=True,
+                )
+
+        upload_arg = mock_api.upload_file.call_args.kwargs["path_or_fileobj"]
+        assert isinstance(upload_arg, io.BytesIO)
+        assert upload_arg.getbuffer().nbytes > 0
+        assert result["rows"] == 1

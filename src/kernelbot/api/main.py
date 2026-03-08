@@ -694,9 +694,11 @@ async def admin_export_hf(
     filename = payload.get("filename")
     private = payload.get("private", True)
 
-    if not leaderboard_ids or not isinstance(leaderboard_ids, list):
+    if not isinstance(leaderboard_ids, list) or not leaderboard_ids:
         raise HTTPException(status_code=400, detail="leaderboard_ids must be a non-empty list of integers")
-    if not filename or not filename.endswith(".parquet"):
+    if not all(isinstance(leaderboard_id, int) for leaderboard_id in leaderboard_ids):
+        raise HTTPException(status_code=400, detail="leaderboard_ids must be a non-empty list of integers")
+    if not isinstance(filename, str) or not filename.endswith(".parquet"):
         raise HTTPException(status_code=400, detail="filename must end with .parquet")
     if not env.HF_TOKEN:
         raise HTTPException(status_code=500, detail="HF_TOKEN not configured")

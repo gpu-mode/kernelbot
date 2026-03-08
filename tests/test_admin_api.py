@@ -430,6 +430,39 @@ class TestAdminUpdateProblems:
 class TestAdminExportHF:
     """Test admin HF export endpoint."""
 
+    def test_export_hf_rejects_non_int_leaderboard_ids(self, test_client):
+        """POST /admin/export-hf returns 400 for non-integer leaderboard IDs."""
+        from kernelbot.api import main as api_main
+
+        with patch.object(api_main.env, "HF_TOKEN", "hf-token"):
+            response = test_client.post(
+                "/admin/export-hf",
+                headers={"Authorization": "Bearer test_token"},
+                json={
+                    "leaderboard_ids": ["1"],
+                    "filename": "active-comp.parquet",
+                    "private": True,
+                },
+            )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "leaderboard_ids must be a non-empty list of integers"
+
+    def test_export_hf_rejects_non_string_filename(self, test_client):
+        """POST /admin/export-hf returns 400 for non-string filenames."""
+        response = test_client.post(
+            "/admin/export-hf",
+            headers={"Authorization": "Bearer test_token"},
+            json={
+                "leaderboard_ids": [1],
+                "filename": 123,
+                "private": True,
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "filename must end with .parquet"
+
     def test_export_hf_rejects_active_public_export(self, test_client, mock_backend):
         """POST /admin/export-hf returns 400 for active public exports."""
         from kernelbot.api import main as api_main
