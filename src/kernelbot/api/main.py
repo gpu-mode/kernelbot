@@ -675,6 +675,51 @@ async def admin_update_problems(
     }
 
 
+@app.post("/admin/export-hf")
+async def admin_export_hf(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Export competition submissions to a Hugging Face dataset as parquet.
+
+    Payload:
+        leaderboard_ids: list[int] - IDs of leaderboards to export
+        filename: str - parquet filename in the repo (e.g. "nvidia_nvfp4_submissions.parquet")
+        private: bool - if true, upload to private live repo; if false, upload to public repo (default: true)
+    """
+    from libkernelbot.hf_export import export_to_hf
+
+    leaderboard_ids = payload.get("leaderboard_ids")
+    filename = payload.get("filename")
+    private = payload.get("private", True)
+
+    if not leaderboard_ids or not isinstance(leaderboard_ids, list):
+        raise HTTPException(status_code=400, detail="leaderboard_ids must be a non-empty list of integers")
+    if not filename or not filename.endswith(".parquet"):
+        raise HTTPException(status_code=400, detail="filename must end with .parquet")
+    if not env.HF_TOKEN:
+        raise HTTPException(status_code=500, detail="HF_TOKEN not configured")
+
+    repo_id = env.HF_PUBLIC_DATASET if not private else env.HF_PRIVATE_DATASET
+
+    try:
+        with db_context as db:
+            result = export_to_hf(
+                db=db,
+                leaderboard_ids=leaderboard_ids,
+                repo_id=repo_id,
+                filename=filename,
+                token=env.HF_TOKEN,
+                private=private,
+            )
+        return {"status": "ok", **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}") from e
+
+
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
     """An endpoint that returns all leaderboards.
