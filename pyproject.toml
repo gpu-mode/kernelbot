@@ -23,6 +23,8 @@ dependencies = [
     "fastapi[all]",
     "uvicorn",
     "jinja2",
+    "huggingface-hub>=0.20",
+    "pyarrow>=14.0",
 ]
 
 [project.optional-dependencies]
