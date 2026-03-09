@@ -635,8 +635,6 @@ class LeaderboardCog(commands.Cog):
 # Leaderboard Commands Help
 
 ## Basic Commands
-- `/get-api-url` \
-- For popcorn-cli users, get the API URL
 - `/leaderboard list` \
 - View all active leaderboards
 - `/leaderboard help` \
