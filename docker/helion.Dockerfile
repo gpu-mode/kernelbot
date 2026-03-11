@@ -60,6 +60,18 @@ RUN sudo uv pip install --system flash-linear-attention
 # --no-build-isolation: use system torch (cu130) instead of build env pulling cu128 from PyPI
 RUN sudo uv pip install --system --no-build-isolation causal-conv1d
 
+# jq for payload extraction in the workflow
+RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends jq \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+# Kernelbot runner dependencies (only what github-runner.py / run_eval.py actually imports)
+RUN sudo uv pip install --system \
+    PyGithub \
+    aiohttp \
+    python-dotenv \
+    requests \
+    PyYAML
+
 # # tinygrad
 # RUN sudo uv pip install --system tinygrad~=0.10
 
