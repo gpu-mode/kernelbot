@@ -1,0 +1,8 @@
+{
+  "lang": "py",
+  "sources": {
+    "main.py": "import torch\nimport os\n\nprint(f\"CUDA available: {torch.cuda.is_available()}\")\nprint(f\"PyTorch version: {torch.__version__}\")\nprint(f\"ROCm version: {torch.version.hip if hasattr(torch.version, 'hip') else 'N/A'}\")\n\nif torch.cuda.is_available():\n    device_name = torch.cuda.get_device_name(0)\n    print(f\"Device: {device_name}\")\n    x = torch.randn(5, device='cuda')\n    print(f\"Random tensor on GPU: {x}\")\n    y = x * 2.0\n    print(f\"Multiplied tensor: {y}\")\n    print(\"Test passed!\")\nelse:\n    print(\"WARNING: CUDA not available!\")\n    import sys\n    sys.exit(1)"
+  },
+  "main": "main.py",
+  "mode": "script"
+}

@@ -14,6 +14,7 @@ class SchedulerType(Enum):
     GITHUB = "github"
     MODAL = "modal"
     SLURM = "slurm"
+    NORTHFLANK = "northflank"
 
 
 class GitHubGPU(Enum):
