@@ -23,6 +23,8 @@ dependencies = [
     "fastapi[all]",
     "uvicorn",
     "jinja2",
+    "huggingface-hub>=0.20",
+    "pyarrow>=14.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +38,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+libkernelbot = ["sql/*.sql"]
 
 [tool.coverage.run]
 omit = ["src/libkernelbot/run_eval.py", "src/libkernelbot/launchers/*.py"]

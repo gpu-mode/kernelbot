@@ -56,7 +56,7 @@ RUN curl -L -o /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
     && sudo uv pip install --system /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
     && rm /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl
 
-ENV ENABLE_TILE=1
+ENV ENABLE_TILE=0
 
 # Helion
 RUN sudo uv pip install --system helion
