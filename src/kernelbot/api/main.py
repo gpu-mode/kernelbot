@@ -221,6 +221,16 @@ def require_admin(
         raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
+def enforce_leaderboard_access(db, leaderboard_name: str, user_info: Optional[dict]) -> None:
+    """Raise 401/403 if the leaderboard is closed and the user lacks access."""
+    lb = db.get_leaderboard(leaderboard_name)
+    if lb.get("visibility") == "closed":
+        if user_info is None:
+            raise HTTPException(status_code=401, detail="Authentication required for closed leaderboard")
+        if not db.check_leaderboard_access(leaderboard_name, user_info["user_id"]):
+            raise HTTPException(status_code=403, detail="You do not have access to this leaderboard")
+
+
 @app.get("/auth/init")
 async def auth_init(provider: str, db_context=Depends(get_db)) -> dict:
     if provider not in ["discord", "github"]:
@@ -744,12 +754,7 @@ async def get_gpus(
     await simple_rate_limit()
     try:
         with db_context as db:
-            lb = db.get_leaderboard(leaderboard_name)
-            if lb.get("visibility") == "closed":
-                if user_info is None:
-                    raise HTTPException(status_code=401, detail="Authentication required for closed leaderboard")
-                if not db.check_leaderboard_access(leaderboard_name, user_info["user_id"]):
-                    raise HTTPException(status_code=403, detail="You do not have access to this leaderboard")
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             return db.get_leaderboard_gpu_types(leaderboard_name)
     except HTTPException:
         raise
@@ -769,12 +774,7 @@ async def get_submissions(
     await simple_rate_limit()
     try:
         with db_context as db:
-            lb = db.get_leaderboard(leaderboard_name)
-            if lb.get("visibility") == "closed":
-                if user_info is None:
-                    raise HTTPException(status_code=401, detail="Authentication required for closed leaderboard")
-                if not db.check_leaderboard_access(leaderboard_name, user_info["user_id"]):
-                    raise HTTPException(status_code=403, detail="You do not have access to this leaderboard")
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             return db.get_leaderboard_submissions(
                 leaderboard_name, gpu_name, limit=limit, offset=offset
             )
@@ -796,12 +796,7 @@ async def get_submission_count(
     await simple_rate_limit()
     try:
         with db_context as db:
-            lb = db.get_leaderboard(leaderboard_name)
-            if lb.get("visibility") == "closed":
-                if user_info is None:
-                    raise HTTPException(status_code=401, detail="Authentication required for closed leaderboard")
-                if not db.check_leaderboard_access(leaderboard_name, user_info["user_id"]):
-                    raise HTTPException(status_code=403, detail="You do not have access to this leaderboard")
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             count = db.get_leaderboard_submission_count(leaderboard_name, gpu_name, user_id)
             return {"count": count}
     except HTTPException:
@@ -930,14 +925,6 @@ async def delete_user_submission(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting submission: {e}") from e
-
-
-@app.get("/user/me")
-async def get_current_user(
-    user_info: Annotated[dict, Depends(validate_user_header)],
-) -> dict:
-    """Returns the authenticated user's ID and name."""
-    return {"user_id": user_info["user_id"], "user_name": user_info["user_name"]}
 
 
 @app.post("/admin/invites")
