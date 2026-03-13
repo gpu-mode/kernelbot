@@ -123,7 +123,13 @@ class AdminCog(commands.Cog):
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
 
+        self.export_to_hf = bot.admin_group.command(
+            name="export-hf", description="Export competition data to Hugging Face dataset"
+        )(self.export_to_hf)
+
         self._scheduled_cleanup_temp_users.start()
+        if env.HF_TOKEN:
+            self._scheduled_hf_export.start()
 
     # --------------------------------------------------------------------------
     # |                           HELPER FUNCTIONS                              |
@@ -880,6 +886,106 @@ class AdminCog(commands.Cog):
         with self.bot.leaderboard_db as db:
             db.cleanup_temp_users()
         logger.info("Temporary users cleanup completed")
+
+    @tasks.loop(hours=24)
+    async def _scheduled_hf_export(self):
+        """Daily export of active competition submissions to private HF dataset.
+
+        Once a competition expires, it drops out of the scheduled export set. If
+        there are still results settling after the deadline, a manual export is
+        needed once the queue drains. Currently public HF dataset releases are
+        handled manually.
+        """
+        from libkernelbot.hf_export import export_to_hf, get_active_competition_leaderboards
+
+        try:
+            with self.bot.leaderboard_db as db:
+                leaderboards = db.get_leaderboards()
+                active = get_active_competition_leaderboards(
+                    leaderboards,
+                    now=datetime.now(timezone.utc),
+                )
+
+                if not active:
+                    logger.info("HF export: no active competitions, skipping")
+                    return
+
+                leaderboard_ids = [lb["id"] for lb in active]
+                result = export_to_hf(
+                    db=db,
+                    leaderboard_ids=leaderboard_ids,
+                    repo_id=env.HF_PRIVATE_DATASET,
+                    filename="active_submissions.parquet",
+                    token=env.HF_TOKEN,
+                    private=True,
+                )
+                logger.info("Scheduled HF export complete: %s", result)
+        except Exception:
+            logger.exception("Scheduled HF export failed")
+
+    @_scheduled_hf_export.before_loop
+    async def _before_hf_export(self):
+        await self.bot.wait_until_ready()
+
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the competition to export",
+        filename="Parquet filename (default: <leaderboard_name>.parquet)",
+        private="Upload to private repo (default: true)",
+    )
+    @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def export_to_hf(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        filename: Optional[str] = None,
+        private: bool = True,
+    ):
+        from libkernelbot.hf_export import export_to_hf as do_export
+
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to have Admin permissions to run this command",
+                ephemeral=True,
+            )
+            return
+
+        if not env.HF_TOKEN:
+            await send_discord_message(interaction, "HF_TOKEN not configured.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if filename is None:
+            filename = f"{leaderboard_name}.parquet"
+        if not filename.endswith(".parquet"):
+            filename += ".parquet"
+
+        repo_id = env.HF_PRIVATE_DATASET if private else env.HF_PUBLIC_DATASET
+
+        try:
+            with self.bot.leaderboard_db as db:
+                lb_id = db.get_leaderboard_id(leaderboard_name)
+                result = do_export(
+                    db=db,
+                    leaderboard_ids=[lb_id],
+                    repo_id=repo_id,
+                    filename=filename,
+                    token=env.HF_TOKEN,
+                    private=private,
+                )
+            await send_discord_message(
+                interaction,
+                f"Exported {result['rows']} rows to `{repo_id}/{filename}`.",
+                ephemeral=True,
+            )
+        except ValueError as e:
+            await send_discord_message(interaction, str(e), ephemeral=True)
+        except Exception as e:
+            logger.error("HF export failed: %s", e, exc_info=True)
+            await send_discord_message(interaction, f"Export failed: {e}", ephemeral=True)
 
     ####################################################################################################################
     #            MIGRATION COMMANDS --- TO BE DELETED LATER
