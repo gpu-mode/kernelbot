@@ -647,138 +647,173 @@ class LeaderboardDB:
         """Generate N unique invite codes covering multiple leaderboards. Returns the codes."""
         import secrets
 
-        lb_ids = []
-        for name in leaderboard_names:
-            lb_ids.append(self.get_leaderboard_id(name))
+        try:
+            lb_ids = []
+            for name in leaderboard_names:
+                lb_ids.append(self.get_leaderboard_id(name))
 
-        codes = []
-        for _ in range(count):
-            code = secrets.token_urlsafe(16)
-            self.cursor.execute(
-                """
-                INSERT INTO leaderboard.leaderboard_invite (code)
-                VALUES (%s)
-                RETURNING id
-                """,
-                (code,),
-            )
-            invite_id = self.cursor.fetchone()[0]
-            for lb_id in lb_ids:
+            codes = []
+            for _ in range(count):
+                code = secrets.token_urlsafe(16)
                 self.cursor.execute(
                     """
-                    INSERT INTO leaderboard.leaderboard_invite_scope (invite_id, leaderboard_id)
-                    VALUES (%s, %s)
+                    INSERT INTO leaderboard.leaderboard_invite (code)
+                    VALUES (%s)
+                    RETURNING id
                     """,
-                    (invite_id, lb_id),
+                    (code,),
                 )
-            codes.append(code)
-        self.connection.commit()
-        return codes
+                invite_id = self.cursor.fetchone()[0]
+                for lb_id in lb_ids:
+                    self.cursor.execute(
+                        """
+                        INSERT INTO leaderboard.leaderboard_invite_scope (invite_id, leaderboard_id)
+                        VALUES (%s, %s)
+                        """,
+                        (invite_id, lb_id),
+                    )
+                codes.append(code)
+            self.connection.commit()
+            return codes
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error generating invite codes", exc_info=e)
+            raise KernelBotError("Error generating invite codes") from e
 
     def claim_invite_code(self, code: str, user_id: str) -> dict:
         """Claim an invite code for a user. Returns list of leaderboard names.
 
         Raises KernelBotError if code is invalid or already claimed.
         """
-        self.cursor.execute(
-            """
-            SELECT li.id, li.user_id
-            FROM leaderboard.leaderboard_invite li
-            WHERE li.code = %s
-            """,
-            (code,),
-        )
-        row = self.cursor.fetchone()
-        if row is None:
-            raise KernelBotError("Invalid invite code")
-        invite_id, existing_user = row
+        try:
+            self.cursor.execute(
+                """
+                SELECT li.id, li.user_id
+                FROM leaderboard.leaderboard_invite li
+                WHERE li.code = %s
+                """,
+                (code,),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise KernelBotError("Invalid invite code")
+            invite_id, existing_user = row
 
-        # Fetch leaderboard names for this invite
-        self.cursor.execute(
-            """
-            SELECT l.name
-            FROM leaderboard.leaderboard_invite_scope lis
-            JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
-            WHERE lis.invite_id = %s
-            ORDER BY l.name
-            """,
-            (invite_id,),
-        )
-        leaderboards = [r[0] for r in self.cursor.fetchall()]
+            # Fetch leaderboard names for this invite
+            self.cursor.execute(
+                """
+                SELECT l.name
+                FROM leaderboard.leaderboard_invite_scope lis
+                JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
+                WHERE lis.invite_id = %s
+                ORDER BY l.name
+                """,
+                (invite_id,),
+            )
+            leaderboards = [r[0] for r in self.cursor.fetchall()]
 
-        if existing_user == str(user_id):
+            if existing_user == str(user_id):
+                return {"leaderboards": leaderboards}
+            if existing_user is not None:
+                raise KernelBotError("This invite code has already been claimed")
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard_invite
+                SET user_id = %s, claimed_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND user_id IS NULL
+                """,
+                (str(user_id), invite_id),
+            )
+            if self.cursor.rowcount == 0:
+                raise KernelBotError("This invite code has already been claimed")
+            self.connection.commit()
             return {"leaderboards": leaderboards}
-        if existing_user is not None:
-            raise KernelBotError("This invite code has already been claimed")
-        self.cursor.execute(
-            """
-            UPDATE leaderboard.leaderboard_invite
-            SET user_id = %s, claimed_at = CURRENT_TIMESTAMP
-            WHERE id = %s AND user_id IS NULL
-            """,
-            (str(user_id), invite_id),
-        )
-        if self.cursor.rowcount == 0:
-            raise KernelBotError("This invite code has already been claimed")
-        self.connection.commit()
-        return {"leaderboards": leaderboards}
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error claiming invite code", exc_info=e)
+            raise KernelBotError("Error claiming invite code") from e
 
     def get_invite_codes(self, leaderboard_name: str) -> list[dict]:
         """Returns all invite codes that cover a given leaderboard, with claim status."""
-        lb_id = self.get_leaderboard_id(leaderboard_name)
-        self.cursor.execute(
-            """
-            SELECT li.code, li.user_id, ui.user_name, li.claimed_at, li.created_at
-            FROM leaderboard.leaderboard_invite li
-            JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
-            LEFT JOIN leaderboard.user_info ui ON li.user_id = ui.id
-            WHERE lis.leaderboard_id = %s
-            ORDER BY li.created_at
-            """,
-            (lb_id,),
-        )
-        return [
-            {
-                "code": row[0],
-                "user_id": row[1],
-                "user_name": row[2],
-                "claimed_at": row[3],
-                "created_at": row[4],
-            }
-            for row in self.cursor.fetchall()
-        ]
+        try:
+            lb_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                SELECT li.code, li.user_id, ui.user_name, li.claimed_at, li.created_at
+                FROM leaderboard.leaderboard_invite li
+                JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
+                LEFT JOIN leaderboard.user_info ui ON li.user_id = ui.id
+                WHERE lis.leaderboard_id = %s
+                ORDER BY li.created_at
+                """,
+                (lb_id,),
+            )
+            return [
+                {
+                    "code": row[0],
+                    "user_id": row[1],
+                    "user_name": row[2],
+                    "claimed_at": row[3],
+                    "created_at": row[4],
+                }
+                for row in self.cursor.fetchall()
+            ]
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching invite codes", exc_info=e)
+            raise KernelBotError("Error fetching invite codes") from e
 
     def revoke_invite_code(self, code: str) -> dict:
         """Revoke (delete) an invite code. Returns info about the revoked code.
 
         Raises KernelBotError if code does not exist.
         """
-        self.cursor.execute(
-            """
-            DELETE FROM leaderboard.leaderboard_invite
-            WHERE code = %s
-            RETURNING code, user_id
-            """,
-            (code,),
-        )
-        row = self.cursor.fetchone()
-        if row is None:
-            raise KernelBotError("Invalid invite code", code=404)
-        self.connection.commit()
-        return {"code": row[0], "was_claimed": row[1] is not None}
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.leaderboard_invite
+                WHERE code = %s
+                RETURNING code, user_id
+                """,
+                (code,),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise KernelBotError("Invalid invite code", code=404)
+            self.connection.commit()
+            return {"code": row[0], "was_claimed": row[1] is not None}
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error revoking invite code", exc_info=e)
+            raise KernelBotError("Error revoking invite code") from e
 
     def set_leaderboard_visibility(self, leaderboard_name: str, visibility: str):
         """Change the visibility of a leaderboard."""
-        lb_id = self.get_leaderboard_id(leaderboard_name)
-        self.cursor.execute(
-            """
-            UPDATE leaderboard.leaderboard
-            SET visibility = %s
-            WHERE id = %s
-            """,
-            (visibility, lb_id),
-        )
-        self.connection.commit()
+        try:
+            lb_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard
+                SET visibility = %s
+                WHERE id = %s
+                """,
+                (visibility, lb_id),
+            )
+            self.connection.commit()
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error setting leaderboard visibility", exc_info=e)
+            raise KernelBotError("Error setting leaderboard visibility") from e
 
     def get_leaderboard_submissions(
         self,
