@@ -163,6 +163,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         directory: str,
         gpu: Optional[app_commands.Choice[str]],
+        closed: bool = False,
     ):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
@@ -212,6 +213,7 @@ class AdminCog(commands.Cog):
             definition=definition,
             forum_id=forum_id,
             gpu=gpu.value if gpu else None,
+            visibility="closed" if closed else "public",
         ):
             await send_discord_message(
                 interaction,
@@ -235,6 +237,7 @@ class AdminCog(commands.Cog):
         deadline: str,
         definition: LeaderboardDefinition,
         gpus: Optional[str | list[str]],
+        visibility: str = "public",
     ):
         if len(leaderboard_name) > 95:
             await send_discord_message(
@@ -276,7 +279,8 @@ class AdminCog(commands.Cog):
             )
 
             success = await self.create_leaderboard_in_db(
-                interaction, leaderboard_name, date_value, definition, forum_thread.thread.id, gpus
+                interaction, leaderboard_name, date_value, definition, forum_thread.thread.id, gpus,
+                visibility=visibility,
             )
             if not success:
                 await forum_thread.delete()
@@ -325,6 +329,7 @@ class AdminCog(commands.Cog):
         definition: LeaderboardDefinition,
         forum_id: int,
         gpu: Optional[str | list[str]] = None,
+        visibility: str = "public",
     ) -> bool:
         if gpu is None:
             # Ask the user to select GPUs
@@ -355,6 +360,7 @@ class AdminCog(commands.Cog):
                     gpu_types=selected_gpus,
                     creator_id=interaction.user.id,
                     forum_id=forum_id,
+                    visibility=visibility,
                 )
             except KernelBotError as e:
                 await send_discord_message(
@@ -515,6 +521,7 @@ class AdminCog(commands.Cog):
         problem_set: Optional[str] = None,
         branch: Optional[str] = "main",
         force: bool = False,
+        closed: bool = False,
     ):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
@@ -573,7 +580,7 @@ class AdminCog(commands.Cog):
                     )
                     return
                 for competition in problem_dir.glob("*.yaml"):
-                    await self.update_competition(interaction, competition)
+                    await self.update_competition(interaction, competition, closed=closed)
             else:
                 problem_set = problem_dir / f"{problem_set}.yaml"
                 if not problem_set.exists():
@@ -586,7 +593,7 @@ class AdminCog(commands.Cog):
                         ephemeral=True,
                     )
                     return
-                await self.update_competition(interaction, problem_set, force)
+                await self.update_competition(interaction, problem_set, force, closed=closed)
 
     async def _create_update_plan(  # noqa: C901
         self,
@@ -693,7 +700,7 @@ class AdminCog(commands.Cog):
         return update_list, create_list
 
     async def update_competition(
-        self, interaction: discord.Interaction, spec_file: Path, force: bool = False
+        self, interaction: discord.Interaction, spec_file: Path, force: bool = False, closed: bool = False
     ):
         try:
             root = spec_file.parent
@@ -732,6 +739,7 @@ class AdminCog(commands.Cog):
                     entry["deadline"],
                     make_task_definition(root / entry["directory"]),
                     entry["gpus"],
+                    visibility="closed" if closed else "public",
                 )
                 steps += "done\n"
 

@@ -214,6 +214,7 @@ def sync_problems(  # noqa: C901
     force: bool = False,
     creator_id: int = 0,
     forum_id: int = -1,
+    visibility: str = "public",
 ) -> SyncResult:
     """Sync problems from a GitHub repository.
 
@@ -283,6 +284,7 @@ def sync_problems(  # noqa: C901
                                     creator_id=creator_id,
                                     forum_id=forum_id,
                                     gpu_types=plan.gpus,
+                                    visibility=visibility,
                                 )
                             result.created.append(plan.name)
                         else:  # update
