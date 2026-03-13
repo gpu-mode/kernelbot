@@ -50,13 +50,14 @@ RUN sudo uv pip install --system \
     torch \
     --index-url https://download.pytorch.org/whl/cu130
 
-# nvtriton (Triton with TileIR backend — replaces upstream triton)
-RUN curl -L -o /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
-    https://github.com/triton-lang/Triton-to-tile-IR/releases/download/v3.6.0-rc1/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
-    && sudo uv pip install --system /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
-    && rm /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl
-
-ENV ENABLE_TILE=0
+# nvtriton (Triton with TileIR backend) — opt-in install/uninstall scripts.
+#   bash /opt/triton_tileir/install.sh           # install
+#   source ~/.local/triton_tileir/activate.sh    # activate
+#   source ~/.local/triton_tileir/deactivate.sh  # deactivate
+#   bash /opt/triton_tileir/uninstall.sh         # uninstall
+COPY docker/install_nvtriton.sh /opt/triton_tileir/install.sh
+COPY docker/uninstall_nvtriton.sh /opt/triton_tileir/uninstall.sh
+COPY docker/INSTALL_NVTRITON_TILEIR.md /opt/triton_tileir/README.md
 
 # Helion
 RUN sudo uv pip install --system helion
