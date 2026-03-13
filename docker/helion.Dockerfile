@@ -52,7 +52,7 @@ RUN sudo uv pip install --system \
 
 # nvtriton (Triton with TileIR backend) — installed to /opt/nvtriton so it
 # coexists with the upstream triton that PyTorch bundles in site-packages.
-# Activate with: PYTHONPATH=/opt/nvtriton ENABLE_TILE=1
+# Activate with: PYTHONPATH=/opt/nvtriton ENABLE_TILE=1 HELION_BACKEND=tileir
 RUN curl -L -o /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
     https://github.com/triton-lang/Triton-to-tile-IR/releases/download/v3.6.0-rc1/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
     && sudo python3 -m pip install --no-cache-dir --no-deps \
