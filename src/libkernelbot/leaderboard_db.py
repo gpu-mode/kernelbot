@@ -79,6 +79,7 @@ class LeaderboardDB:
         creator_id: int,
         forum_id: int,
         gpu_types: list | str,
+        visibility: str = "public",
     ) -> int:
         # to prevent surprises, ensure we have specified a timezone
         try:
@@ -86,11 +87,11 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.leaderboard (name, deadline, task, creator_id,
-                                                     forum_id, description)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                                                     forum_id, description, visibility)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (name, deadline, task.to_str(), creator_id, forum_id, definition.description),
+                (name, deadline, task.to_str(), creator_id, forum_id, definition.description, visibility),
             )
 
             leaderboard_id = self.cursor.fetchone()[0]
@@ -503,7 +504,7 @@ class LeaderboardDB:
     def get_leaderboards(self) -> list["LeaderboardItem"]:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, description, secret_seed
+            SELECT id, name, deadline, task, creator_id, forum_id, description, secret_seed, visibility
             FROM leaderboard.leaderboard
             """
         )
@@ -528,6 +529,7 @@ class LeaderboardDB:
                     forum_id=lb[5],
                     description=lb[6],
                     secret_seed=lb[7],
+                    visibility=lb[8],
                 )
             )
 
@@ -588,7 +590,7 @@ class LeaderboardDB:
     def get_leaderboard(self, leaderboard_name: str) -> "LeaderboardItem":
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description
+            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description, visibility
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -609,9 +611,174 @@ class LeaderboardDB:
                 secret_seed=res[6],
                 gpu_types=self.get_leaderboard_gpu_types(res[1]),
                 description=res[7],
+                visibility=res[8],
             )
         else:
             raise LeaderboardDoesNotExist(leaderboard_name)
+
+    def check_leaderboard_access(self, leaderboard_name: str, user_id: str) -> bool:
+        """Returns True if leaderboard is public or user has claimed an invite covering this leaderboard."""
+        self.cursor.execute(
+            """
+            SELECT l.visibility
+            FROM leaderboard.leaderboard l
+            WHERE l.name = %s
+            """,
+            (leaderboard_name,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        if row[0] == "public":
+            return True
+        self.cursor.execute(
+            """
+            SELECT 1
+            FROM leaderboard.leaderboard_invite li
+            JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
+            JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
+            WHERE l.name = %s AND li.user_id = %s
+            """,
+            (leaderboard_name, str(user_id)),
+        )
+        return self.cursor.fetchone() is not None
+
+    def generate_invite_codes(self, leaderboard_names: list[str], count: int) -> list[str]:
+        """Generate N unique invite codes covering multiple leaderboards. Returns the codes."""
+        import secrets
+
+        lb_ids = []
+        for name in leaderboard_names:
+            lb_ids.append(self.get_leaderboard_id(name))
+
+        codes = []
+        for _ in range(count):
+            code = secrets.token_urlsafe(16)
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.leaderboard_invite (code)
+                VALUES (%s)
+                RETURNING id
+                """,
+                (code,),
+            )
+            invite_id = self.cursor.fetchone()[0]
+            for lb_id in lb_ids:
+                self.cursor.execute(
+                    """
+                    INSERT INTO leaderboard.leaderboard_invite_scope (invite_id, leaderboard_id)
+                    VALUES (%s, %s)
+                    """,
+                    (invite_id, lb_id),
+                )
+            codes.append(code)
+        self.connection.commit()
+        return codes
+
+    def claim_invite_code(self, code: str, user_id: str) -> dict:
+        """Claim an invite code for a user. Returns list of leaderboard names.
+
+        Raises KernelBotError if code is invalid or already claimed.
+        """
+        self.cursor.execute(
+            """
+            SELECT li.id, li.user_id
+            FROM leaderboard.leaderboard_invite li
+            WHERE li.code = %s
+            """,
+            (code,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise KernelBotError("Invalid invite code")
+        invite_id, existing_user = row
+
+        # Fetch leaderboard names for this invite
+        self.cursor.execute(
+            """
+            SELECT l.name
+            FROM leaderboard.leaderboard_invite_scope lis
+            JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
+            WHERE lis.invite_id = %s
+            ORDER BY l.name
+            """,
+            (invite_id,),
+        )
+        leaderboards = [r[0] for r in self.cursor.fetchall()]
+
+        if existing_user == str(user_id):
+            return {"leaderboards": leaderboards}
+        if existing_user is not None:
+            raise KernelBotError("This invite code has already been claimed")
+        self.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard_invite
+            SET user_id = %s, claimed_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND user_id IS NULL
+            """,
+            (str(user_id), invite_id),
+        )
+        if self.cursor.rowcount == 0:
+            raise KernelBotError("This invite code has already been claimed")
+        self.connection.commit()
+        return {"leaderboards": leaderboards}
+
+    def get_invite_codes(self, leaderboard_name: str) -> list[dict]:
+        """Returns all invite codes that cover a given leaderboard, with claim status."""
+        lb_id = self.get_leaderboard_id(leaderboard_name)
+        self.cursor.execute(
+            """
+            SELECT li.code, li.user_id, ui.user_name, li.claimed_at, li.created_at
+            FROM leaderboard.leaderboard_invite li
+            JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
+            LEFT JOIN leaderboard.user_info ui ON li.user_id = ui.id
+            WHERE lis.leaderboard_id = %s
+            ORDER BY li.created_at
+            """,
+            (lb_id,),
+        )
+        return [
+            {
+                "code": row[0],
+                "user_id": row[1],
+                "user_name": row[2],
+                "claimed_at": row[3],
+                "created_at": row[4],
+            }
+            for row in self.cursor.fetchall()
+        ]
+
+    def revoke_invite_code(self, code: str) -> dict:
+        """Revoke (delete) an invite code. Returns info about the revoked code.
+
+        Raises KernelBotError if code does not exist.
+        """
+        self.cursor.execute(
+            """
+            DELETE FROM leaderboard.leaderboard_invite
+            WHERE code = %s
+            RETURNING code, user_id
+            """,
+            (code,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise KernelBotError("Invalid invite code", code=404)
+        self.connection.commit()
+        return {"code": row[0], "was_claimed": row[1] is not None}
+
+    def set_leaderboard_visibility(self, leaderboard_name: str, visibility: str):
+        """Change the visibility of a leaderboard."""
+        lb_id = self.get_leaderboard_id(leaderboard_name)
+        self.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET visibility = %s
+            WHERE id = %s
+            """,
+            (visibility, lb_id),
+        )
+        self.connection.commit()
 
     def get_leaderboard_submissions(
         self,

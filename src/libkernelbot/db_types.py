@@ -21,6 +21,7 @@ class LeaderboardItem(TypedDict):
     gpu_types: List[str]
     forum_id: int
     secret_seed: NotRequired[int]
+    visibility: str
 
 
 class LeaderboardRankedEntry(TypedDict):

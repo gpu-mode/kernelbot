@@ -798,3 +798,232 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+def test_check_leaderboard_access_public(database, submit_leaderboard):
+    """Public leaderboards grant access to everyone."""
+    with database as db:
+        assert db.check_leaderboard_access("submit-leaderboard", "999") is True
+
+
+def test_check_leaderboard_access_closed_no_invite(database, task_directory):
+    """Closed leaderboards deny access without a claimed invite."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        assert db.check_leaderboard_access("closed-lb", "999") is False
+
+
+def test_check_leaderboard_access_closed_with_invite(database, task_directory):
+    """Closed leaderboards grant access after claiming an invite."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        assert db.check_leaderboard_access("closed-lb", "42") is False
+        db.claim_invite_code(codes[0], "42")
+        assert db.check_leaderboard_access("closed-lb", "42") is True
+
+
+def test_generate_invite_codes(database, task_directory):
+    """Generate invite codes returns unique codes."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 5)
+        assert len(codes) == 5
+        assert len(set(codes)) == 5  # all unique
+
+
+def test_generate_invite_codes_multi_leaderboard(database, task_directory):
+    """Generate invite codes covering multiple leaderboards."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb-1", deadline=deadline, definition=definition,
+            creator_id=1, forum_id=5, gpu_types=["A100"], visibility="closed",
+        )
+        db.create_leaderboard(
+            name="closed-lb-2", deadline=deadline, definition=definition,
+            creator_id=1, forum_id=6, gpu_types=["A100"], visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb-1", "closed-lb-2"], 2)
+        assert len(codes) == 2
+
+        # Claiming one code grants access to both leaderboards
+        db.claim_invite_code(codes[0], "42")
+        assert db.check_leaderboard_access("closed-lb-1", "42") is True
+        assert db.check_leaderboard_access("closed-lb-2", "42") is True
+
+        # Unclaimed code doesn't grant access
+        assert db.check_leaderboard_access("closed-lb-1", "99") is False
+
+
+def test_claim_invite_code_already_claimed(database, task_directory):
+    """Claiming an already-claimed code raises an error."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        db.claim_invite_code(codes[0], "42")
+
+        with pytest.raises(KernelBotError, match="already been claimed"):
+            db.claim_invite_code(codes[0], "99")
+
+
+def test_claim_invite_code_idempotent(database, task_directory):
+    """Same user claiming the same code again is idempotent."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        db.claim_invite_code(codes[0], "42")
+        result = db.claim_invite_code(codes[0], "42")  # no error
+        assert result["leaderboards"] == ["closed-lb"]
+
+
+def test_claim_invite_code_invalid(database, task_directory):
+    """Claiming a nonexistent code raises an error."""
+    with database as db:
+        with pytest.raises(KernelBotError, match="Invalid invite code"):
+            db.claim_invite_code("bogus-code", "42")
+
+
+def test_get_invite_codes(database, task_directory):
+    """Admin can list invite codes with claim status."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 3)
+        db.claim_invite_code(codes[0], "42")
+
+        invites = db.get_invite_codes("closed-lb")
+        assert len(invites) == 3
+
+        claimed = [i for i in invites if i["user_id"] is not None]
+        unclaimed = [i for i in invites if i["user_id"] is None]
+        assert len(claimed) == 1
+        assert len(unclaimed) == 2
+        assert claimed[0]["user_id"] == "42"
+        assert claimed[0]["code"] == codes[0]
+
+
+def test_leaderboard_visibility_field(database, task_directory):
+    """Leaderboard visibility field is returned correctly."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="public-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+        )
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=6,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+
+        assert db.get_leaderboard("public-lb")["visibility"] == "public"
+        assert db.get_leaderboard("closed-lb")["visibility"] == "closed"
+
+        lbs = db.get_leaderboards()
+        vis_map = {lb["name"]: lb["visibility"] for lb in lbs}
+        assert vis_map["public-lb"] == "public"
+        assert vis_map["closed-lb"] == "closed"
+
+
+def test_set_leaderboard_visibility(database, submit_leaderboard):
+    """Changing visibility works."""
+    with database as db:
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "public"
+        db.set_leaderboard_visibility("submit-leaderboard", "closed")
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "closed"
+        db.set_leaderboard_visibility("submit-leaderboard", "public")
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "public"
+
