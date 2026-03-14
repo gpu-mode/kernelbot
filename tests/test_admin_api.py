@@ -427,6 +427,234 @@ class TestAdminUpdateProblems:
             assert data["errors"][0]["name"] == "bad-problem"
 
 
+class TestAdminLeaderboardInvites:
+    """Test admin leaderboard invite endpoints."""
+
+    def _setup_db_mock(self, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+    def test_generate_invites(self, test_client, mock_backend):
+        """POST /admin/invites generates codes for multiple leaderboards."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.generate_invite_codes = MagicMock(return_value=["code1", "code2"])
+
+        response = test_client.post(
+            "/admin/invites",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboards": ["lb-1", "lb-2"], "count": 2},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["codes"] == ["code1", "code2"]
+        assert data["leaderboards"] == ["lb-1", "lb-2"]
+        mock_backend.db.generate_invite_codes.assert_called_once_with(["lb-1", "lb-2"], 2)
+
+    def test_generate_invites_single_shorthand(self, test_client, mock_backend):
+        """POST /admin/invites accepts single leaderboard shorthand."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.generate_invite_codes = MagicMock(return_value=["code1"])
+
+        response = test_client.post(
+            "/admin/invites",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboard": "test-lb", "count": 1},
+        )
+        assert response.status_code == 200
+        mock_backend.db.generate_invite_codes.assert_called_once_with(["test-lb"], 1)
+
+    def test_generate_invites_invalid_count(self, test_client, mock_backend):
+        """POST /admin/invites rejects invalid count."""
+        response = test_client.post(
+            "/admin/invites",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboards": ["lb-1"], "count": 0},
+        )
+        assert response.status_code == 400
+
+    def test_generate_invites_missing_leaderboards(self, test_client, mock_backend):
+        """POST /admin/invites rejects missing leaderboards."""
+        response = test_client.post(
+            "/admin/invites",
+            headers={"Authorization": "Bearer test_token"},
+            json={"count": 5},
+        )
+        assert response.status_code == 400
+
+    def test_generate_invites_requires_auth(self, test_client):
+        """POST /admin/invites requires admin auth."""
+        response = test_client.post(
+            "/admin/invites",
+            json={"leaderboards": ["lb-1"], "count": 5},
+        )
+        assert response.status_code == 401
+
+    def test_list_invites(self, test_client, mock_backend):
+        """GET /admin/leaderboards/{lb}/invites lists codes."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_invite_codes = MagicMock(return_value=[
+            {"code": "abc", "user_id": "1", "user_name": "alice",
+             "claimed_at": "2026-01-01T00:00:00Z", "created_at": "2026-01-01T00:00:00Z"},
+            {"code": "def", "user_id": None, "user_name": None,
+             "claimed_at": None, "created_at": "2026-01-01T00:00:00Z"},
+        ])
+
+        response = test_client.get(
+            "/admin/leaderboards/test-lb/invites",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["invites"]) == 2
+        assert data["invites"][0]["user_id"] == "1"
+        assert data["invites"][1]["user_id"] is None
+
+    def test_set_visibility(self, test_client, mock_backend):
+        """POST /admin/leaderboards/{lb}/visibility changes visibility."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.set_leaderboard_visibility = MagicMock()
+
+        response = test_client.post(
+            "/admin/leaderboards/test-lb/visibility",
+            headers={"Authorization": "Bearer test_token"},
+            json={"visibility": "closed"},
+        )
+        assert response.status_code == 200
+        mock_backend.db.set_leaderboard_visibility.assert_called_once_with("test-lb", "closed")
+
+    def test_set_visibility_invalid(self, test_client, mock_backend):
+        """POST /admin/leaderboards/{lb}/visibility rejects invalid values."""
+        response = test_client.post(
+            "/admin/leaderboards/test-lb/visibility",
+            headers={"Authorization": "Bearer test_token"},
+            json={"visibility": "private"},
+        )
+        assert response.status_code == 400
+
+    def test_revoke_invite(self, test_client, mock_backend):
+        """DELETE /admin/invites/{code} revokes a code."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.revoke_invite_code = MagicMock(return_value={"code": "abc123", "was_claimed": False})
+
+        response = test_client.delete(
+            "/admin/invites/abc123",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["was_claimed"] is False
+        mock_backend.db.revoke_invite_code.assert_called_once_with("abc123")
+
+    def test_revoke_invite_not_found(self, test_client, mock_backend):
+        """DELETE /admin/invites/{code} returns 404 for invalid code."""
+        from libkernelbot.utils import KernelBotError
+
+        self._setup_db_mock(mock_backend)
+        err = KernelBotError("Invalid invite code", code=404)
+        mock_backend.db.revoke_invite_code = MagicMock(side_effect=err)
+
+        response = test_client.delete(
+            "/admin/invites/bad-code",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 404
+
+    def test_revoke_invite_requires_auth(self, test_client):
+        """DELETE /admin/invites/{code} requires admin auth."""
+        response = test_client.delete("/admin/invites/abc123")
+        assert response.status_code == 401
+
+
+class TestUserJoin:
+    """Test user invite claim endpoint."""
+
+    def _setup_db_mock(self, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+    def test_join_success(self, test_client, mock_backend):
+        """POST /user/join claims an invite code."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.validate_cli_id = MagicMock(
+            return_value={"user_id": "42", "user_name": "testuser"}
+        )
+        mock_backend.db.claim_invite_code = MagicMock(
+            return_value={"leaderboards": ["closed-lb-1", "closed-lb-2"]}
+        )
+
+        response = test_client.post(
+            "/user/join",
+            headers={"X-Popcorn-Cli-Id": "valid-cli-id"},
+            json={"code": "invite-code-123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["leaderboards"] == ["closed-lb-1", "closed-lb-2"]
+        mock_backend.db.claim_invite_code.assert_called_once_with("invite-code-123", "42")
+
+    def test_join_missing_code(self, test_client, mock_backend):
+        """POST /user/join requires code field."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.validate_cli_id = MagicMock(
+            return_value={"user_id": "42", "user_name": "testuser"}
+        )
+
+        response = test_client.post(
+            "/user/join",
+            headers={"X-Popcorn-Cli-Id": "valid-cli-id"},
+            json={},
+        )
+        assert response.status_code == 400
+
+    def test_join_requires_cli_auth(self, test_client):
+        """POST /user/join requires CLI authentication."""
+        response = test_client.post(
+            "/user/join",
+            json={"code": "invite-code-123"},
+        )
+        assert response.status_code == 400  # missing header
+
+
+class TestClosedLeaderboardAccess:
+    """Test that closed leaderboards gate access correctly."""
+
+    def _setup_db_mock(self, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+    def test_closed_leaderboard_submissions_no_auth(self, test_client, mock_backend):
+        """GET /submissions on closed leaderboard without auth returns 401."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard = MagicMock(return_value={"visibility": "closed"})
+
+        response = test_client.get("/submissions/closed-lb/A100")
+        assert response.status_code == 401
+
+    def test_closed_leaderboard_submissions_no_access(self, test_client, mock_backend):
+        """GET /submissions on closed leaderboard without invite returns 403."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard = MagicMock(return_value={"visibility": "closed"})
+        mock_backend.db.check_leaderboard_access = MagicMock(return_value=False)
+        mock_backend.db.validate_identity = MagicMock(
+            return_value={"user_id": "1", "user_name": "test", "id_type": "cli"}
+        )
+
+        response = test_client.get(
+            "/submissions/closed-lb/A100",
+            headers={"X-Popcorn-Cli-Id": "valid-cli-id"},
+        )
+        assert response.status_code == 403
+
+    def test_public_leaderboard_submissions_no_auth(self, test_client, mock_backend):
+        """GET /submissions on public leaderboard without auth works fine."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard = MagicMock(return_value={"visibility": "public"})
+        mock_backend.db.get_leaderboard_submissions = MagicMock(return_value=[])
+
+        response = test_client.get("/submissions/public-lb/A100")
+        assert response.status_code == 200
 class TestAdminExportHF:
     """Test admin HF export endpoint."""
 

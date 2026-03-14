@@ -274,6 +274,7 @@ async def to_submit_info(
             user_name=user_name,
             gpus=[gpu_type],
             leaderboard=leaderboard_name,
+            identity_type=user_info.get("id_type"),
         )
     except UnicodeDecodeError:
         raise HTTPException(
