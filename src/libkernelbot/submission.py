@@ -30,16 +30,17 @@ class SubmissionRequest:
     user_name: str
     gpus: Union[None, str, list]
     leaderboard: Optional[str]
+    identity_type: Optional[str] = None
 
 
 @dataclasses.dataclass
 class ProcessedSubmissionRequest(SubmissionRequest):
-    task: LeaderboardTask
-    secret_seed: int
-    task_gpus: list
+    task: LeaderboardTask = None
+    secret_seed: int = None
+    task_gpus: list = None
 
 
-def prepare_submission(
+def prepare_submission(  # noqa: C901
     req: SubmissionRequest, backend: "KernelBackend"
 ) -> ProcessedSubmissionRequest:
     if not backend.accepts_jobs:
@@ -62,6 +63,13 @@ def prepare_submission(
 
     with backend.db as db:
         leaderboard = db.get_leaderboard(req.leaderboard)
+        if leaderboard.get("visibility") == "closed":
+            if req.identity_type != "cli":
+                raise KernelBotError(
+                    "Closed leaderboards only accept submissions via CLI", code=403
+                )
+            if not db.check_leaderboard_access(req.leaderboard, str(req.user_id)):
+                raise KernelBotError("You do not have access to this leaderboard", code=403)
     check_deadline(leaderboard)
 
     task_gpus = get_avail_gpus(req.leaderboard, backend.db)
