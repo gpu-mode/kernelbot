@@ -887,7 +887,7 @@ class AdminCog(commands.Cog):
             db.cleanup_temp_users()
         logger.info("Temporary users cleanup completed")
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=6)
     async def _scheduled_hf_export(self):
         """Daily export of active competition submissions to private HF dataset.
 
