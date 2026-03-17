@@ -51,7 +51,7 @@ def _nuke_contents(db):
         "TRUNCATE leaderboard.code_files, leaderboard.submission, leaderboard.runs, "
         "leaderboard.leaderboard, leaderboard.user_info, leaderboard.templates, "
         "leaderboard.gpu_type, leaderboard.leaderboard_invite_scope, "
-        "leaderboard.leaderboard_invite RESTART IDENTITY CASCADE"
+        "leaderboard.leaderboard_invite, leaderboard.rate_limit RESTART IDENTITY CASCADE"
     )
     db.connection.commit()
 

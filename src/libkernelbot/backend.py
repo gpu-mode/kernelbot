@@ -1,10 +1,10 @@
 import asyncio
 import copy
-from datetime import datetime
+import datetime
 from types import SimpleNamespace
 from typing import Optional
 
-from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name
+from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name, get_mode_category
 from libkernelbot.launchers import Launcher
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
@@ -67,8 +67,9 @@ class KernelBackend:
                     file_name=req.file_name,
                     code=req.code,
                     user_id=req.user_id,
-                    time=datetime.now(),
+                    time=datetime.datetime.now(datetime.timezone.utc),
                     user_name=req.user_name,
+                    mode_category=req.mode_category or get_mode_category(mode),
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
         try:

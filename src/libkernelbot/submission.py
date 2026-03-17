@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 from better_profanity import profanity
 
-from libkernelbot.consts import RankCriterion
+from libkernelbot.consts import RankCriterion, SubmissionMode, get_mode_category
 from libkernelbot.db_types import RunItem, SubmissionItem
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
 from libkernelbot.run_eval import FullResult
@@ -38,10 +38,11 @@ class ProcessedSubmissionRequest(SubmissionRequest):
     task: LeaderboardTask = None
     secret_seed: int = None
     task_gpus: list = None
+    mode_category: str = None
 
 
 def prepare_submission(  # noqa: C901
-    req: SubmissionRequest, backend: "KernelBackend"
+    req: SubmissionRequest, backend: "KernelBackend", mode: SubmissionMode = None
 ) -> ProcessedSubmissionRequest:
     if not backend.accepts_jobs:
         raise KernelBotError(
@@ -70,6 +71,19 @@ def prepare_submission(  # noqa: C901
                 )
             if not db.check_leaderboard_access(req.leaderboard, str(req.user_id)):
                 raise KernelBotError("You do not have access to this leaderboard", code=403)
+
+        mode_category = get_mode_category(mode) if mode else None
+        if mode_category is not None:
+            with backend.db as db:
+                rate_check = db.check_rate_limit(req.leaderboard, str(req.user_id), mode_category)
+                if rate_check and not rate_check["allowed"]:
+                    raise KernelBotError(
+                        f"Rate limit exceeded: {rate_check['current_count']}/{rate_check['max_per_hour']} "
+                        f"{mode_category} submissions per hour. "
+                        f"Try again in {rate_check['retry_after_seconds']}s.",
+                        code=429,
+                    )
+
     check_deadline(leaderboard)
 
     task_gpus = get_avail_gpus(req.leaderboard, backend.db)
@@ -91,6 +105,7 @@ def prepare_submission(  # noqa: C901
         task=leaderboard["task"],
         secret_seed=leaderboard["secret_seed"],
         task_gpus=task_gpus,
+        mode_category=mode_category,
     )
 
 
