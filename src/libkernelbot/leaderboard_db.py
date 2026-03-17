@@ -9,6 +9,7 @@ from libkernelbot.db_types import (
     IdentityType,
     LeaderboardItem,
     LeaderboardRankedEntry,
+    RateLimitItem,
     RunItem,
     SubmissionItem,
 )
@@ -276,8 +277,13 @@ class LeaderboardDB:
         code: str,
         time: datetime.datetime,
         user_name: str = None,
+        mode_category: str = None,
     ) -> Optional[int]:
         try:
+            if time.tzinfo is None:
+                time = time.astimezone()
+            time = time.astimezone(datetime.timezone.utc)
+
             # check if we already have the code
             self.cursor.execute(
                 """
@@ -323,10 +329,10 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.submission (leaderboard_id, file_name,
-                    user_id, code_id, submission_time)
+                    user_id, code_id, submission_time, mode_category)
                 VALUES (
                     (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
-                    %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -335,6 +341,7 @@ class LeaderboardDB:
                     user_id,
                     code_id,
                     time,
+                    mode_category,
                 ),
             )
             submission_id = self.cursor.fetchone()[0]
@@ -1436,6 +1443,154 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
             raise KernelBotError("Error validating CLI ID") from e
+
+
+    def set_rate_limit(self, leaderboard_name: str, mode_category: str, max_per_hour: int) -> RateLimitItem:
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.rate_limit (leaderboard_id, mode_category, max_submissions_per_hour)
+                VALUES (
+                    (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
+                    %s, %s
+                )
+                ON CONFLICT (leaderboard_id, mode_category)
+                DO UPDATE SET max_submissions_per_hour = EXCLUDED.max_submissions_per_hour
+                RETURNING id, leaderboard_id, mode_category, max_submissions_per_hour
+                """,
+                (leaderboard_name, mode_category, max_per_hour),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise LeaderboardDoesNotExist(leaderboard_name)
+            self.connection.commit()
+            return RateLimitItem(
+                id=row[0],
+                leaderboard_id=row[1],
+                leaderboard_name=leaderboard_name,
+                mode_category=row[2],
+                max_submissions_per_hour=row[3],
+            )
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            if "null value in column" in str(e):
+                raise LeaderboardDoesNotExist(leaderboard_name) from e
+            logger.exception("Error setting rate limit", exc_info=e)
+            raise KernelBotError("Error setting rate limit") from e
+
+    def get_rate_limits(self, leaderboard_name: str) -> List[RateLimitItem]:
+        try:
+            self.cursor.execute(
+                """
+                SELECT rl.id, rl.leaderboard_id, rl.mode_category, rl.max_submissions_per_hour
+                FROM leaderboard.rate_limit rl
+                JOIN leaderboard.leaderboard lb ON rl.leaderboard_id = lb.id
+                WHERE lb.name = %s
+                """,
+                (leaderboard_name,),
+            )
+            return [
+                RateLimitItem(
+                    id=row[0],
+                    leaderboard_id=row[1],
+                    leaderboard_name=leaderboard_name,
+                    mode_category=row[2],
+                    max_submissions_per_hour=row[3],
+                )
+                for row in self.cursor.fetchall()
+            ]
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error getting rate limits", exc_info=e)
+            raise KernelBotError("Error getting rate limits") from e
+
+    def delete_rate_limit(self, leaderboard_name: str, mode_category: str) -> None:
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.rate_limit
+                WHERE leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = %s)
+                    AND mode_category = %s
+                """,
+                (leaderboard_name, mode_category),
+            )
+            if self.cursor.rowcount == 0:
+                raise KernelBotError(
+                    f"No rate limit found for '{leaderboard_name}' with category '{mode_category}'",
+                    code=404,
+                )
+            self.connection.commit()
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error deleting rate limit", exc_info=e)
+            raise KernelBotError("Error deleting rate limit") from e
+
+    def check_rate_limit(
+        self, leaderboard_name: str, user_id: str, mode_category: str
+    ) -> Optional[dict]:
+        """Check if a user has exceeded the rate limit for a leaderboard+category.
+
+        Returns None if no rate limit is configured, otherwise returns a dict with:
+        - allowed: bool
+        - current_count: int
+        - max_per_hour: int
+        - retry_after_seconds: int (0 if allowed)
+        """
+        try:
+            # Get the rate limit config
+            self.cursor.execute(
+                """
+                SELECT rl.max_submissions_per_hour
+                FROM leaderboard.rate_limit rl
+                JOIN leaderboard.leaderboard lb ON rl.leaderboard_id = lb.id
+                WHERE lb.name = %s AND rl.mode_category = %s
+                """,
+                (leaderboard_name, mode_category),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                return None
+
+            max_per_hour = row[0]
+
+            # Count submissions in the last hour
+            self.cursor.execute(
+                """
+                SELECT COUNT(*), MIN(s.submission_time)
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                WHERE lb.name = %s
+                    AND s.user_id = %s
+                    AND s.mode_category = %s
+                    AND s.submission_time > NOW() - INTERVAL '1 hour'
+                """,
+                (leaderboard_name, user_id, mode_category),
+            )
+            count_row = self.cursor.fetchone()
+            current_count = count_row[0]
+            oldest_time = count_row[1]
+
+            allowed = current_count < max_per_hour
+            retry_after = 0
+            if not allowed and oldest_time is not None:
+                import datetime as dt
+
+                expiry = oldest_time + dt.timedelta(hours=1)
+                now = dt.datetime.now(dt.timezone.utc)
+                retry_after = max(0, int((expiry - now).total_seconds()))
+
+            return {
+                "allowed": allowed,
+                "current_count": current_count,
+                "max_per_hour": max_per_hour,
+                "retry_after_seconds": retry_after,
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking rate limit", exc_info=e)
+            raise KernelBotError("Error checking rate limit") from e
 
 
 class LeaderboardDoesNotExist(KernelBotError):
