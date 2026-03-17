@@ -1027,3 +1027,112 @@ def test_set_leaderboard_visibility(database, submit_leaderboard):
         db.set_leaderboard_visibility("submit-leaderboard", "public")
         assert db.get_leaderboard("submit-leaderboard")["visibility"] == "public"
 
+
+# --- Rate Limit Tests ---
+
+
+def test_set_rate_limit(database, submit_leaderboard):
+    """Setting a rate limit creates it and upserting updates it."""
+    with database as db:
+        result = db.set_rate_limit("submit-leaderboard", "test", 5)
+        assert result["mode_category"] == "test"
+        assert result["max_submissions_per_hour"] == 5
+        assert result["leaderboard_name"] == "submit-leaderboard"
+
+        # Upsert updates the value
+        result = db.set_rate_limit("submit-leaderboard", "test", 10)
+        assert result["max_submissions_per_hour"] == 10
+
+        # Different category creates a separate entry
+        result = db.set_rate_limit("submit-leaderboard", "leaderboard", 3)
+        assert result["mode_category"] == "leaderboard"
+        assert result["max_submissions_per_hour"] == 3
+
+
+def test_get_rate_limits_empty(database, submit_leaderboard):
+    """No rate limits returns empty list."""
+    with database as db:
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert limits == []
+
+
+def test_get_rate_limits(database, submit_leaderboard):
+    """Getting rate limits returns all configured limits."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.set_rate_limit("submit-leaderboard", "leaderboard", 3)
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert len(limits) == 2
+        categories = {r["mode_category"] for r in limits}
+        assert categories == {"test", "leaderboard"}
+
+
+def test_delete_rate_limit(database, submit_leaderboard):
+    """Deleting a rate limit removes it."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.delete_rate_limit("submit-leaderboard", "test")
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert limits == []
+
+
+def test_delete_rate_limit_not_found(database, submit_leaderboard):
+    """Deleting a non-existent rate limit raises an error."""
+    with database as db:
+        with pytest.raises(KernelBotError, match="No rate limit found"):
+            db.delete_rate_limit("submit-leaderboard", "test")
+
+
+def test_check_rate_limit_no_config(database, submit_leaderboard):
+    """check_rate_limit returns None when no rate limit is configured."""
+    with database as db:
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result is None
+
+
+def test_check_rate_limit_under_limit(database, submit_leaderboard):
+    """check_rate_limit allows submissions under the limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.create_submission(
+            "submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now(), mode_category="test"
+        )
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is True
+        assert result["current_count"] == 1
+        assert result["max_per_hour"] == 5
+
+
+def test_check_rate_limit_at_limit(database, submit_leaderboard):
+    """check_rate_limit blocks submissions at the limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 2)
+        for i in range(2):
+            db.create_submission(
+                "submit-leaderboard", f"test{i}.py", 123, f"code{i}", datetime.datetime.now(), mode_category="test"
+            )
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is False
+        assert result["current_count"] == 2
+        assert result["max_per_hour"] == 2
+        assert result["retry_after_seconds"] >= 0
+
+
+def test_check_rate_limit_categories_independent(database, submit_leaderboard):
+    """Test submissions don't count against leaderboard rate limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 1)
+        db.set_rate_limit("submit-leaderboard", "leaderboard", 1)
+        # Use up test limit
+        db.create_submission(
+            "submit-leaderboard", "test.py", 123, "code_test", datetime.datetime.now(), mode_category="test"
+        )
+        # Leaderboard should still be allowed
+        result = db.check_rate_limit("submit-leaderboard", "123", "leaderboard")
+        assert result["allowed"] is True
+        assert result["current_count"] == 0
+
+        # Test should be blocked
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is False
+

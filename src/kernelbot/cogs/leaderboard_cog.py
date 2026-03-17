@@ -126,7 +126,7 @@ class LeaderboardSubmitCog(app_commands.Group):
             leaderboard=leaderboard_name,
             identity_type="discord",
         )
-        req = prepare_submission(req, self.bot.backend)
+        req = prepare_submission(req, self.bot.backend, mode)
 
         if req.gpus is None:
             view = await self.select_gpu_view(interaction, leaderboard_name, req.task_gpus)

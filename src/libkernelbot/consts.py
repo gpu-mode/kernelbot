@@ -101,6 +101,13 @@ class SubmissionMode(Enum):
     PRIVATE = "private"
 
 
+def get_mode_category(mode: "SubmissionMode") -> str:
+    """Map a SubmissionMode to its rate limit category ('test' or 'leaderboard')."""
+    if mode == SubmissionMode.LEADERBOARD:
+        return "leaderboard"
+    return "test"
+
+
 class Language(Enum):
     Python = "py"
     CUDA = "cu"
