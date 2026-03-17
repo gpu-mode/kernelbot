@@ -478,8 +478,9 @@ async def enqueue_background_job(
             file_name=req.file_name,
             code=req.code,
             user_id=req.user_id,
-            time=datetime.datetime.now(),
+            time=datetime.datetime.now(datetime.timezone.utc),
             user_name=req.user_name,
+            mode_category=req.mode_category,
         )
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
@@ -523,8 +524,10 @@ async def run_submission_async(
                 user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
             )
 
-            req = prepare_submission(submission_request, backend_instance)
+            req = prepare_submission(submission_request, backend_instance, submission_mode_enum)
 
+        except KernelBotError as e:
+            raise HTTPException(status_code=e.http_code, detail=str(e)) from e
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"failed to prepare submission request: {str(e)}"
@@ -1039,6 +1042,58 @@ async def admin_set_visibility(
     with db_context as db:
         db.set_leaderboard_visibility(leaderboard_name, visibility)
     return {"status": "ok", "leaderboard": leaderboard_name, "visibility": visibility}
+
+
+@app.put("/admin/leaderboards/{leaderboard_name}/rate-limits")
+async def admin_set_rate_limit(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Create or update a rate limit for a leaderboard."""
+    mode_category = payload.get("mode_category")
+    if mode_category not in ("test", "leaderboard"):
+        raise HTTPException(status_code=400, detail="mode_category must be 'test' or 'leaderboard'")
+    max_per_hour = payload.get("max_submissions_per_hour")
+    if not isinstance(max_per_hour, int) or max_per_hour < 1:
+        raise HTTPException(status_code=400, detail="max_submissions_per_hour must be a positive integer")
+    try:
+        with db_context as db:
+            result = db.set_rate_limit(leaderboard_name, mode_category, max_per_hour)
+        return {"status": "ok", "rate_limit": dict(result)}
+    except KernelBotError as e:
+        raise HTTPException(status_code=e.http_code, detail=str(e)) from e
+
+
+@app.get("/admin/leaderboards/{leaderboard_name}/rate-limits")
+async def admin_get_rate_limits(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """List rate limits for a leaderboard."""
+    with db_context as db:
+        limits = db.get_rate_limits(leaderboard_name)
+    return {"status": "ok", "leaderboard": leaderboard_name, "rate_limits": [dict(r) for r in limits]}
+
+
+@app.delete("/admin/leaderboards/{leaderboard_name}/rate-limits/{mode_category}")
+async def admin_delete_rate_limit(
+    leaderboard_name: str,
+    mode_category: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Delete a rate limit for a leaderboard."""
+    if mode_category not in ("test", "leaderboard"):
+        raise HTTPException(status_code=400, detail="mode_category must be 'test' or 'leaderboard'")
+    try:
+        with db_context as db:
+            db.delete_rate_limit(leaderboard_name, mode_category)
+        return {"status": "ok", "leaderboard": leaderboard_name, "mode_category": mode_category}
+    except KernelBotError as e:
+        raise HTTPException(status_code=e.http_code, detail=str(e)) from e
 
 
 @app.post("/user/join")
