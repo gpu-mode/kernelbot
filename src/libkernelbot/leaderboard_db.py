@@ -1445,6 +1445,59 @@ class LeaderboardDB:
             raise KernelBotError("Error validating CLI ID") from e
 
 
+    def ban_user(self, user_id: str) -> bool:
+        """Ban a user by their ID. Returns True if the user was found and banned."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.user_info
+                SET is_banned = TRUE
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error banning user %s", user_id, exc_info=e)
+            raise KernelBotError("Error banning user") from e
+
+    def unban_user(self, user_id: str) -> bool:
+        """Unban a user by their ID. Returns True if the user was found and unbanned."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.user_info
+                SET is_banned = FALSE
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error unbanning user %s", user_id, exc_info=e)
+            raise KernelBotError("Error unbanning user") from e
+
+    def is_user_banned(self, user_id: str) -> bool:
+        """Check if a user is banned."""
+        try:
+            self.cursor.execute(
+                """
+                SELECT is_banned FROM leaderboard.user_info
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            row = self.cursor.fetchone()
+            return row[0] if row else False
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking ban status for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error checking ban status") from e
+
     def set_rate_limit(self, leaderboard_name: str, mode_category: str, max_per_hour: int) -> RateLimitItem:
         try:
             self.cursor.execute(
