@@ -49,6 +49,10 @@ def prepare_submission(  # noqa: C901
             "The bot is currently not accepting any new submissions, please try again later."
         )
 
+    with backend.db as db:
+        if db.is_user_banned(str(req.user_id)):
+            raise KernelBotError("You are banned from making submissions.")
+
     if profanity.contains_profanity(req.file_name):
         raise KernelBotError("Please provide a non-rude filename")
 

@@ -426,6 +426,32 @@ async def _stream_submission_response(
                 pass
 
 
+@app.post("/admin/ban/{user_id}")
+async def admin_ban_user(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        found = db.ban_user(user_id)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    return {"status": "ok", "user_id": user_id, "banned": True}
+
+
+@app.delete("/admin/ban/{user_id}")
+async def admin_unban_user(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        found = db.unban_user(user_id)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    return {"status": "ok", "user_id": user_id, "banned": False}
+
+
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
     leaderboard_name: str,
