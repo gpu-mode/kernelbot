@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.report import MultiProgressReporter, RunProgressReporter, RunResultReport
 from libkernelbot.submission import ProcessedSubmissionRequest
 from libkernelbot.utils import setup_logging
@@ -251,6 +252,22 @@ class BackgroundSubmissionManager:
                     status="timed_out",
                     last_heartbeat=ts,
                     error="hard timeout reached",
+                )
+        except KernelGuardRejected as e:
+            ts = dt.datetime.now(dt.timezone.utc)
+            logger.info("[Background Job] submission %s flagged as hacked", sub_id)
+            try:
+                with self.backend.db as db:
+                    db.upsert_submission_job_status(
+                        sub_id,
+                        status="hacked",
+                        last_heartbeat=ts,
+                        error=str(e),
+                    )
+            except Exception:
+                logger.error(
+                    "[Background Job] Failed to write hacked status for submission %s",
+                    sub_id,
                 )
         except Exception as e:
             ts = dt.datetime.now(dt.timezone.utc)

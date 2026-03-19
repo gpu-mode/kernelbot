@@ -18,6 +18,7 @@ from libkernelbot.submission import (
     SubmissionRequest,
     prepare_submission,
 )
+from libkernelbot.utils import KernelBotError
 
 
 async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]:
@@ -154,7 +155,10 @@ async def _run_submission(
         raise HTTPException(status_code=400, detail="Invalid GPU type")
 
     reporter = MultiProgressReporterAPI()
-    sub_id, results = await backend.submit_full(req, mode, reporter)
+    try:
+        sub_id, results = await backend.submit_full(req, mode, reporter)
+    except KernelBotError as e:
+        raise HTTPException(status_code=getattr(e, "http_code", 400), detail=str(e)) from e
     return results, [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs]
 
 

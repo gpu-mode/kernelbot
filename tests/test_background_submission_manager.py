@@ -6,6 +6,7 @@ import pytest
 
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.submission import ProcessedSubmissionRequest
 
 
@@ -145,4 +146,34 @@ async def test_scale_up_and_down(mock_backend):
 
     async with manager._state_lock:
         assert len(manager._workers) == manager.min_workers
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_hacked_submission_sets_hacked_status(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(
+        side_effect=lambda *a, **k: a[0]
+    )
+    db_context.update_heartbeat_if_active = mock.Mock()
+
+    async def fake_submit_full(req, mode, reporter, sub_id):
+        raise KernelGuardRejected("blocked by kernelguard", result={})
+
+    mock_backend.submit_full = fake_submit_full
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+
+    await manager.enqueue(get_req(1), SubmissionMode.BENCHMARK, sub_id=42)
+    await manager.queue.join()
+    await asyncio.sleep(0.05)
+
+    assert (
+        mock.call(42, status="hacked", last_heartbeat=mock.ANY, error="blocked by kernelguard")
+        in db_context.upsert_submission_job_status.call_args_list
+    )
+
     await manager.stop()

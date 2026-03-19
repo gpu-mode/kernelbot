@@ -5,6 +5,11 @@ from types import SimpleNamespace
 from typing import Optional
 
 from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name
+from libkernelbot.kernelguard import (
+    KernelGuardRejected,
+    enforce_submission_precheck,
+    should_precheck_submission,
+)
 from libkernelbot.launchers import Launcher
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
@@ -72,6 +77,18 @@ class KernelBackend:
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
         try:
+            if should_precheck_submission(mode):
+                try:
+                    await asyncio.to_thread(enforce_submission_precheck, req.code, req.file_name)
+                except KernelGuardRejected as exc:
+                    logger.error(
+                        "Submission %s rejected by precheck: file=%s, mode=%s, error=%s",
+                        sub_id, req.file_name, mode, str(exc)
+                    )
+                    with self.db as db:
+                        db.mark_submission_hacked(sub_id, error=str(exc))
+                    raise
+
             tasks = [
                 self.submit_leaderboard(
                     sub_id,

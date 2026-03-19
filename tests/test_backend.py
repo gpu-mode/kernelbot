@@ -7,6 +7,7 @@ from test_leaderboard_db import _submit_leaderboard
 from test_report import create_eval_result, sample_system_info
 
 from libkernelbot import backend, consts, report
+from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.run_eval import FullResult
 
 
@@ -374,3 +375,52 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
             "submission_time": ANY,
             "user_id": "5",
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pre_sub_id,expected_sub_id,expect_create_called", [
+    (None, 42, True),
+    (99, 99, False),
+])
+async def test_submit_full_records_hacked_submission(monkeypatch, pre_sub_id, expected_sub_id, expect_create_called):
+    bot = object.__new__(backend.KernelBackend)
+    db = MagicMock()
+    db.__enter__ = MagicMock(return_value=db)
+    db.__exit__ = MagicMock(return_value=None)
+    db.create_submission.return_value = 42
+    bot.db = db
+
+    req = backend.ProcessedSubmissionRequest(
+        code="pass",
+        file_name="submission.py",
+        user_id=5,
+        user_name="user",
+        gpus=["A100"],
+        leaderboard="submit-leaderboard",
+        task=MagicMock(),
+        secret_seed=42,
+        task_gpus=["A100"],
+    )
+    reporter = MockMultReporter()
+
+    monkeypatch.setattr(backend, "should_precheck_submission", lambda mode: True)
+
+    def _reject(code, file_name):
+        raise KernelGuardRejected("blocked", result={})
+
+    monkeypatch.setattr(backend, "enforce_submission_precheck", _reject)
+
+    with pytest.raises(KernelGuardRejected, match="blocked"):
+        await bot.submit_full(
+            req,
+            mode=consts.SubmissionMode.BENCHMARK,
+            reporter=reporter,
+            pre_sub_id=pre_sub_id,
+        )
+
+    if expect_create_called:
+        db.create_submission.assert_called_once()
+    else:
+        db.create_submission.assert_not_called()
+    db.mark_submission_hacked.assert_called_once_with(expected_sub_id, error="blocked")
+    db.mark_submission_done.assert_called_once_with(expected_sub_id)
