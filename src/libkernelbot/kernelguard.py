@@ -134,7 +134,8 @@ def enforce_submission_precheck(code: str, file_name: str) -> dict[str, Any] | N
         if _fail_open_enabled():
             return None
         raise KernelBotError(
-            "KernelGuard pre-check is unavailable right now. Please try again later."
+            "KernelGuard pre-check is unavailable right now. Please try again later.",
+            code=503,
         ) from exc
 
     classification = str(result.get("classification", "unknown"))

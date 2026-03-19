@@ -15,6 +15,7 @@ from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
+from libkernelbot.kernelguard import KernelGuardRejected, enforce_submission_precheck, should_precheck_submission
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
 from libkernelbot.problem_sync import sync_problems
 from libkernelbot.submission import (
@@ -533,6 +534,18 @@ async def run_submission_async(
         # prepare submission request before the submission is started
         if not req.gpus or len(req.gpus) != 1:
             raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+        # run KernelGuard pre-check before enqueuing to avoid filling the queue with blocked submissions
+        if should_precheck_submission(submission_mode_enum):
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(enforce_submission_precheck, req.code, req.file_name),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError as e:
+                raise HTTPException(status_code=504, detail="KernelGuard pre-check timed out") from e
+            except KernelGuardRejected as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
 
         # put submission request to background manager to run in background
         sub_id, job_status_id = await enqueue_background_job(

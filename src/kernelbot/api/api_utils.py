@@ -6,6 +6,7 @@ from fastapi import HTTPException, UploadFile
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
+from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     Log,
@@ -157,8 +158,10 @@ async def _run_submission(
     reporter = MultiProgressReporterAPI()
     try:
         sub_id, results = await backend.submit_full(req, mode, reporter)
+    except KernelGuardRejected as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except KernelBotError as e:
-        raise HTTPException(status_code=getattr(e, "http_code", 400), detail=str(e)) from e
+        raise HTTPException(status_code=getattr(e, "http_code", 500), detail=str(e)) from e
     return results, [rep.get_message() + "\n" + rep.long_report for rep in reporter.runs]
 
 

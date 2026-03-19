@@ -58,7 +58,7 @@ async def test_enqueue_and_run_job(mock_backend):
     db_context.update_heartbeat_if_active = mock.Mock()
 
     # mock submit_full
-    async def fake_submit_full(req, mode, reporter, sub_id):
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
         await asyncio.sleep(0.01)  # simulate a long-running job
         return None, None
 
@@ -120,7 +120,7 @@ async def test_scale_up_and_down(mock_backend):
     )
     db_context.update_heartbeat_if_active = mock.Mock()
 
-    async def fake_submit_full(req, mode, reporter, sub_id):
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
         await asyncio.sleep(0.05)
         return None, None
 
@@ -157,7 +157,7 @@ async def test_hacked_submission_sets_hacked_status(mock_backend):
     )
     db_context.update_heartbeat_if_active = mock.Mock()
 
-    async def fake_submit_full(req, mode, reporter, sub_id):
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
         raise KernelGuardRejected("blocked by kernelguard", result={})
 
     mock_backend.submit_full = fake_submit_full

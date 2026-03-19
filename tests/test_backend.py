@@ -423,4 +423,4 @@ async def test_submit_full_records_hacked_submission(monkeypatch, pre_sub_id, ex
     else:
         db.create_submission.assert_not_called()
     db.mark_submission_hacked.assert_called_once_with(expected_sub_id, error="blocked")
-    db.mark_submission_done.assert_called_once_with(expected_sub_id)
+    db.mark_submission_done.assert_not_called()
