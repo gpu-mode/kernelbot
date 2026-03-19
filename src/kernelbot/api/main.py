@@ -131,6 +131,7 @@ async def validate_cli_header(
     if user_info is None:
         raise HTTPException(status_code=401, detail="Invalid or unauthorized X-Popcorn-Cli-Id")
 
+    user_info["id_type"] = "cli"
     return user_info
 
 
@@ -178,6 +179,38 @@ async def validate_user_header(
     return user_info
 
 
+async def optional_user_header(
+    x_web_auth_id: Optional[str] = Header(None, alias="X-Web-Auth-Id"),
+    x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
+    db_context: LeaderboardDB = Depends(get_db),
+) -> Optional[Any]:
+    """Like validate_user_header but returns None instead of raising when no auth header is present."""
+    token = x_web_auth_id or x_popcorn_cli_id
+    if not token:
+        return None
+
+    if x_web_auth_id:
+        id_type = IdentityType.WEB
+    else:
+        id_type = IdentityType.CLI
+
+    try:
+        with db_context as db:
+            user_info = db.validate_identity(token, id_type)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error during validation: {e}",
+        ) from e
+
+    if not user_info:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or unauthorized auth header",
+        )
+    return user_info
+
+
 def require_admin(
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ) -> None:
@@ -186,6 +219,16 @@ def require_admin(
     expected = f"Bearer {env.ADMIN_TOKEN}"
     if authorization != expected:
         raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def enforce_leaderboard_access(db, leaderboard_name: str, user_info: Optional[dict]) -> None:
+    """Raise 401/403 if the leaderboard is closed and the user lacks access."""
+    lb = db.get_leaderboard(leaderboard_name)
+    if lb.get("visibility") == "closed":
+        if user_info is None:
+            raise HTTPException(status_code=401, detail="Authentication required for closed leaderboard")
+        if not db.check_leaderboard_access(leaderboard_name, user_info["user_id"]):
+            raise HTTPException(status_code=403, detail="You do not have access to this leaderboard")
 
 
 @app.get("/auth/init")
@@ -383,6 +426,32 @@ async def _stream_submission_response(
                 pass
 
 
+@app.post("/admin/ban/{user_id}")
+async def admin_ban_user(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        found = db.ban_user(user_id)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    return {"status": "ok", "user_id": user_id, "banned": True}
+
+
+@app.delete("/admin/ban/{user_id}")
+async def admin_unban_user(
+    user_id: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        found = db.unban_user(user_id)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    return {"status": "ok", "user_id": user_id, "banned": False}
+
+
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")
 async def run_submission(  # noqa: C901
     leaderboard_name: str,
@@ -435,8 +504,9 @@ async def enqueue_background_job(
             file_name=req.file_name,
             code=req.code,
             user_id=req.user_id,
-            time=datetime.datetime.now(),
+            time=datetime.datetime.now(datetime.timezone.utc),
             user_name=req.user_name,
+            mode_category=req.mode_category,
         )
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
@@ -480,8 +550,10 @@ async def run_submission_async(
                 user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
             )
 
-            req = prepare_submission(submission_request, backend_instance)
+            req = prepare_submission(submission_request, backend_instance, submission_mode_enum)
 
+        except KernelBotError as e:
+            raise HTTPException(status_code=e.http_code, detail=str(e)) from e
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"failed to prepare submission request: {str(e)}"
@@ -576,6 +648,10 @@ async def create_dev_leaderboard(
         except Exception:
             pass  # Leaderboard doesn't exist, that's fine
 
+        visibility = payload.get("visibility", "public")
+        if visibility not in ("public", "closed"):
+            raise HTTPException(status_code=400, detail="visibility must be 'public' or 'closed'")
+
         db.create_leaderboard(
             name=leaderboard_name,
             deadline=deadline_value,
@@ -583,6 +659,7 @@ async def create_dev_leaderboard(
             creator_id=0,
             forum_id=-1,
             gpu_types=definition.gpus,
+            visibility=visibility,
         )
     return {"status": "ok", "leaderboard": leaderboard_name}
 
@@ -652,6 +729,9 @@ async def admin_update_problems(
     problem_set = payload.get("problem_set")
     branch = payload.get("branch", "main")
     force = payload.get("force", False)
+    visibility = payload.get("visibility", "public")
+    if visibility not in ("public", "closed"):
+        raise HTTPException(status_code=400, detail="visibility must be 'public' or 'closed'")
 
     try:
         result = sync_problems(
@@ -662,6 +742,7 @@ async def admin_update_problems(
             force=force,
             creator_id=0,  # API-created
             forum_id=-1,  # No Discord forum
+            visibility=visibility,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -774,6 +855,53 @@ async def admin_backfill(
     }
 
 
+@app.post("/admin/export-hf")
+async def admin_export_hf(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Export competition submissions to a Hugging Face dataset as parquet.
+
+    Payload:
+        leaderboard_ids: list[int] - IDs of leaderboards to export
+        filename: str - parquet filename in the repo (e.g. "nvidia_nvfp4_submissions.parquet")
+        private: bool - if true, upload to private live repo; if false, upload to public repo (default: true)
+    """
+    from libkernelbot.hf_export import export_to_hf
+
+    leaderboard_ids = payload.get("leaderboard_ids")
+    filename = payload.get("filename")
+    private = payload.get("private", True)
+
+    if not isinstance(leaderboard_ids, list) or not leaderboard_ids:
+        raise HTTPException(status_code=400, detail="leaderboard_ids must be a non-empty list of integers")
+    if not all(isinstance(leaderboard_id, int) for leaderboard_id in leaderboard_ids):
+        raise HTTPException(status_code=400, detail="leaderboard_ids must be a non-empty list of integers")
+    if not isinstance(filename, str) or not filename.endswith(".parquet"):
+        raise HTTPException(status_code=400, detail="filename must end with .parquet")
+    if not env.HF_TOKEN:
+        raise HTTPException(status_code=500, detail="HF_TOKEN not configured")
+
+    repo_id = env.HF_PUBLIC_DATASET if not private else env.HF_PRIVATE_DATASET
+
+    try:
+        with db_context as db:
+            result = export_to_hf(
+                db=db,
+                leaderboard_ids=leaderboard_ids,
+                repo_id=repo_id,
+                filename=filename,
+                token=env.HF_TOKEN,
+                private=private,
+            )
+        return {"status": "ok", **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}") from e
+
+
 @app.get("/leaderboards")
 async def get_leaderboards(db_context=Depends(get_db)):
     """An endpoint that returns all leaderboards.
@@ -792,21 +920,19 @@ async def get_leaderboards(db_context=Depends(get_db)):
 
 
 @app.get("/gpus/{leaderboard_name}")
-async def get_gpus(leaderboard_name: str, db_context=Depends(get_db)) -> list[str]:
-    """An endpoint that returns all GPU types that are available for a given leaderboard and runner.
-
-    Args:
-        leaderboard_name (str): The name of the leaderboard to get the GPU types for.
-        runner_name (str): The name of the runner to get the GPU types for.
-
-    Returns:
-        list[str]: A list of GPU types that are available for the given leaderboard and runner.
-    """
+async def get_gpus(
+    leaderboard_name: str,
+    user_info: Annotated[Optional[Any], Depends(optional_user_header)] = None,
+    db_context=Depends(get_db),
+) -> list[str]:
+    """An endpoint that returns all GPU types that are available for a given leaderboard and runner."""
     await simple_rate_limit()
     try:
         with db_context as db:
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             return db.get_leaderboard_gpu_types(leaderboard_name)
-
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
 
@@ -817,29 +943,39 @@ async def get_submissions(
     gpu_name: str,
     limit: int = None,
     offset: int = 0,
+    user_info: Annotated[Optional[Any], Depends(optional_user_header)] = None,
     db_context=Depends(get_db),
 ) -> list[LeaderboardRankedEntry]:
     await simple_rate_limit()
     try:
         with db_context as db:
-            # Add validation for leaderboard and GPU? Might be redundant if DB handles it.
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             return db.get_leaderboard_submissions(
                 leaderboard_name, gpu_name, limit=limit, offset=offset
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching submissions: {e}") from e
 
 
 @app.get("/submission_count/{leaderboard_name}/{gpu_name}")
 async def get_submission_count(
-    leaderboard_name: str, gpu_name: str, user_id: str = None, db_context=Depends(get_db)
+    leaderboard_name: str,
+    gpu_name: str,
+    user_id: str = None,
+    user_info: Annotated[Optional[Any], Depends(optional_user_header)] = None,
+    db_context=Depends(get_db),
 ) -> dict:
     """Get the total count of submissions for pagination"""
     await simple_rate_limit()
     try:
         with db_context as db:
+            enforce_leaderboard_access(db, leaderboard_name, user_info)
             count = db.get_leaderboard_submission_count(leaderboard_name, gpu_name, user_id)
             return {"count": count}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching submission count: {e}") from e
 
@@ -964,3 +1100,140 @@ async def delete_user_submission(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting submission: {e}") from e
+
+
+@app.post("/admin/invites")
+async def admin_generate_invites(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Generate invite codes covering one or more leaderboards.
+
+    Accepts either:
+      {"leaderboards": ["lb1", "lb2"], "count": 10}
+      {"leaderboard": "lb1", "count": 10}  (single leaderboard shorthand)
+    """
+    count = payload.get("count")
+    if not isinstance(count, int) or count < 1 or count > 10000:
+        raise HTTPException(status_code=400, detail="count must be an integer between 1 and 10000")
+    leaderboards = payload.get("leaderboards") or []
+    if not leaderboards:
+        single = payload.get("leaderboard")
+        if single:
+            leaderboards = [single]
+    if not leaderboards or not isinstance(leaderboards, list):
+        raise HTTPException(status_code=400, detail="Must provide 'leaderboards' list or 'leaderboard' string")
+    with db_context as db:
+        codes = db.generate_invite_codes(leaderboards, count)
+    return {"status": "ok", "leaderboards": leaderboards, "codes": codes}
+
+
+@app.get("/admin/leaderboards/{leaderboard_name}/invites")
+async def admin_list_invites(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """List all invite codes for a leaderboard with claim status."""
+    with db_context as db:
+        invites = db.get_invite_codes(leaderboard_name)
+    return {"status": "ok", "leaderboard": leaderboard_name, "invites": invites}
+
+
+@app.delete("/admin/invites/{code}")
+async def admin_revoke_invite(
+    code: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Revoke an invite code, removing it from the pool."""
+    with db_context as db:
+        result = db.revoke_invite_code(code)
+    return {"status": "ok", **result}
+
+
+@app.post("/admin/leaderboards/{leaderboard_name}/visibility")
+async def admin_set_visibility(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Change the visibility of an existing leaderboard."""
+    visibility = payload.get("visibility")
+    if visibility not in ("public", "closed"):
+        raise HTTPException(status_code=400, detail="visibility must be 'public' or 'closed'")
+    with db_context as db:
+        db.set_leaderboard_visibility(leaderboard_name, visibility)
+    return {"status": "ok", "leaderboard": leaderboard_name, "visibility": visibility}
+
+
+@app.put("/admin/leaderboards/{leaderboard_name}/rate-limits")
+async def admin_set_rate_limit(
+    leaderboard_name: str,
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Create or update a rate limit for a leaderboard."""
+    mode_category = payload.get("mode_category")
+    if mode_category not in ("test", "leaderboard"):
+        raise HTTPException(status_code=400, detail="mode_category must be 'test' or 'leaderboard'")
+    max_per_hour = payload.get("max_submissions_per_hour")
+    if not isinstance(max_per_hour, int) or max_per_hour < 1:
+        raise HTTPException(status_code=400, detail="max_submissions_per_hour must be a positive integer")
+    try:
+        with db_context as db:
+            result = db.set_rate_limit(leaderboard_name, mode_category, max_per_hour)
+        return {"status": "ok", "rate_limit": dict(result)}
+    except KernelBotError as e:
+        raise HTTPException(status_code=e.http_code, detail=str(e)) from e
+
+
+@app.get("/admin/leaderboards/{leaderboard_name}/rate-limits")
+async def admin_get_rate_limits(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """List rate limits for a leaderboard."""
+    with db_context as db:
+        limits = db.get_rate_limits(leaderboard_name)
+    return {"status": "ok", "leaderboard": leaderboard_name, "rate_limits": [dict(r) for r in limits]}
+
+
+@app.delete("/admin/leaderboards/{leaderboard_name}/rate-limits/{mode_category}")
+async def admin_delete_rate_limit(
+    leaderboard_name: str,
+    mode_category: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Delete a rate limit for a leaderboard."""
+    if mode_category not in ("test", "leaderboard"):
+        raise HTTPException(status_code=400, detail="mode_category must be 'test' or 'leaderboard'")
+    try:
+        with db_context as db:
+            db.delete_rate_limit(leaderboard_name, mode_category)
+        return {"status": "ok", "leaderboard": leaderboard_name, "mode_category": mode_category}
+    except KernelBotError as e:
+        raise HTTPException(status_code=e.http_code, detail=str(e)) from e
+
+
+@app.post("/user/join")
+async def user_join_leaderboard(
+    payload: dict,
+    user_info: Annotated[dict, Depends(validate_cli_header)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Claim an invite code to join a closed leaderboard. CLI only."""
+    code = payload.get("code")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing required field: code")
+    try:
+        with db_context as db:
+            result = db.claim_invite_code(code, user_info["user_id"])
+    except KernelBotError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"status": "ok", "leaderboards": result["leaderboards"]}

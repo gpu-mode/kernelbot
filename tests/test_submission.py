@@ -31,6 +31,7 @@ def mock_backend():
         "name": "test_board",
     }
     db_context.get_leaderboard_gpu_types.return_value = ["A100", "V100"]
+    db_context.is_user_banned.return_value = False
 
     return backend
 

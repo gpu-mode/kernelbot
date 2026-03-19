@@ -798,3 +798,487 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 1.5 in scores
         assert 2.0 in scores
 
+
+def test_check_leaderboard_access_public(database, submit_leaderboard):
+    """Public leaderboards grant access to everyone."""
+    with database as db:
+        assert db.check_leaderboard_access("submit-leaderboard", "999") is True
+
+
+def test_check_leaderboard_access_closed_no_invite(database, task_directory):
+    """Closed leaderboards deny access without a claimed invite."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        assert db.check_leaderboard_access("closed-lb", "999") is False
+
+
+def test_check_leaderboard_access_closed_with_invite(database, task_directory):
+    """Closed leaderboards grant access after claiming an invite."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        assert db.check_leaderboard_access("closed-lb", "42") is False
+        db.claim_invite_code(codes[0], "42")
+        assert db.check_leaderboard_access("closed-lb", "42") is True
+
+
+def test_generate_invite_codes(database, task_directory):
+    """Generate invite codes returns unique codes."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 5)
+        assert len(codes) == 5
+        assert len(set(codes)) == 5  # all unique
+
+
+def test_generate_invite_codes_multi_leaderboard(database, task_directory):
+    """Generate invite codes covering multiple leaderboards."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb-1", deadline=deadline, definition=definition,
+            creator_id=1, forum_id=5, gpu_types=["A100"], visibility="closed",
+        )
+        db.create_leaderboard(
+            name="closed-lb-2", deadline=deadline, definition=definition,
+            creator_id=1, forum_id=6, gpu_types=["A100"], visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb-1", "closed-lb-2"], 2)
+        assert len(codes) == 2
+
+        # Claiming one code grants access to both leaderboards
+        db.claim_invite_code(codes[0], "42")
+        assert db.check_leaderboard_access("closed-lb-1", "42") is True
+        assert db.check_leaderboard_access("closed-lb-2", "42") is True
+
+        # Unclaimed code doesn't grant access
+        assert db.check_leaderboard_access("closed-lb-1", "99") is False
+
+
+def test_claim_invite_code_already_claimed(database, task_directory):
+    """Claiming an already-claimed code raises an error."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        db.claim_invite_code(codes[0], "42")
+
+        with pytest.raises(KernelBotError, match="already been claimed"):
+            db.claim_invite_code(codes[0], "99")
+
+
+def test_claim_invite_code_idempotent(database, task_directory):
+    """Same user claiming the same code again is idempotent."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 1)
+        db.claim_invite_code(codes[0], "42")
+        result = db.claim_invite_code(codes[0], "42")  # no error
+        assert result["leaderboards"] == ["closed-lb"]
+
+
+def test_claim_invite_code_invalid(database, task_directory):
+    """Claiming a nonexistent code raises an error."""
+    with database as db:
+        with pytest.raises(KernelBotError, match="Invalid invite code"):
+            db.claim_invite_code("bogus-code", "42")
+
+
+def test_get_invite_codes(database, task_directory):
+    """Admin can list invite codes with claim status."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+        codes = db.generate_invite_codes(["closed-lb"], 3)
+        db.claim_invite_code(codes[0], "42")
+
+        invites = db.get_invite_codes("closed-lb")
+        assert len(invites) == 3
+
+        claimed = [i for i in invites if i["user_id"] is not None]
+        unclaimed = [i for i in invites if i["user_id"] is None]
+        assert len(claimed) == 1
+        assert len(unclaimed) == 2
+        assert claimed[0]["user_id"] == "42"
+        assert claimed[0]["code"] == codes[0]
+
+
+def test_leaderboard_visibility_field(database, task_directory):
+    """Leaderboard visibility field is returned correctly."""
+    from libkernelbot.task import make_task_definition
+
+    definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    with database as db:
+        db.create_leaderboard(
+            name="public-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=5,
+            gpu_types=["A100"],
+        )
+        db.create_leaderboard(
+            name="closed-lb",
+            deadline=deadline,
+            definition=definition,
+            creator_id=1,
+            forum_id=6,
+            gpu_types=["A100"],
+            visibility="closed",
+        )
+
+        assert db.get_leaderboard("public-lb")["visibility"] == "public"
+        assert db.get_leaderboard("closed-lb")["visibility"] == "closed"
+
+        lbs = db.get_leaderboards()
+        vis_map = {lb["name"]: lb["visibility"] for lb in lbs}
+        assert vis_map["public-lb"] == "public"
+        assert vis_map["closed-lb"] == "closed"
+
+
+def test_set_leaderboard_visibility(database, submit_leaderboard):
+    """Changing visibility works."""
+    with database as db:
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "public"
+        db.set_leaderboard_visibility("submit-leaderboard", "closed")
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "closed"
+        db.set_leaderboard_visibility("submit-leaderboard", "public")
+        assert db.get_leaderboard("submit-leaderboard")["visibility"] == "public"
+
+
+# --- Rate Limit Tests ---
+
+
+def test_set_rate_limit(database, submit_leaderboard):
+    """Setting a rate limit creates it and upserting updates it."""
+    with database as db:
+        result = db.set_rate_limit("submit-leaderboard", "test", 5)
+        assert result["mode_category"] == "test"
+        assert result["max_submissions_per_hour"] == 5
+        assert result["leaderboard_name"] == "submit-leaderboard"
+
+        # Upsert updates the value
+        result = db.set_rate_limit("submit-leaderboard", "test", 10)
+        assert result["max_submissions_per_hour"] == 10
+
+        # Different category creates a separate entry
+        result = db.set_rate_limit("submit-leaderboard", "leaderboard", 3)
+        assert result["mode_category"] == "leaderboard"
+        assert result["max_submissions_per_hour"] == 3
+
+
+def test_get_rate_limits_empty(database, submit_leaderboard):
+    """No rate limits returns empty list."""
+    with database as db:
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert limits == []
+
+
+def test_get_rate_limits(database, submit_leaderboard):
+    """Getting rate limits returns all configured limits."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.set_rate_limit("submit-leaderboard", "leaderboard", 3)
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert len(limits) == 2
+        categories = {r["mode_category"] for r in limits}
+        assert categories == {"test", "leaderboard"}
+
+
+def test_delete_rate_limit(database, submit_leaderboard):
+    """Deleting a rate limit removes it."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.delete_rate_limit("submit-leaderboard", "test")
+        limits = db.get_rate_limits("submit-leaderboard")
+        assert limits == []
+
+
+def test_delete_rate_limit_not_found(database, submit_leaderboard):
+    """Deleting a non-existent rate limit raises an error."""
+    with database as db:
+        with pytest.raises(KernelBotError, match="No rate limit found"):
+            db.delete_rate_limit("submit-leaderboard", "test")
+
+
+def test_check_rate_limit_no_config(database, submit_leaderboard):
+    """check_rate_limit returns None when no rate limit is configured."""
+    with database as db:
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result is None
+
+
+def test_check_rate_limit_under_limit(database, submit_leaderboard):
+    """check_rate_limit allows submissions under the limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 5)
+        db.create_submission(
+            "submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now(), mode_category="test"
+        )
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is True
+        assert result["current_count"] == 1
+        assert result["max_per_hour"] == 5
+
+
+def test_check_rate_limit_at_limit(database, submit_leaderboard):
+    """check_rate_limit blocks submissions at the limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 2)
+        for i in range(2):
+            db.create_submission(
+                "submit-leaderboard", f"test{i}.py", 123, f"code{i}", datetime.datetime.now(), mode_category="test"
+            )
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is False
+        assert result["current_count"] == 2
+        assert result["max_per_hour"] == 2
+        assert result["retry_after_seconds"] >= 0
+
+
+def test_check_rate_limit_categories_independent(database, submit_leaderboard):
+    """Test submissions don't count against leaderboard rate limit."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "test", 1)
+        db.set_rate_limit("submit-leaderboard", "leaderboard", 1)
+        # Use up test limit
+        db.create_submission(
+            "submit-leaderboard", "test.py", 123, "code_test", datetime.datetime.now(), mode_category="test"
+        )
+        # Leaderboard should still be allowed
+        result = db.check_rate_limit("submit-leaderboard", "123", "leaderboard")
+        assert result["allowed"] is True
+        assert result["current_count"] == 0
+
+        # Test should be blocked
+        result = db.check_rate_limit("submit-leaderboard", "123", "test")
+        assert result["allowed"] is False
+
+
+# --------------------------------------------------------------------------
+# Task versioning tests
+# --------------------------------------------------------------------------
+
+
+def test_task_version_starts_at_one(database, submit_leaderboard):
+    """New leaderboards start at task_version 1."""
+    with database as db:
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 1
+
+
+def test_task_version_bumps_on_task_change(database, task_directory):
+    """Updating a leaderboard with a different task bumps task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    # Create a modified task.yml
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 2000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 2
+
+
+def test_task_version_unchanged_on_same_task(database, task_directory):
+    """Updating a leaderboard with the same task does not bump task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+    definition = make_task_definition(task_directory / "task.yml")
+
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 1
+
+
+def test_rankings_filter_by_task_version(database, task_directory):
+    """Rankings only include runs from the current task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        # Create a submission and run at v1
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+        # Verify the run shows up in rankings at v1
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 1
+
+    # Bump task_version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 3000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        # Rankings should now be empty (v1 runs filtered out)
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 0
+
+
+def test_backfill_candidates_found(database, task_directory):
+    """Backfill finds submissions from previous task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+    # Bump version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 4000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        candidates = db.get_top_submissions_for_backfill("submit-leaderboard", "A100")
+        assert len(candidates) == 1
+        assert candidates[0]["user_id"] == "123"
+        assert candidates[0]["code"] == "code1"
+
+
+def test_backfill_candidates_exclude_current_version(database, task_directory):
+    """Backfill excludes users who already have runs at the current task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+    # Bump version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 5000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+
+        # Create a new submission at v2
+        sub_id2 = db.create_submission("submit-leaderboard", "test2.py", 123, "code2", datetime.datetime.now())
+        _create_submission_run(db, sub_id2, runner="A100", score=0.5, mode="leaderboard")
+
+        # User 123 already has a v2 run, so no backfill candidates
+        candidates = db.get_top_submissions_for_backfill("submit-leaderboard", "A100")
+        assert len(candidates) == 0
+
+
+def test_create_submission_run_gets_current_version(database, task_directory):
+    """Runs auto-get the leaderboard's current task_version when none is specified."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    # Bump version first
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 6000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 2
+
+        # Create a submission and run — should auto-get v2
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 456, "code_v2", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+        # This run should show in rankings (it's at current version)
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 1
+

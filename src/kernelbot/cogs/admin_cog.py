@@ -123,7 +123,25 @@ class AdminCog(commands.Cog):
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
 
+        self.ban_user = bot.admin_group.command(
+            name="ban", description="Ban a user from making submissions"
+        )(self.ban_user)
+
+        self.unban_user = bot.admin_group.command(
+            name="unban", description="Unban a user"
+        )(self.unban_user)
+
+        self.export_to_hf = bot.admin_group.command(
+            name="export-hf", description="Export competition data to Hugging Face dataset"
+        )(self.export_to_hf)
+
+        self.backfill = bot.admin_group.command(
+            name="backfill", description="Re-run top submissions after eval change"
+        )(self.backfill)
+
         self._scheduled_cleanup_temp_users.start()
+        if env.HF_TOKEN:
+            self._scheduled_hf_export.start()
 
     # --------------------------------------------------------------------------
     # |                           HELPER FUNCTIONS                              |
@@ -148,6 +166,152 @@ class AdminCog(commands.Cog):
                 return True
             return False
 
+    @discord.app_commands.describe(user_id="Discord user ID to ban")
+    @with_error_handling
+    async def ban_user(self, interaction: discord.Interaction, user_id: str):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            if db.ban_user(user_id):
+                await send_discord_message(
+                    interaction, f"User `{user_id}` has been banned.", ephemeral=True
+                )
+            else:
+                await send_discord_message(
+                    interaction, f"User `{user_id}` not found.", ephemeral=True
+                )
+
+    @discord.app_commands.describe(user_id="Discord user ID to unban")
+    @with_error_handling
+    async def unban_user(self, interaction: discord.Interaction, user_id: str):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            if db.unban_user(user_id):
+                await send_discord_message(
+                    interaction, f"User `{user_id}` has been unbanned.", ephemeral=True
+                )
+            else:
+                await send_discord_message(
+                    interaction, f"User `{user_id}` not found.", ephemeral=True
+                )
+
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the leaderboard to backfill",
+        gpu="GPU type to backfill",
+        top_n="Number of top submissions to re-run (default 100)",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @app_commands.choices(
+        gpu=[app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in GitHubGPU]
+        + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in ModalGPU]
+    )
+    @with_error_handling
+    async def backfill(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: str,
+        top_n: int = 100,
+    ):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        with self.bot.leaderboard_db as db:
+            task_version = db.get_leaderboard_task_version(leaderboard_name)
+            if task_version <= 1:
+                await interaction.edit_original_response(
+                    content=f"Leaderboard `{leaderboard_name}` is on task_version 1 — nothing to backfill."
+                )
+                return
+
+            submissions = db.get_top_submissions_for_backfill(leaderboard_name, gpu, top_n)
+            lb = db.get_leaderboard(leaderboard_name)
+
+        if not submissions:
+            await interaction.edit_original_response(
+                content=f"No eligible submissions found for `{leaderboard_name}` ({gpu}) from previous versions."
+            )
+            return
+
+        await interaction.edit_original_response(
+            content=(
+                f"**Backfill: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                f"Found {len(submissions)} submissions to re-run\nQueued: 0/{len(submissions)}"
+            )
+        )
+
+        queued = 0
+        errors = 0
+        for sub in submissions:
+            try:
+                from libkernelbot.submission import ProcessedSubmissionRequest
+
+                req = ProcessedSubmissionRequest(
+                    code=sub["code"],
+                    file_name=sub["file_name"],
+                    user_id=sub["user_id"],
+                    user_name=sub["user_name"],
+                    leaderboard=leaderboard_name,
+                    gpus=[gpu],
+                    task=lb["task"],
+                    secret_seed=lb.get("secret_seed", 0),
+                    task_gpus=[gpu],
+                )
+                from libkernelbot.background_submission_manager import BackgroundSubmissionManagerReporter
+                from libkernelbot.consts import SubmissionMode
+
+                with self.bot.leaderboard_db as db:
+                    new_sub_id = db.create_submission(
+                        leaderboard=leaderboard_name,
+                        file_name=sub["file_name"],
+                        code=sub["code"],
+                        user_id=sub["user_id"],
+                        time=datetime.now(tz=timezone.utc),
+                        user_name=sub["user_name"],
+                    )
+
+                reporter = BackgroundSubmissionManagerReporter(new_sub_id, self.bot.backend)
+                # Fire and forget — don't block on each submission
+                self.bot.loop.create_task(
+                    self.bot.backend.submit_full(req, SubmissionMode.LEADERBOARD, reporter, new_sub_id)
+                )
+                queued += 1
+            except Exception as e:
+                logger.error("Backfill error for submission %s: %s", sub["submission_id"], e)
+                errors += 1
+
+            if queued % 5 == 0 or queued + errors == len(submissions):
+                await interaction.edit_original_response(
+                    content=(
+                        f"**Backfill: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                        f"Found {len(submissions)} submissions to re-run\n"
+                        f"Queued: {queued}/{len(submissions)}\n"
+                        f"Errors: {errors}"
+                    )
+                )
+
+        await interaction.edit_original_response(
+            content=(
+                f"**Backfill complete: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                f"Queued: {queued}/{len(submissions)}\n"
+                f"Errors: {errors}"
+            )
+        )
+
     @discord.app_commands.describe(
         directory="Directory of the kernel definition. Also used as the leaderboard's name",
         gpu="The GPU to submit to. Leave empty for interactive selection/multiple GPUs",
@@ -163,6 +327,7 @@ class AdminCog(commands.Cog):
         interaction: discord.Interaction,
         directory: str,
         gpu: Optional[app_commands.Choice[str]],
+        closed: bool = False,
     ):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
@@ -212,6 +377,7 @@ class AdminCog(commands.Cog):
             definition=definition,
             forum_id=forum_id,
             gpu=gpu.value if gpu else None,
+            visibility="closed" if closed else "public",
         ):
             await send_discord_message(
                 interaction,
@@ -235,6 +401,7 @@ class AdminCog(commands.Cog):
         deadline: str,
         definition: LeaderboardDefinition,
         gpus: Optional[str | list[str]],
+        visibility: str = "public",
     ):
         if len(leaderboard_name) > 95:
             await send_discord_message(
@@ -276,7 +443,8 @@ class AdminCog(commands.Cog):
             )
 
             success = await self.create_leaderboard_in_db(
-                interaction, leaderboard_name, date_value, definition, forum_thread.thread.id, gpus
+                interaction, leaderboard_name, date_value, definition, forum_thread.thread.id, gpus,
+                visibility=visibility,
             )
             if not success:
                 await forum_thread.delete()
@@ -325,6 +493,7 @@ class AdminCog(commands.Cog):
         definition: LeaderboardDefinition,
         forum_id: int,
         gpu: Optional[str | list[str]] = None,
+        visibility: str = "public",
     ) -> bool:
         if gpu is None:
             # Ask the user to select GPUs
@@ -355,6 +524,7 @@ class AdminCog(commands.Cog):
                     gpu_types=selected_gpus,
                     creator_id=interaction.user.id,
                     forum_id=forum_id,
+                    visibility=visibility,
                 )
             except KernelBotError as e:
                 await send_discord_message(
@@ -515,6 +685,7 @@ class AdminCog(commands.Cog):
         problem_set: Optional[str] = None,
         branch: Optional[str] = "main",
         force: bool = False,
+        closed: bool = False,
     ):
         is_admin = await self.admin_check(interaction)
         if not is_admin:
@@ -573,7 +744,7 @@ class AdminCog(commands.Cog):
                     )
                     return
                 for competition in problem_dir.glob("*.yaml"):
-                    await self.update_competition(interaction, competition)
+                    await self.update_competition(interaction, competition, closed=closed)
             else:
                 problem_set = problem_dir / f"{problem_set}.yaml"
                 if not problem_set.exists():
@@ -586,7 +757,7 @@ class AdminCog(commands.Cog):
                         ephemeral=True,
                     )
                     return
-                await self.update_competition(interaction, problem_set, force)
+                await self.update_competition(interaction, problem_set, force, closed=closed)
 
     async def _create_update_plan(  # noqa: C901
         self,
@@ -693,7 +864,7 @@ class AdminCog(commands.Cog):
         return update_list, create_list
 
     async def update_competition(
-        self, interaction: discord.Interaction, spec_file: Path, force: bool = False
+        self, interaction: discord.Interaction, spec_file: Path, force: bool = False, closed: bool = False
     ):
         try:
             root = spec_file.parent
@@ -732,6 +903,7 @@ class AdminCog(commands.Cog):
                     entry["deadline"],
                     make_task_definition(root / entry["directory"]),
                     entry["gpus"],
+                    visibility="closed" if closed else "public",
                 )
                 steps += "done\n"
 
@@ -872,6 +1044,106 @@ class AdminCog(commands.Cog):
         with self.bot.leaderboard_db as db:
             db.cleanup_temp_users()
         logger.info("Temporary users cleanup completed")
+
+    @tasks.loop(hours=6)
+    async def _scheduled_hf_export(self):
+        """Daily export of active competition submissions to private HF dataset.
+
+        Once a competition expires, it drops out of the scheduled export set. If
+        there are still results settling after the deadline, a manual export is
+        needed once the queue drains. Currently public HF dataset releases are
+        handled manually.
+        """
+        from libkernelbot.hf_export import export_to_hf, get_active_competition_leaderboards
+
+        try:
+            with self.bot.leaderboard_db as db:
+                leaderboards = db.get_leaderboards()
+                active = get_active_competition_leaderboards(
+                    leaderboards,
+                    now=datetime.now(timezone.utc),
+                )
+
+                if not active:
+                    logger.info("HF export: no active competitions, skipping")
+                    return
+
+                leaderboard_ids = [lb["id"] for lb in active]
+                result = export_to_hf(
+                    db=db,
+                    leaderboard_ids=leaderboard_ids,
+                    repo_id=env.HF_PRIVATE_DATASET,
+                    filename="active_submissions.parquet",
+                    token=env.HF_TOKEN,
+                    private=True,
+                )
+                logger.info("Scheduled HF export complete: %s", result)
+        except Exception:
+            logger.exception("Scheduled HF export failed")
+
+    @_scheduled_hf_export.before_loop
+    async def _before_hf_export(self):
+        await self.bot.wait_until_ready()
+
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the competition to export",
+        filename="Parquet filename (default: <leaderboard_name>.parquet)",
+        private="Upload to private repo (default: true)",
+    )
+    @discord.app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @with_error_handling
+    async def export_to_hf(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        filename: Optional[str] = None,
+        private: bool = True,
+    ):
+        from libkernelbot.hf_export import export_to_hf as do_export
+
+        is_admin = await self.admin_check(interaction)
+        if not is_admin:
+            await send_discord_message(
+                interaction,
+                "You need to have Admin permissions to run this command",
+                ephemeral=True,
+            )
+            return
+
+        if not env.HF_TOKEN:
+            await send_discord_message(interaction, "HF_TOKEN not configured.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if filename is None:
+            filename = f"{leaderboard_name}.parquet"
+        if not filename.endswith(".parquet"):
+            filename += ".parquet"
+
+        repo_id = env.HF_PRIVATE_DATASET if private else env.HF_PUBLIC_DATASET
+
+        try:
+            with self.bot.leaderboard_db as db:
+                lb_id = db.get_leaderboard_id(leaderboard_name)
+                result = do_export(
+                    db=db,
+                    leaderboard_ids=[lb_id],
+                    repo_id=repo_id,
+                    filename=filename,
+                    token=env.HF_TOKEN,
+                    private=private,
+                )
+            await send_discord_message(
+                interaction,
+                f"Exported {result['rows']} rows to `{repo_id}/{filename}`.",
+                ephemeral=True,
+            )
+        except ValueError as e:
+            await send_discord_message(interaction, str(e), ephemeral=True)
+        except Exception as e:
+            logger.error("HF export failed: %s", e, exc_info=True)
+            await send_discord_message(interaction, f"Export failed: {e}", ephemeral=True)
 
     ####################################################################################################################
     #            MIGRATION COMMANDS --- TO BE DELETED LATER
