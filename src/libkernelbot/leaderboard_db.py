@@ -145,35 +145,21 @@ class LeaderboardDB:
             old_task = LeaderboardTask.from_dict(old_task_json)
             task_changed = old_task != task
 
-            if task_changed:
-                self.cursor.execute(
-                    """
-                    UPDATE leaderboard.leaderboard
-                    SET deadline = %s, task = %s, description = %s,
-                        task_version = task_version + 1
-                    WHERE id = %s;
-                    """,
-                    (
-                        deadline.astimezone(datetime.timezone.utc),
-                        task.to_str(),
-                        definition.description,
-                        lb_id,
-                    ),
-                )
-            else:
-                self.cursor.execute(
-                    """
-                    UPDATE leaderboard.leaderboard
-                    SET deadline = %s, task = %s, description = %s
-                    WHERE id = %s;
-                    """,
-                    (
-                        deadline.astimezone(datetime.timezone.utc),
-                        task.to_str(),
-                        definition.description,
-                        lb_id,
-                    ),
-                )
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard
+                SET deadline = %s, task = %s, description = %s,
+                    task_version = task_version + CASE WHEN %s THEN 1 ELSE 0 END
+                WHERE id = %s;
+                """,
+                (
+                    deadline.astimezone(datetime.timezone.utc),
+                    task.to_str(),
+                    definition.description,
+                    task_changed,
+                    lb_id,
+                ),
+            )
 
             # replace templates
             self.cursor.execute(
@@ -776,6 +762,15 @@ class LeaderboardDB:
                 WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                       AND r.score IS NOT NULL AND r.passed
                       AND r.task_version < l.task_version
+                      AND NOT EXISTS (
+                          SELECT 1 FROM leaderboard.runs r2
+                          JOIN leaderboard.submission s2 ON r2.submission_id = s2.id
+                          WHERE s2.user_id = s.user_id
+                            AND s2.leaderboard_id = l.id
+                            AND r2.runner = r.runner
+                            AND r2.task_version = l.task_version
+                            AND r2.passed AND NOT r2.secret
+                      )
                 ORDER BY s.user_id, r.score ASC
             )
             SELECT
