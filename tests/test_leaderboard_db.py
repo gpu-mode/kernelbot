@@ -1136,3 +1136,149 @@ def test_check_rate_limit_categories_independent(database, submit_leaderboard):
         result = db.check_rate_limit("submit-leaderboard", "123", "test")
         assert result["allowed"] is False
 
+
+# --------------------------------------------------------------------------
+# Task versioning tests
+# --------------------------------------------------------------------------
+
+
+def test_task_version_starts_at_one(database, submit_leaderboard):
+    """New leaderboards start at task_version 1."""
+    with database as db:
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 1
+
+
+def test_task_version_bumps_on_task_change(database, task_directory):
+    """Updating a leaderboard with a different task bumps task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    # Create a modified task.yml
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 2000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 2
+
+
+def test_task_version_unchanged_on_same_task(database, task_directory):
+    """Updating a leaderboard with the same task does not bump task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+    definition = make_task_definition(task_directory / "task.yml")
+
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 1
+
+
+def test_rankings_filter_by_task_version(database, task_directory):
+    """Rankings only include runs from the current task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        # Create a submission and run at v1
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+        # Verify the run shows up in rankings at v1
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 1
+
+    # Bump task_version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 3000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        # Rankings should now be empty (v1 runs filtered out)
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 0
+
+
+def test_backfill_candidates_found(database, task_directory):
+    """Backfill finds submissions from previous task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+    # Bump version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 4000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        candidates = db.get_top_submissions_for_backfill("submit-leaderboard", "A100")
+        assert len(candidates) == 1
+        assert candidates[0]["user_id"] == "123"
+        assert candidates[0]["code"] == "code1"
+
+
+def test_backfill_candidates_exclude_current_version(database, task_directory):
+    """Backfill excludes users who already have runs at the current task_version."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    with database as db:
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 123, "code1", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+    # Bump version
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 5000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+
+        # Create a new submission at v2
+        sub_id2 = db.create_submission("submit-leaderboard", "test2.py", 123, "code2", datetime.datetime.now())
+        _create_submission_run(db, sub_id2, runner="A100", score=0.5, mode="leaderboard")
+
+        # User 123 already has a v2 run, so no backfill candidates
+        candidates = db.get_top_submissions_for_backfill("submit-leaderboard", "A100")
+        assert len(candidates) == 0
+
+
+def test_create_submission_run_gets_current_version(database, task_directory):
+    """Runs auto-get the leaderboard's current task_version when none is specified."""
+    from libkernelbot.task import make_task_definition
+
+    _submit_leaderboard(database, task_directory)
+
+    # Bump version first
+    modified_yaml = (task_directory / "task.yml").read_text().replace("input_size: 1000", "input_size: 6000")
+    (task_directory / "task.yml").write_text(modified_yaml)
+    new_definition = make_task_definition(task_directory / "task.yml")
+    deadline = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(days=1)
+    with database as db:
+        db.update_leaderboard("submit-leaderboard", deadline, new_definition)
+        version = db.get_leaderboard_task_version("submit-leaderboard")
+        assert version == 2
+
+        # Create a submission and run — should auto-get v2
+        sub_id = db.create_submission("submit-leaderboard", "test.py", 456, "code_v2", datetime.datetime.now())
+        _create_submission_run(db, sub_id, runner="A100", score=1.0, mode="leaderboard")
+
+        # This run should show in rankings (it's at current version)
+        count = db.get_leaderboard_submission_count("submit-leaderboard", "A100", None)
+        assert count == 1
+

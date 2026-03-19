@@ -135,6 +135,10 @@ class AdminCog(commands.Cog):
             name="export-hf", description="Export competition data to Hugging Face dataset"
         )(self.export_to_hf)
 
+        self.backfill = bot.admin_group.command(
+            name="backfill", description="Re-run top submissions after eval change"
+        )(self.backfill)
+
         self._scheduled_cleanup_temp_users.start()
         if env.HF_TOKEN:
             self._scheduled_hf_export.start()
@@ -199,6 +203,114 @@ class AdminCog(commands.Cog):
                 await send_discord_message(
                     interaction, f"User `{user_id}` not found.", ephemeral=True
                 )
+
+    @discord.app_commands.describe(
+        leaderboard_name="Name of the leaderboard to backfill",
+        gpu="GPU type to backfill",
+        top_n="Number of top submissions to re-run (default 100)",
+    )
+    @app_commands.autocomplete(leaderboard_name=leaderboard_name_autocomplete)
+    @app_commands.choices(
+        gpu=[app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in GitHubGPU]
+        + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in ModalGPU]
+    )
+    @with_error_handling
+    async def backfill(
+        self,
+        interaction: discord.Interaction,
+        leaderboard_name: str,
+        gpu: str,
+        top_n: int = 100,
+    ):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        with self.bot.leaderboard_db as db:
+            task_version = db.get_leaderboard_task_version(leaderboard_name)
+            if task_version <= 1:
+                await interaction.edit_original_response(
+                    content=f"Leaderboard `{leaderboard_name}` is on task_version 1 — nothing to backfill."
+                )
+                return
+
+            submissions = db.get_top_submissions_for_backfill(leaderboard_name, gpu, top_n)
+            lb = db.get_leaderboard(leaderboard_name)
+
+        if not submissions:
+            await interaction.edit_original_response(
+                content=f"No eligible submissions found for `{leaderboard_name}` ({gpu}) from previous versions."
+            )
+            return
+
+        await interaction.edit_original_response(
+            content=(
+                f"**Backfill: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                f"Found {len(submissions)} submissions to re-run\nQueued: 0/{len(submissions)}"
+            )
+        )
+
+        queued = 0
+        errors = 0
+        for sub in submissions:
+            try:
+                from libkernelbot.submission import ProcessedSubmissionRequest
+
+                req = ProcessedSubmissionRequest(
+                    code=sub["code"],
+                    file_name=sub["file_name"],
+                    user_id=sub["user_id"],
+                    user_name=sub["user_name"],
+                    leaderboard=leaderboard_name,
+                    gpus=[gpu],
+                    task=lb["task"],
+                    secret_seed=lb.get("secret_seed", 0),
+                    task_gpus=[gpu],
+                )
+                from libkernelbot.background_submission_manager import BackgroundSubmissionManagerReporter
+                from libkernelbot.consts import SubmissionMode
+
+                with self.bot.leaderboard_db as db:
+                    new_sub_id = db.create_submission(
+                        leaderboard=leaderboard_name,
+                        file_name=sub["file_name"],
+                        code=sub["code"],
+                        user_id=sub["user_id"],
+                        time=datetime.now(tz=timezone.utc),
+                        user_name=sub["user_name"],
+                    )
+
+                reporter = BackgroundSubmissionManagerReporter(new_sub_id, self.bot.backend)
+                # Fire and forget — don't block on each submission
+                self.bot.loop.create_task(
+                    self.bot.backend.submit_full(req, SubmissionMode.LEADERBOARD, reporter, new_sub_id)
+                )
+                queued += 1
+            except Exception as e:
+                logger.error("Backfill error for submission %s: %s", sub["submission_id"], e)
+                errors += 1
+
+            if queued % 5 == 0 or queued + errors == len(submissions):
+                await interaction.edit_original_response(
+                    content=(
+                        f"**Backfill: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                        f"Found {len(submissions)} submissions to re-run\n"
+                        f"Queued: {queued}/{len(submissions)}\n"
+                        f"Errors: {errors}"
+                    )
+                )
+
+        await interaction.edit_original_response(
+            content=(
+                f"**Backfill complete: {leaderboard_name} ({gpu}) v{task_version - 1} → v{task_version}**\n"
+                f"Queued: {queued}/{len(submissions)}\n"
+                f"Errors: {errors}"
+            )
+        )
 
     @discord.app_commands.describe(
         directory="Directory of the kernel definition. Also used as the leaderboard's name",

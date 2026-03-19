@@ -137,16 +137,28 @@ class LeaderboardDB:
         task = definition.task
         try:
             lb_id = self.get_leaderboard_id(name)
+
+            # Check if the task actually changed; if so, bump task_version
+            self.cursor.execute(
+                "SELECT task FROM leaderboard.leaderboard WHERE id = %s",
+                (lb_id,),
+            )
+            old_task_json = self.cursor.fetchone()[0]
+            old_task = LeaderboardTask.from_dict(old_task_json)
+            task_changed = old_task != task
+
             self.cursor.execute(
                 """
                 UPDATE leaderboard.leaderboard
-                SET deadline = %s, task = %s, description = %s
+                SET deadline = %s, task = %s, description = %s,
+                    task_version = task_version + CASE WHEN %s THEN 1 ELSE 0 END
                 WHERE id = %s;
                 """,
                 (
                     deadline.astimezone(datetime.timezone.utc),
                     task.to_str(),
                     definition.description,
+                    task_changed,
                     lb_id,
                 ),
             )
@@ -437,6 +449,7 @@ class LeaderboardDB:
         compilation: Optional[CompileResult],
         result: RunResult,
         system: SystemInfo,
+        task_version: Optional[int] = None,
     ):
         try:
             if compilation is not None:
@@ -445,11 +458,15 @@ class LeaderboardDB:
             # check validity
             self.cursor.execute(
                 """
-            SELECT done FROM leaderboard.submission WHERE id = %s
+            SELECT s.done, l.task_version
+            FROM leaderboard.submission s
+            JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+            WHERE s.id = %s
             """,
                 (submission,),
             )
-            if self.cursor.fetchone()[0]:
+            row = self.cursor.fetchone()
+            if row[0]:
                 logger.error(
                     "Submission '%s' is already marked as done when trying to add %s run.",
                     submission,
@@ -460,6 +477,9 @@ class LeaderboardDB:
                     "but submission was already marked as done."
                 )
 
+            # Use provided task_version or fall back to leaderboard's current version
+            run_task_version = task_version if task_version is not None else row[1]
+
             meta = {
                 k: result.__dict__[k]
                 for k in ["stdout", "stderr", "success", "exit_code", "command", "duration"]
@@ -467,9 +487,10 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.runs (submission_id, start_time, end_time, mode,
-                secret, runner, score, passed, compilation, meta, result, system_info
+                secret, runner, score, passed, compilation, meta, result, system_info,
+                task_version
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     submission,
@@ -484,6 +505,7 @@ class LeaderboardDB:
                     json.dumps(meta),
                     json.dumps(result.result),
                     json.dumps(dataclasses.asdict(system)),
+                    run_task_version,
                 ),
             )
             self.connection.commit()
@@ -852,6 +874,7 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND r.task_version = l.task_version
                     AND s.user_id = %s
                 ORDER BY r.score ASC
                 LIMIT %s OFFSET %s
@@ -874,6 +897,7 @@ class LeaderboardDB:
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
+                          AND r.task_version = l.task_version
                     ORDER BY s.user_id, r.score ASC
                 )
                 SELECT
@@ -921,6 +945,84 @@ class LeaderboardDB:
                 )
 
         return result
+
+    def get_top_submissions_for_backfill(
+        self,
+        leaderboard_name: str,
+        gpu_name: str,
+        top_n: int = 100,
+    ) -> list[dict]:
+        """Get the top N submissions (best per user) from any previous task_version.
+
+        Returns dicts with: submission_id, user_id, user_name, file_name, code, score, task_version
+        """
+        self.cursor.execute(
+            """
+            WITH best_submissions AS (
+                SELECT DISTINCT ON (s.user_id)
+                    s.id as submission_id,
+                    s.user_id,
+                    s.file_name,
+                    r.score,
+                    r.task_version
+                FROM leaderboard.runs r
+                JOIN leaderboard.submission s ON r.submission_id = s.id
+                JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
+                WHERE l.name = %s AND r.runner = %s AND NOT r.secret
+                      AND r.score IS NOT NULL AND r.passed
+                      AND r.task_version < l.task_version
+                      AND NOT EXISTS (
+                          SELECT 1 FROM leaderboard.runs r2
+                          JOIN leaderboard.submission s2 ON r2.submission_id = s2.id
+                          WHERE s2.user_id = s.user_id
+                            AND s2.leaderboard_id = l.id
+                            AND r2.runner = r.runner
+                            AND r2.task_version = l.task_version
+                            AND r2.passed AND NOT r2.secret
+                      )
+                ORDER BY s.user_id, r.score ASC
+            )
+            SELECT
+                bs.submission_id,
+                bs.user_id,
+                bs.file_name,
+                convert_from(cf.code, 'UTF8') as code,
+                bs.score,
+                bs.task_version,
+                ui.user_name
+            FROM best_submissions bs
+            JOIN leaderboard.submission s ON bs.submission_id = s.id
+            JOIN leaderboard.code_files cf ON s.code_id = cf.id
+            JOIN leaderboard.user_info ui ON bs.user_id = ui.id
+            ORDER BY bs.score ASC
+            LIMIT %s
+            """,
+            (leaderboard_name, gpu_name, top_n),
+        )
+
+        return [
+            {
+                "submission_id": row[0],
+                "user_id": row[1],
+                "file_name": row[2],
+                "code": row[3],
+                "score": row[4],
+                "task_version": row[5],
+                "user_name": row[6],
+            }
+            for row in self.cursor.fetchall()
+        ]
+
+    def get_leaderboard_task_version(self, leaderboard_name: str) -> int:
+        """Get the current task_version for a leaderboard."""
+        self.cursor.execute(
+            "SELECT task_version FROM leaderboard.leaderboard WHERE name = %s",
+            (leaderboard_name,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        return row[0]
 
     def generate_stats(self, last_day: bool, leaderboard_name: Optional[str] = None):
         try:
@@ -1250,6 +1352,7 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND r.task_version = l.task_version
                     AND s.user_id = %s
                 """
             args = (leaderboard_name, gpu_name, user_id)
@@ -1264,6 +1367,7 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND r.task_version = l.task_version
                 """
             args = (leaderboard_name, gpu_name)
 
