@@ -9,6 +9,7 @@ from libkernelbot.db_types import (
     IdentityType,
     LeaderboardItem,
     LeaderboardRankedEntry,
+    RateLimitItem,
     RunItem,
     SubmissionItem,
 )
@@ -79,6 +80,7 @@ class LeaderboardDB:
         creator_id: int,
         forum_id: int,
         gpu_types: list | str,
+        visibility: str = "public",
     ) -> int:
         # to prevent surprises, ensure we have specified a timezone
         try:
@@ -86,11 +88,11 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.leaderboard (name, deadline, task, creator_id,
-                                                     forum_id, description)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                                                     forum_id, description, visibility)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (name, deadline, task.to_str(), creator_id, forum_id, definition.description),
+                (name, deadline, task.to_str(), creator_id, forum_id, definition.description, visibility),
             )
 
             leaderboard_id = self.cursor.fetchone()[0]
@@ -287,8 +289,13 @@ class LeaderboardDB:
         code: str,
         time: datetime.datetime,
         user_name: str = None,
+        mode_category: str = None,
     ) -> Optional[int]:
         try:
+            if time.tzinfo is None:
+                time = time.astimezone()
+            time = time.astimezone(datetime.timezone.utc)
+
             # check if we already have the code
             self.cursor.execute(
                 """
@@ -334,10 +341,10 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.submission (leaderboard_id, file_name,
-                    user_id, code_id, submission_time)
+                    user_id, code_id, submission_time, mode_category)
                 VALUES (
                     (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
-                    %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -346,6 +353,7 @@ class LeaderboardDB:
                     user_id,
                     code_id,
                     time,
+                    mode_category,
                 ),
             )
             submission_id = self.cursor.fetchone()[0]
@@ -525,7 +533,7 @@ class LeaderboardDB:
     def get_leaderboards(self) -> list["LeaderboardItem"]:
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, description, secret_seed
+            SELECT id, name, deadline, task, creator_id, forum_id, description, secret_seed, visibility
             FROM leaderboard.leaderboard
             """
         )
@@ -550,6 +558,7 @@ class LeaderboardDB:
                     forum_id=lb[5],
                     description=lb[6],
                     secret_seed=lb[7],
+                    visibility=lb[8],
                 )
             )
 
@@ -610,7 +619,7 @@ class LeaderboardDB:
     def get_leaderboard(self, leaderboard_name: str) -> "LeaderboardItem":
         self.cursor.execute(
             """
-            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description
+            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description, visibility
             FROM leaderboard.leaderboard
             WHERE name = %s
             """,
@@ -631,9 +640,209 @@ class LeaderboardDB:
                 secret_seed=res[6],
                 gpu_types=self.get_leaderboard_gpu_types(res[1]),
                 description=res[7],
+                visibility=res[8],
             )
         else:
             raise LeaderboardDoesNotExist(leaderboard_name)
+
+    def check_leaderboard_access(self, leaderboard_name: str, user_id: str) -> bool:
+        """Returns True if leaderboard is public or user has claimed an invite covering this leaderboard."""
+        self.cursor.execute(
+            """
+            SELECT l.visibility
+            FROM leaderboard.leaderboard l
+            WHERE l.name = %s
+            """,
+            (leaderboard_name,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise LeaderboardDoesNotExist(leaderboard_name)
+        if row[0] == "public":
+            return True
+        self.cursor.execute(
+            """
+            SELECT 1
+            FROM leaderboard.leaderboard_invite li
+            JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
+            JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
+            WHERE l.name = %s AND li.user_id = %s
+            """,
+            (leaderboard_name, str(user_id)),
+        )
+        return self.cursor.fetchone() is not None
+
+    def generate_invite_codes(self, leaderboard_names: list[str], count: int) -> list[str]:
+        """Generate N unique invite codes covering multiple leaderboards. Returns the codes."""
+        import secrets
+
+        try:
+            lb_ids = []
+            for name in leaderboard_names:
+                lb_ids.append(self.get_leaderboard_id(name))
+
+            codes = []
+            for _ in range(count):
+                code = secrets.token_urlsafe(16)
+                self.cursor.execute(
+                    """
+                    INSERT INTO leaderboard.leaderboard_invite (code)
+                    VALUES (%s)
+                    RETURNING id
+                    """,
+                    (code,),
+                )
+                invite_id = self.cursor.fetchone()[0]
+                for lb_id in lb_ids:
+                    self.cursor.execute(
+                        """
+                        INSERT INTO leaderboard.leaderboard_invite_scope (invite_id, leaderboard_id)
+                        VALUES (%s, %s)
+                        """,
+                        (invite_id, lb_id),
+                    )
+                codes.append(code)
+            self.connection.commit()
+            return codes
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error generating invite codes", exc_info=e)
+            raise KernelBotError("Error generating invite codes") from e
+
+    def claim_invite_code(self, code: str, user_id: str) -> dict:
+        """Claim an invite code for a user. Returns list of leaderboard names.
+
+        Raises KernelBotError if code is invalid or already claimed.
+        """
+        try:
+            self.cursor.execute(
+                """
+                SELECT li.id, li.user_id
+                FROM leaderboard.leaderboard_invite li
+                WHERE li.code = %s
+                """,
+                (code,),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise KernelBotError("Invalid invite code")
+            invite_id, existing_user = row
+
+            # Fetch leaderboard names for this invite
+            self.cursor.execute(
+                """
+                SELECT l.name
+                FROM leaderboard.leaderboard_invite_scope lis
+                JOIN leaderboard.leaderboard l ON lis.leaderboard_id = l.id
+                WHERE lis.invite_id = %s
+                ORDER BY l.name
+                """,
+                (invite_id,),
+            )
+            leaderboards = [r[0] for r in self.cursor.fetchall()]
+
+            if existing_user == str(user_id):
+                return {"leaderboards": leaderboards}
+            if existing_user is not None:
+                raise KernelBotError("This invite code has already been claimed")
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard_invite
+                SET user_id = %s, claimed_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND user_id IS NULL
+                """,
+                (str(user_id), invite_id),
+            )
+            if self.cursor.rowcount == 0:
+                raise KernelBotError("This invite code has already been claimed")
+            self.connection.commit()
+            return {"leaderboards": leaderboards}
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error claiming invite code", exc_info=e)
+            raise KernelBotError("Error claiming invite code") from e
+
+    def get_invite_codes(self, leaderboard_name: str) -> list[dict]:
+        """Returns all invite codes that cover a given leaderboard, with claim status."""
+        try:
+            lb_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                SELECT li.code, li.user_id, ui.user_name, li.claimed_at, li.created_at
+                FROM leaderboard.leaderboard_invite li
+                JOIN leaderboard.leaderboard_invite_scope lis ON li.id = lis.invite_id
+                LEFT JOIN leaderboard.user_info ui ON li.user_id = ui.id
+                WHERE lis.leaderboard_id = %s
+                ORDER BY li.created_at
+                """,
+                (lb_id,),
+            )
+            return [
+                {
+                    "code": row[0],
+                    "user_id": row[1],
+                    "user_name": row[2],
+                    "claimed_at": row[3],
+                    "created_at": row[4],
+                }
+                for row in self.cursor.fetchall()
+            ]
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error fetching invite codes", exc_info=e)
+            raise KernelBotError("Error fetching invite codes") from e
+
+    def revoke_invite_code(self, code: str) -> dict:
+        """Revoke (delete) an invite code. Returns info about the revoked code.
+
+        Raises KernelBotError if code does not exist.
+        """
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.leaderboard_invite
+                WHERE code = %s
+                RETURNING code, user_id
+                """,
+                (code,),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise KernelBotError("Invalid invite code", code=404)
+            self.connection.commit()
+            return {"code": row[0], "was_claimed": row[1] is not None}
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error revoking invite code", exc_info=e)
+            raise KernelBotError("Error revoking invite code") from e
+
+    def set_leaderboard_visibility(self, leaderboard_name: str, visibility: str):
+        """Change the visibility of a leaderboard."""
+        try:
+            lb_id = self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.leaderboard
+                SET visibility = %s
+                WHERE id = %s
+                """,
+                (visibility, lb_id),
+            )
+            self.connection.commit()
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error setting leaderboard visibility", exc_info=e)
+            raise KernelBotError("Error setting leaderboard visibility") from e
 
     def get_leaderboard_submissions(
         self,
@@ -1338,6 +1547,207 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Error validating CLI ID %s", cli_id, exc_info=e)
             raise KernelBotError("Error validating CLI ID") from e
+
+
+    def ban_user(self, user_id: str) -> bool:
+        """Ban a user by their ID. Returns True if the user was found and banned."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.user_info
+                SET is_banned = TRUE
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error banning user %s", user_id, exc_info=e)
+            raise KernelBotError("Error banning user") from e
+
+    def unban_user(self, user_id: str) -> bool:
+        """Unban a user by their ID. Returns True if the user was found and unbanned."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.user_info
+                SET is_banned = FALSE
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            self.connection.commit()
+            return self.cursor.rowcount > 0
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error unbanning user %s", user_id, exc_info=e)
+            raise KernelBotError("Error unbanning user") from e
+
+    def is_user_banned(self, user_id: str) -> bool:
+        """Check if a user is banned."""
+        try:
+            self.cursor.execute(
+                """
+                SELECT is_banned FROM leaderboard.user_info
+                WHERE id = %s
+                """,
+                (str(user_id),),
+            )
+            row = self.cursor.fetchone()
+            return row[0] if row else False
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking ban status for user %s", user_id, exc_info=e)
+            raise KernelBotError("Error checking ban status") from e
+
+    def set_rate_limit(self, leaderboard_name: str, mode_category: str, max_per_hour: int) -> RateLimitItem:
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.rate_limit (leaderboard_id, mode_category, max_submissions_per_hour)
+                VALUES (
+                    (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
+                    %s, %s
+                )
+                ON CONFLICT (leaderboard_id, mode_category)
+                DO UPDATE SET max_submissions_per_hour = EXCLUDED.max_submissions_per_hour
+                RETURNING id, leaderboard_id, mode_category, max_submissions_per_hour
+                """,
+                (leaderboard_name, mode_category, max_per_hour),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                raise LeaderboardDoesNotExist(leaderboard_name)
+            self.connection.commit()
+            return RateLimitItem(
+                id=row[0],
+                leaderboard_id=row[1],
+                leaderboard_name=leaderboard_name,
+                mode_category=row[2],
+                max_submissions_per_hour=row[3],
+            )
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            if "null value in column" in str(e):
+                raise LeaderboardDoesNotExist(leaderboard_name) from e
+            logger.exception("Error setting rate limit", exc_info=e)
+            raise KernelBotError("Error setting rate limit") from e
+
+    def get_rate_limits(self, leaderboard_name: str) -> List[RateLimitItem]:
+        try:
+            self.cursor.execute(
+                """
+                SELECT rl.id, rl.leaderboard_id, rl.mode_category, rl.max_submissions_per_hour
+                FROM leaderboard.rate_limit rl
+                JOIN leaderboard.leaderboard lb ON rl.leaderboard_id = lb.id
+                WHERE lb.name = %s
+                """,
+                (leaderboard_name,),
+            )
+            return [
+                RateLimitItem(
+                    id=row[0],
+                    leaderboard_id=row[1],
+                    leaderboard_name=leaderboard_name,
+                    mode_category=row[2],
+                    max_submissions_per_hour=row[3],
+                )
+                for row in self.cursor.fetchall()
+            ]
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error getting rate limits", exc_info=e)
+            raise KernelBotError("Error getting rate limits") from e
+
+    def delete_rate_limit(self, leaderboard_name: str, mode_category: str) -> None:
+        try:
+            self.cursor.execute(
+                """
+                DELETE FROM leaderboard.rate_limit
+                WHERE leaderboard_id = (SELECT id FROM leaderboard.leaderboard WHERE name = %s)
+                    AND mode_category = %s
+                """,
+                (leaderboard_name, mode_category),
+            )
+            if self.cursor.rowcount == 0:
+                raise KernelBotError(
+                    f"No rate limit found for '{leaderboard_name}' with category '{mode_category}'",
+                    code=404,
+                )
+            self.connection.commit()
+        except KernelBotError:
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error deleting rate limit", exc_info=e)
+            raise KernelBotError("Error deleting rate limit") from e
+
+    def check_rate_limit(
+        self, leaderboard_name: str, user_id: str, mode_category: str
+    ) -> Optional[dict]:
+        """Check if a user has exceeded the rate limit for a leaderboard+category.
+
+        Returns None if no rate limit is configured, otherwise returns a dict with:
+        - allowed: bool
+        - current_count: int
+        - max_per_hour: int
+        - retry_after_seconds: int (0 if allowed)
+        """
+        try:
+            # Get the rate limit config
+            self.cursor.execute(
+                """
+                SELECT rl.max_submissions_per_hour
+                FROM leaderboard.rate_limit rl
+                JOIN leaderboard.leaderboard lb ON rl.leaderboard_id = lb.id
+                WHERE lb.name = %s AND rl.mode_category = %s
+                """,
+                (leaderboard_name, mode_category),
+            )
+            row = self.cursor.fetchone()
+            if row is None:
+                return None
+
+            max_per_hour = row[0]
+
+            # Count submissions in the last hour
+            self.cursor.execute(
+                """
+                SELECT COUNT(*), MIN(s.submission_time)
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                WHERE lb.name = %s
+                    AND s.user_id = %s
+                    AND s.mode_category = %s
+                    AND s.submission_time > NOW() - INTERVAL '1 hour'
+                """,
+                (leaderboard_name, user_id, mode_category),
+            )
+            count_row = self.cursor.fetchone()
+            current_count = count_row[0]
+            oldest_time = count_row[1]
+
+            allowed = current_count < max_per_hour
+            retry_after = 0
+            if not allowed and oldest_time is not None:
+                import datetime as dt
+
+                expiry = oldest_time + dt.timedelta(hours=1)
+                now = dt.datetime.now(dt.timezone.utc)
+                retry_after = max(0, int((expiry - now).total_seconds()))
+
+            return {
+                "allowed": allowed,
+                "current_count": current_count,
+                "max_per_hour": max_per_hour,
+                "retry_after_seconds": retry_after,
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking rate limit", exc_info=e)
+            raise KernelBotError("Error checking rate limit") from e
 
 
 class LeaderboardDoesNotExist(KernelBotError):

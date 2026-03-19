@@ -50,6 +50,14 @@ RUN sudo uv pip install --system \
     torch \
     --index-url https://download.pytorch.org/whl/cu130
 
+# nvtriton (Triton with TileIR backend — replaces upstream triton)
+RUN curl -L -o /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
+    https://github.com/triton-lang/Triton-to-tile-IR/releases/download/v3.6.0-rc1/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
+    && sudo uv pip install --system /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl \
+    && rm /tmp/nvtriton-3.6.0-cp313-cp313-linux_x86_64.whl
+
+ENV ENABLE_TILE=0
+
 # Helion
 RUN sudo uv pip install --system helion
 
@@ -59,6 +67,18 @@ RUN sudo uv pip install --system flash-linear-attention
 # Causal Conv1d (Dao-AILab reference for benchmarking)
 # --no-build-isolation: use system torch (cu130) instead of build env pulling cu128 from PyPI
 RUN sudo uv pip install --system --no-build-isolation causal-conv1d
+
+# jq for payload extraction in the workflow
+RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends jq \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+# Kernelbot runner dependencies (only what github-runner.py / run_eval.py actually imports)
+RUN sudo uv pip install --system \
+    PyGithub \
+    aiohttp \
+    python-dotenv \
+    requests \
+    PyYAML
 
 # # tinygrad
 # RUN sudo uv pip install --system tinygrad~=0.10

@@ -21,6 +21,7 @@ class LeaderboardItem(TypedDict):
     gpu_types: List[str]
     forum_id: int
     secret_seed: NotRequired[int]
+    visibility: str
 
 
 class LeaderboardRankedEntry(TypedDict):
@@ -61,4 +62,12 @@ class SubmissionItem(TypedDict):
     runs: List[RunItem]
 
 
-__all__ = [LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem]
+class RateLimitItem(TypedDict):
+    id: int
+    leaderboard_id: int
+    leaderboard_name: str
+    mode_category: str
+    max_submissions_per_hour: int
+
+
+__all__ = [LeaderboardItem, LeaderboardRankedEntry, RunItem, SubmissionItem, RateLimitItem]

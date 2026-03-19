@@ -146,7 +146,7 @@ async def _run_submission(
     submission: SubmissionRequest, mode: SubmissionMode, backend: KernelBackend
 ):
     try:
-        req = prepare_submission(submission, backend)
+        req = prepare_submission(submission, backend, mode)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -274,6 +274,7 @@ async def to_submit_info(
             user_name=user_name,
             gpus=[gpu_type],
             leaderboard=leaderboard_name,
+            identity_type=user_info.get("id_type"),
         )
     except UnicodeDecodeError:
         raise HTTPException(

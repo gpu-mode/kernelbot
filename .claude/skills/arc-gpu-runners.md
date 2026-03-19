@@ -181,6 +181,40 @@ sudo k3s kubectl describe node <new-node-name> | grep amd.com/gpu
 - **Listener not starting**: Check controller logs: `kubectl logs -n arc-systems -l app.kubernetes.io/name=gha-rs-controller`
 - **Runner image issues**: The image must have `/home/runner/run.sh` (GitHub Actions runner binary)
 
+### Jobs queuing forever / failed ephemeral runners
+
+ARC does **not** garbage-collect failed ephemeral runners. If pods fail to start (transient image pull errors, node issues, resource contention), ARC retries 5 times then marks the ephemeral runner as `Failed` with `TooManyPodFailures`. These zombie runners still count against `maxRunners`, so the autoscaler thinks the cluster is full even though the GPUs are idle.
+
+**Symptoms:**
+- GitHub Actions jobs stuck in "Queued" indefinitely
+- `kubectl get autoscalingrunnerset -n arc-runners` shows `CURRENT RUNNERS` at max but `RUNNING RUNNERS` much lower
+- `kubectl get ephemeralrunner -n arc-runners` shows runners with status `Failed`
+
+**Diagnose:**
+
+```bash
+# Count failed vs running runners
+sudo k3s kubectl get ephemeralrunner -n arc-runners --no-headers | grep -c Failed
+sudo k3s kubectl get ephemeralrunner -n arc-runners --no-headers | grep -c Running
+
+# Check GPU availability across nodes
+for node in mia1-p02-g29 mia1-p02-g52 mia1-p02-g53 mia1-p02-g55 mia1-p02-g56; do
+  used=$(sudo k3s kubectl describe node $node | grep "amd.com/gpu" | tail -1 | awk '{print $2}')
+  echo "$node: $used/8 GPUs used"
+done
+```
+
+**Fix — delete the failed ephemeral runners:**
+
+```bash
+sudo k3s kubectl get ephemeralrunner -n arc-runners --no-headers \
+  | grep Failed \
+  | awk '{print $1}' \
+  | xargs sudo k3s kubectl delete ephemeralrunner -n arc-runners
+```
+
+ARC will immediately create new ephemeral runners for queued jobs, and k8s will schedule them onto the freed GPU slots. No helm upgrade or restart needed.
+
 ## Current Cluster Info
 
 - **Nodes**: mia1-p02-g29, mia1-p02-g52, mia1-p02-g53, mia1-p02-g55, mia1-p02-g56 (5-node k3s cluster)

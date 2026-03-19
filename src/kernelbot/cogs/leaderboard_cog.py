@@ -124,8 +124,9 @@ class LeaderboardSubmitCog(app_commands.Group):
             user_name=interaction.user.global_name or interaction.user.name,
             gpus=gpu,
             leaderboard=leaderboard_name,
+            identity_type="discord",
         )
-        req = prepare_submission(req, self.bot.backend)
+        req = prepare_submission(req, self.bot.backend, mode)
 
         if req.gpus is None:
             view = await self.select_gpu_view(interaction, leaderboard_name, req.task_gpus)
@@ -635,8 +636,6 @@ class LeaderboardCog(commands.Cog):
 # Leaderboard Commands Help
 
 ## Basic Commands
-- `/get-api-url` \
-- For popcorn-cli users, get the API URL
 - `/leaderboard list` \
 - View all active leaderboards
 - `/leaderboard help` \

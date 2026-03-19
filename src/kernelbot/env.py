@@ -17,6 +17,9 @@ env.DISCORD_CLUSTER_STAGING_ID = os.getenv("DISCORD_CLUSTER_STAGING_ID")
 env.DISCORD_DEBUG_CLUSTER_STAGING_ID = os.getenv("DISCORD_DEBUG_CLUSTER_STAGING_ID")
 
 env.ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+env.HF_TOKEN = os.getenv("HF_TOKEN")
+env.HF_PRIVATE_DATASET = os.getenv("HF_PRIVATE_DATASET", "GPUMODE/kernelbot-data-live")
+env.HF_PUBLIC_DATASET = os.getenv("HF_PUBLIC_DATASET", "GPUMODE/kernelbot-data")
 
 # Only required to run the CLI against this instance
 # setting these is required only to run the CLI against local instance

@@ -4,7 +4,7 @@ add-task-version
 
 from yoyo import step
 
-__depends__ = {'20260226_01_WgYAV-queryindex'}
+__depends__ = {'20260318_01_ban-user'}
 
 
 steps = [
