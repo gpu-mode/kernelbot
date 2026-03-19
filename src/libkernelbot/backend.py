@@ -5,6 +5,11 @@ from types import SimpleNamespace
 from typing import Optional
 
 from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name, get_mode_category
+from libkernelbot.kernelguard import (
+    KernelGuardRejected,
+    enforce_submission_precheck,
+    should_precheck_submission,
+)
 from libkernelbot.launchers import Launcher
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
@@ -53,10 +58,11 @@ class KernelBackend:
         mode: SubmissionMode,
         reporter: MultiProgressReporter,
         pre_sub_id: Optional[int] = None,
+        skip_precheck: bool = False,
     ):
         """
         pre_sub_id is used to pass the submission id which is created beforehand.
-
+        skip_precheck skips the KernelGuard pre-check (use when the caller already ran it).
         """
         if pre_sub_id is not None:
             sub_id = pre_sub_id
@@ -72,7 +78,29 @@ class KernelBackend:
                     mode_category=req.mode_category or get_mode_category(mode),
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
+        submission_started = False
         try:
+            if not skip_precheck and should_precheck_submission(mode):
+                try:
+                    await asyncio.to_thread(enforce_submission_precheck, req.code, req.file_name)
+                except KernelGuardRejected as exc:
+                    logger.error(
+                        "Submission %s rejected by precheck: file=%s, mode=%s, error=%s",
+                        sub_id, req.file_name, mode, str(exc)
+                    )
+                    with self.db as db:
+                        db.mark_submission_hacked(sub_id, error=str(exc))
+                    raise
+                except Exception as exc:
+                    logger.error(
+                        "Submission %s precheck unavailable: file=%s, mode=%s, error=%s",
+                        sub_id, req.file_name, mode, str(exc)
+                    )
+                    with self.db as db:
+                        db.mark_submission_done(sub_id)
+                    raise
+
+            submission_started = True
             tasks = [
                 self.submit_leaderboard(
                     sub_id,
@@ -106,8 +134,9 @@ class KernelBackend:
             )
             results = await asyncio.gather(*tasks)
         finally:
-            with self.db as db:
-                db.mark_submission_done(sub_id)
+            if submission_started:
+                with self.db as db:
+                    db.mark_submission_done(sub_id)
         return sub_id, results
 
     async def submit_leaderboard(  # noqa: C901
