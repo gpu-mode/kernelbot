@@ -717,3 +717,101 @@ class TestAdminExportHF:
 
         assert response.status_code == 400
         assert "Cannot export active leaderboards" in response.json()["detail"]
+
+
+class TestAdminRateLimits:
+    """Test admin rate limit endpoints."""
+
+    def test_set_rate_limit(self, test_client, mock_backend):
+        """PUT /admin/leaderboards/{name}/rate-limits creates a rate limit."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.set_rate_limit = MagicMock(return_value={
+            "id": 1,
+            "leaderboard_id": 1,
+            "leaderboard_name": "test-lb",
+            "mode_category": "test",
+            "max_submissions_per_hour": 5,
+        })
+
+        response = test_client.put(
+            "/admin/leaderboards/test-lb/rate-limits",
+            headers={"Authorization": "Bearer test_token"},
+            json={"mode_category": "test", "max_submissions_per_hour": 5},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["rate_limit"]["max_submissions_per_hour"] == 5
+        mock_backend.db.set_rate_limit.assert_called_once_with("test-lb", "test", 5)
+
+    def test_set_rate_limit_invalid_category(self, test_client):
+        """PUT /admin/leaderboards/{name}/rate-limits rejects invalid category."""
+        response = test_client.put(
+            "/admin/leaderboards/test-lb/rate-limits",
+            headers={"Authorization": "Bearer test_token"},
+            json={"mode_category": "invalid", "max_submissions_per_hour": 5},
+        )
+        assert response.status_code == 400
+
+    def test_set_rate_limit_invalid_count(self, test_client):
+        """PUT /admin/leaderboards/{name}/rate-limits rejects non-positive count."""
+        response = test_client.put(
+            "/admin/leaderboards/test-lb/rate-limits",
+            headers={"Authorization": "Bearer test_token"},
+            json={"mode_category": "test", "max_submissions_per_hour": 0},
+        )
+        assert response.status_code == 400
+
+    def test_set_rate_limit_requires_auth(self, test_client):
+        """PUT /admin/leaderboards/{name}/rate-limits requires auth."""
+        response = test_client.put(
+            "/admin/leaderboards/test-lb/rate-limits",
+            json={"mode_category": "test", "max_submissions_per_hour": 5},
+        )
+        assert response.status_code == 401
+
+    def test_get_rate_limits(self, test_client, mock_backend):
+        """GET /admin/leaderboards/{name}/rate-limits returns rate limits."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.get_rate_limits = MagicMock(return_value=[
+            {
+                "id": 1,
+                "leaderboard_id": 1,
+                "leaderboard_name": "test-lb",
+                "mode_category": "test",
+                "max_submissions_per_hour": 5,
+            }
+        ])
+
+        response = test_client.get(
+            "/admin/leaderboards/test-lb/rate-limits",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert len(data["rate_limits"]) == 1
+
+    def test_delete_rate_limit(self, test_client, mock_backend):
+        """DELETE /admin/leaderboards/{name}/rate-limits/{category} removes a rate limit."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.delete_rate_limit = MagicMock(return_value=None)
+
+        response = test_client.delete(
+            "/admin/leaderboards/test-lb/rate-limits/test",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        mock_backend.db.delete_rate_limit.assert_called_once_with("test-lb", "test")
+
+    def test_delete_rate_limit_invalid_category(self, test_client):
+        """DELETE rejects invalid mode_category."""
+        response = test_client.delete(
+            "/admin/leaderboards/test-lb/rate-limits/invalid",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 400

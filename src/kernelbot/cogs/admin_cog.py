@@ -123,6 +123,14 @@ class AdminCog(commands.Cog):
             name="set-forum-ids", description="Sets forum IDs"
         )(self.set_forum_ids)
 
+        self.ban_user = bot.admin_group.command(
+            name="ban", description="Ban a user from making submissions"
+        )(self.ban_user)
+
+        self.unban_user = bot.admin_group.command(
+            name="unban", description="Unban a user"
+        )(self.unban_user)
+
         self.export_to_hf = bot.admin_group.command(
             name="export-hf", description="Export competition data to Hugging Face dataset"
         )(self.export_to_hf)
@@ -153,6 +161,44 @@ class AdminCog(commands.Cog):
             if leaderboard_item["creator_id"] == interaction.user.id:
                 return True
             return False
+
+    @discord.app_commands.describe(user_id="Discord user ID to ban")
+    @with_error_handling
+    async def ban_user(self, interaction: discord.Interaction, user_id: str):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            if db.ban_user(user_id):
+                await send_discord_message(
+                    interaction, f"User `{user_id}` has been banned.", ephemeral=True
+                )
+            else:
+                await send_discord_message(
+                    interaction, f"User `{user_id}` not found.", ephemeral=True
+                )
+
+    @discord.app_commands.describe(user_id="Discord user ID to unban")
+    @with_error_handling
+    async def unban_user(self, interaction: discord.Interaction, user_id: str):
+        if not await self.admin_check(interaction):
+            await send_discord_message(
+                interaction, "You need to have Admin permissions to run this command", ephemeral=True
+            )
+            return
+
+        with self.bot.leaderboard_db as db:
+            if db.unban_user(user_id):
+                await send_discord_message(
+                    interaction, f"User `{user_id}` has been unbanned.", ephemeral=True
+                )
+            else:
+                await send_discord_message(
+                    interaction, f"User `{user_id}` not found.", ephemeral=True
+                )
 
     @discord.app_commands.describe(
         directory="Directory of the kernel definition. Also used as the leaderboard's name",
@@ -887,7 +933,7 @@ class AdminCog(commands.Cog):
             db.cleanup_temp_users()
         logger.info("Temporary users cleanup completed")
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=6)
     async def _scheduled_hf_export(self):
         """Daily export of active competition submissions to private HF dataset.
 
