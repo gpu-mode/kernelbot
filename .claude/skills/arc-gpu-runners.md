@@ -49,8 +49,8 @@ githubConfigUrl: "https://github.com/gpu-mode/kernelbot"
 githubConfigSecret:
   github_token: "<YOUR_GITHUB_PAT>"
 
-maxRunners: 8
-minRunners: 0
+maxRunners: 40
+minRunners: 40
 
 template:
   spec:
@@ -108,7 +108,7 @@ sudo k3s kubectl logs -n arc-systems -l actions.github.com/scale-set-name=arc-ru
 - **GPU isolation**: The AMD device plugin exposes `amd.com/gpu` as a k8s resource. Each runner pod requests exactly 1 GPU. Kubernetes guarantees no two pods share a GPU — each gets a unique `/dev/dri/renderD*` device.
 - **CPU isolation**: Each pod gets 14 dedicated cores via cgroup limits (`nproc` reports 14 inside the container).
 - **RAM isolation**: Each pod gets a 340Gi memory limit enforced by cgroups. Exceeding it triggers OOM kill.
-- **Autoscaling**: With `minRunners: 0` and `maxRunners: 40`, runners spin up on demand when GitHub queues jobs and are destroyed after completion (ephemeral runners). The scheduler spreads pods across all 5 nodes.
+- **Autoscaling**: With `minRunners: 40` and `maxRunners: 40`, all 40 runners stay online and idle on the GitHub runners tab, ready to pick up jobs instantly. The scheduler spreads pods across all 5 nodes (8 per node). Note: `minRunners: 0` means runners only exist when there are queued jobs and won't appear on the GitHub runners tab when idle.
 
 ## Resource Budget (per MI355X node)
 
