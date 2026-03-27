@@ -756,6 +756,105 @@ async def admin_update_problems(
     }
 
 
+@app.post("/admin/backfill")
+async def admin_backfill(
+    payload: dict,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    """Queue a backfill: re-run top submissions against the current task version.
+
+    After an update-problems changes the eval for a leaderboard, old run scores
+    become stale.  This endpoint fetches the top N submissions (best per user)
+    from any previous task_version and re-submits each one so that new runs are
+    recorded with the current task_version.
+
+    Payload:
+        leaderboard (str): Leaderboard name (required).
+        gpu (str): GPU type to backfill (required).
+        top_n (int): How many top submissions to re-run (default 100).
+    """
+    leaderboard_name = payload.get("leaderboard")
+    gpu = payload.get("gpu")
+    top_n = payload.get("top_n", 100)
+
+    if not leaderboard_name or not gpu:
+        raise HTTPException(status_code=400, detail="leaderboard and gpu are required")
+
+    if not backend_instance:
+        raise HTTPException(status_code=500, detail="Backend not initialized")
+
+    with db_context as db:
+        task_version = db.get_leaderboard_task_version(leaderboard_name)
+        if task_version <= 1:
+            return {
+                "status": "ok",
+                "message": "Leaderboard is still on task_version 1, nothing to backfill",
+                "queued": 0,
+            }
+
+        submissions = db.get_top_submissions_for_backfill(leaderboard_name, gpu, top_n)
+        lb = db.get_leaderboard(leaderboard_name)
+
+    if not submissions:
+        return {
+            "status": "ok",
+            "message": "No eligible submissions found from previous versions",
+            "queued": 0,
+        }
+
+    if not background_submission_manager:
+        raise HTTPException(
+            status_code=500,
+            detail="Background submission manager not available",
+        )
+
+    queued_ids = []
+    errors = []
+    for sub in submissions:
+        try:
+            req = ProcessedSubmissionRequest(
+                code=sub["code"],
+                file_name=sub["file_name"],
+                user_id=sub["user_id"],
+                user_name=sub["user_name"],
+                leaderboard=leaderboard_name,
+                gpus=[gpu],
+                task=lb["task"],
+                secret_seed=lb.get("secret_seed", 0),
+                task_gpus=[gpu],
+            )
+            with db_context as db:
+                new_sub_id = db.create_submission(
+                    leaderboard=leaderboard_name,
+                    file_name=sub["file_name"],
+                    code=sub["code"],
+                    user_id=sub["user_id"],
+                    time=datetime.datetime.now(),
+                    user_name=sub["user_name"],
+                )
+            await background_submission_manager.enqueue(
+                req, SubmissionMode.LEADERBOARD, new_sub_id
+            )
+            queued_ids.append(new_sub_id)
+        except Exception as e:
+            errors.append({
+                "submission_id": sub["submission_id"],
+                "user_id": sub["user_id"],
+                "error": str(e),
+            })
+
+    return {
+        "status": "ok",
+        "leaderboard": leaderboard_name,
+        "gpu": gpu,
+        "task_version": task_version,
+        "queued": len(queued_ids),
+        "queued_submission_ids": queued_ids,
+        "errors": errors,
+    }
+
+
 @app.post("/admin/export-hf")
 async def admin_export_hf(
     payload: dict,

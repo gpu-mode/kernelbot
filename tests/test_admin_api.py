@@ -815,3 +815,112 @@ class TestAdminRateLimits:
             headers={"Authorization": "Bearer test_token"},
         )
         assert response.status_code == 400
+
+
+class TestAdminBackfill:
+    """Test admin backfill endpoint."""
+
+    def _setup_db_mock(self, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+
+    def test_backfill_requires_auth(self, test_client):
+        """POST /admin/backfill requires authorization."""
+        response = test_client.post("/admin/backfill", json={})
+        assert response.status_code == 401
+
+    def test_backfill_requires_leaderboard_and_gpu(self, test_client):
+        """POST /admin/backfill returns 400 when leaderboard or gpu missing."""
+        response = test_client.post(
+            "/admin/backfill",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboard": "test-lb"},
+        )
+        assert response.status_code == 400
+        assert "leaderboard and gpu are required" in response.json()["detail"]
+
+        response = test_client.post(
+            "/admin/backfill",
+            headers={"Authorization": "Bearer test_token"},
+            json={"gpu": "A100"},
+        )
+        assert response.status_code == 400
+
+    def test_backfill_version_1_noop(self, test_client, mock_backend):
+        """POST /admin/backfill returns queued=0 when task_version is 1."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard_task_version = MagicMock(return_value=1)
+
+        response = test_client.post(
+            "/admin/backfill",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboard": "test-lb", "gpu": "A100"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["queued"] == 0
+        assert "task_version 1" in data["message"]
+
+    def test_backfill_no_candidates(self, test_client, mock_backend):
+        """POST /admin/backfill returns queued=0 when no candidates found."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard_task_version = MagicMock(return_value=2)
+        mock_backend.db.get_top_submissions_for_backfill = MagicMock(return_value=[])
+        mock_backend.db.get_leaderboard = MagicMock(return_value={"task": {}, "secret_seed": 0})
+
+        response = test_client.post(
+            "/admin/backfill",
+            headers={"Authorization": "Bearer test_token"},
+            json={"leaderboard": "test-lb", "gpu": "A100"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["queued"] == 0
+
+    def test_backfill_queues_submissions(self, test_client, mock_backend):
+        """POST /admin/backfill queues submissions and returns count."""
+        self._setup_db_mock(mock_backend)
+        mock_backend.db.get_leaderboard_task_version = MagicMock(return_value=2)
+        mock_backend.db.get_top_submissions_for_backfill = MagicMock(return_value=[
+            {
+                "submission_id": 1,
+                "user_id": "100",
+                "user_name": "alice",
+                "file_name": "sol.py",
+                "code": "print(1)",
+                "score": 1.0,
+                "task_version": 1,
+            },
+            {
+                "submission_id": 2,
+                "user_id": "200",
+                "user_name": "bob",
+                "file_name": "sol.py",
+                "code": "print(2)",
+                "score": 2.0,
+                "task_version": 1,
+            },
+        ])
+        mock_backend.db.get_leaderboard = MagicMock(return_value={"task": {}, "secret_seed": 0})
+        mock_backend.db.create_submission = MagicMock(side_effect=[10, 11])
+
+        with patch('kernelbot.api.main.background_submission_manager') as mock_bsm:
+            mock_bsm.enqueue = MagicMock(return_value=None)
+
+            async def mock_enqueue(*args, **kwargs):
+                pass
+
+            mock_bsm.enqueue = mock_enqueue
+
+            response = test_client.post(
+                "/admin/backfill",
+                headers={"Authorization": "Bearer test_token"},
+                json={"leaderboard": "test-lb", "gpu": "A100"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["queued"] == 2
+        assert data["leaderboard"] == "test-lb"
+        assert data["task_version"] == 2
+        assert len(data["queued_submission_ids"]) == 2
