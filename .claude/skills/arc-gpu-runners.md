@@ -54,6 +54,9 @@ minRunners: 40
 
 template:
   spec:
+    securityContext:
+      supplementalGroups:
+        - 110
     containers:
       - name: runner
         image: ghcr.io/gpu-mode/amd-runner:mi355
@@ -106,6 +109,7 @@ sudo k3s kubectl logs -n arc-systems -l actions.github.com/scale-set-name=arc-ru
 ## How It Works
 
 - **GPU isolation**: The AMD device plugin exposes `amd.com/gpu` as a k8s resource. Each runner pod requests exactly 1 GPU. Kubernetes guarantees no two pods share a GPU — each gets a unique `/dev/dri/renderD*` device.
+- **GPU device permissions**: On this cluster, the host GPU device nodes are group-owned by GID `110`. The runner pod must include `spec.securityContext.supplementalGroups: [110]` or ROCm inside the container will fail with `Unable to open /dev/kfd read-write: Permission denied` / `No HIP GPUs are available`.
 - **CPU isolation**: Each pod gets 14 dedicated cores via cgroup limits (`nproc` reports 14 inside the container).
 - **RAM isolation**: Each pod gets a 340Gi memory limit enforced by cgroups. Exceeding it triggers OOM kill.
 - **Autoscaling**: With `minRunners: 40` and `maxRunners: 40`, all 40 runners stay online and idle on the GitHub runners tab, ready to pick up jobs instantly. The scheduler spreads pods across all 5 nodes (8 per node). Note: `minRunners: 0` means runners only exist when there are queued jobs and won't appear on the GitHub runners tab when idle.
@@ -180,6 +184,62 @@ sudo k3s kubectl describe node <new-node-name> | grep amd.com/gpu
 - **Pods stuck Pending**: Check GPU availability with `kubectl describe node <name> | grep amd.com/gpu`
 - **Listener not starting**: Check controller logs: `kubectl logs -n arc-systems -l app.kubernetes.io/name=gha-rs-controller`
 - **Runner image issues**: The image must have `/home/runner/run.sh` (GitHub Actions runner binary)
+
+### Host rebooted, k3s won't come back cleanly
+
+If a node reboots, kubelet's static memory manager state can become invalid and `k3s` will fail with:
+
+```text
+Invalid state, please drain node and remove policy state file
+start memory manager error: [memorymanager] the expected machine state is different from the real one
+```
+
+**Fix immediately:**
+
+```bash
+sudo systemctl stop k3s
+sudo rm -f /var/lib/kubelet/memory_manager_state
+sudo systemctl start k3s
+```
+
+**Make it persistent on every node:**
+
+```bash
+sudo mkdir -p /etc/systemd/system/k3s.service.d
+cat <<'EOF' | sudo tee /etc/systemd/system/k3s.service.d/fix-memory-manager.conf
+[Service]
+ExecStartPre=/bin/sh -c 'rm -f /var/lib/kubelet/memory_manager_state'
+EOF
+sudo systemctl daemon-reload
+```
+
+### Jobs fail with `No HIP GPUs are available`
+
+If ARC runners start but benchmarks fail inside the container with `RuntimeError: No HIP GPUs are available`, verify the issue from inside a runner pod:
+
+```bash
+rocminfo
+python3 - <<'PY'
+import torch
+print(torch.cuda.is_available())
+print(torch.cuda.device_count())
+PY
+```
+
+**Symptoms of the broken state:**
+- `rocminfo` prints `Unable to open /dev/kfd read-write: Permission denied`
+- `torch.cuda.device_count()` may show `1`, but `torch.cuda.is_available()` is `False`
+
+**Cause:**
+- The pod has `/dev/kfd` and `/dev/dri/renderD*`, but the container user is missing the host GPU device group (GID `110`) unless `supplementalGroups: [110]` is set on the pod.
+
+**Fix:**
+- Add `spec.template.spec.securityContext.supplementalGroups: [110]` to the ARC runner scale set
+- Recreate the runner pods so the new group takes effect
+
+### Full 40-runner capacity
+
+`maxRunners: 40` only works if the cluster is dedicated to ARC. Any non-ARC workload that consumes `amd.com/gpu` or large pinned CPU reservations on these nodes will reduce the actual runner capacity.
 
 ### Jobs queuing forever / failed ephemeral runners
 
