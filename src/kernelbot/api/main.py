@@ -687,6 +687,23 @@ async def admin_delete_submission(
     return {"status": "ok", "submission_id": submission_id}
 
 
+@app.delete("/admin/submissions")
+async def admin_delete_submissions_for_user(
+    leaderboard_id: int,
+    user_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> dict:
+    with db_context as db:
+        deleted = db.delete_submissions_for_user(leaderboard_id, user_name)
+    return {
+        "status": "ok",
+        "leaderboard_id": leaderboard_id,
+        "user_name": user_name,
+        **deleted,
+    }
+
+
 @app.get("/admin/stats")
 async def admin_stats(
     _: Annotated[None, Depends(require_admin)],

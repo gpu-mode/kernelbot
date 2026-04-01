@@ -1095,6 +1095,72 @@ class LeaderboardDB:
             logger.exception("Could not delete submission %s.", submission_id, exc_info=e)
             raise KernelBotError(f"Could not delete submission {submission_id}!") from e
 
+    def delete_submissions_for_user(self, leaderboard_id: int, user_name: str) -> dict[str, int]:
+        try:
+            self.cursor.execute(
+                """
+                SELECT 1
+                FROM leaderboard.leaderboard
+                WHERE id = %s
+                """,
+                (leaderboard_id,),
+            )
+            if self.cursor.fetchone() is None:
+                raise LeaderboardDoesNotExist(str(leaderboard_id))
+
+            self.cursor.execute(
+                """
+                WITH target_submissions AS (
+                    SELECT s.id
+                    FROM leaderboard.submission s
+                    JOIN leaderboard.user_info ui ON ui.id = s.user_id
+                    WHERE s.leaderboard_id = %s
+                      AND ui.user_name = %s
+                ),
+                deleted_job_status AS (
+                    DELETE FROM leaderboard.submission_job_status sjs
+                    WHERE sjs.submission_id IN (SELECT id FROM target_submissions)
+                    RETURNING sjs.id
+                ),
+                deleted_runs AS (
+                    DELETE FROM leaderboard.runs r
+                    WHERE r.submission_id IN (SELECT id FROM target_submissions)
+                    RETURNING r.id
+                ),
+                deleted_submissions AS (
+                    DELETE FROM leaderboard.submission s
+                    WHERE s.id IN (SELECT id FROM target_submissions)
+                    RETURNING s.id
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM deleted_job_status) AS deleted_job_status,
+                    (SELECT COUNT(*) FROM deleted_runs) AS deleted_runs,
+                    (SELECT COUNT(*) FROM deleted_submissions) AS deleted_submissions
+                """,
+                (leaderboard_id, user_name),
+            )
+            deleted_job_status, deleted_runs, deleted_submissions = self.cursor.fetchone()
+            self.connection.commit()
+            return {
+                "deleted_job_status": deleted_job_status,
+                "deleted_runs": deleted_runs,
+                "deleted_submissions": deleted_submissions,
+            }
+        except KernelBotError:
+            self.connection.rollback()
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception(
+                "Could not delete submissions for leaderboard %s user %s.",
+                leaderboard_id,
+                user_name,
+                exc_info=e,
+            )
+            raise KernelBotError(
+                f"Could not delete submissions for leaderboard {leaderboard_id} and user {user_name}!"
+            ) from e
+
     def get_user_submissions(
         self,
         user_id: str,

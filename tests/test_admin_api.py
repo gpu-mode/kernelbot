@@ -184,6 +184,31 @@ class TestAdminSubmissions:
         assert response.status_code == 200
         mock_backend.db.delete_submission.assert_called_once_with(123)
 
+    def test_delete_submissions_for_user(self, test_client, mock_backend):
+        """DELETE /admin/submissions deletes by leaderboard ID and username."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.delete_submissions_for_user = MagicMock(return_value={
+            "deleted_job_status": 2,
+            "deleted_runs": 5,
+            "deleted_submissions": 3,
+        })
+
+        response = test_client.delete(
+            "/admin/submissions?leaderboard_id=765&user_name=Borui%20Xu",
+            headers={"Authorization": "Bearer test_token"}
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "leaderboard_id": 765,
+            "user_name": "Borui Xu",
+            "deleted_job_status": 2,
+            "deleted_runs": 5,
+            "deleted_submissions": 3,
+        }
+        mock_backend.db.delete_submissions_for_user.assert_called_once_with(765, "Borui Xu")
+
 
 class TestAdminLeaderboards:
     """Test admin leaderboard endpoints."""
