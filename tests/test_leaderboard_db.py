@@ -481,6 +481,69 @@ def test_delete_leaderboard(database, submit_leaderboard):
         assert db.get_leaderboard_names() == []
 
 
+def test_delete_submissions_for_user(database, submit_leaderboard):
+    with database as db:
+        target_a = db.create_submission(
+            "submit-leaderboard",
+            "submission.py",
+            5,
+            "pass",
+            datetime.datetime.now(),
+            user_name="target-user",
+        )
+        target_b = db.create_submission(
+            "submit-leaderboard",
+            "submission.py",
+            5,
+            "pass 2",
+            datetime.datetime.now(),
+            user_name="target-user",
+        )
+        other = db.create_submission(
+            "submit-leaderboard",
+            "submission.py",
+            7,
+            "different",
+            datetime.datetime.now(),
+            user_name="other-user",
+        )
+
+        _create_submission_run(db, target_a, mode="leaderboard", secret=False, runner="A100", score=5)
+        _create_submission_run(db, target_b, mode="test", secret=False, runner="A100", score=None)
+        _create_submission_run(db, other, mode="leaderboard", secret=False, runner="A100", score=7)
+        db.upsert_submission_job_status(target_a, "running", None)
+        db.upsert_submission_job_status(target_b, "pending", None)
+
+        deleted = db.delete_submissions_for_user(db.get_leaderboard_id("submit-leaderboard"), "target-user")
+
+        assert deleted == {
+            "deleted_job_status": 2,
+            "deleted_runs": 2,
+            "deleted_submissions": 2,
+        }
+        assert db.get_submission_by_id(target_a) is None
+        assert db.get_submission_by_id(target_b) is None
+        assert db.get_submission_by_id(other) is not None
+
+        db.cursor.execute("SELECT COUNT(*) FROM leaderboard.runs")
+        assert db.cursor.fetchone()[0] == 1
+
+        db.cursor.execute("SELECT COUNT(*) FROM leaderboard.submission_job_status")
+        assert db.cursor.fetchone()[0] == 0
+
+        db.cursor.execute("SELECT COUNT(*) FROM leaderboard.submission")
+        assert db.cursor.fetchone()[0] == 1
+
+
+def test_delete_submissions_for_user_missing_leaderboard(database):
+    with database as db:
+        with pytest.raises(
+            leaderboard_db.LeaderboardDoesNotExist,
+            match="Leaderboard `999999` does not exist.",
+        ):
+            db.delete_submissions_for_user(999999, "target-user")
+
+
 def test_delete_leaderboard_with_runs(database, submit_leaderboard):
     with database as db:
         db.create_submission(
@@ -1135,4 +1198,3 @@ def test_check_rate_limit_categories_independent(database, submit_leaderboard):
         # Test should be blocked
         result = db.check_rate_limit("submit-leaderboard", "123", "test")
         assert result["allowed"] is False
-
