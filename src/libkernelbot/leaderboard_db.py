@@ -377,6 +377,37 @@ class LeaderboardDB:
             self.connection.rollback()  # Ensure rollback if error occurs
             raise KernelBotError("Error while finalizing submission") from e
 
+    def mark_submission_hacked(self, submission: int, error: str | None = None) -> None:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.submission
+                SET done = TRUE, status = 'hacked'
+                WHERE id = %s
+                """,
+                (submission,),
+            )
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_job_status AS s
+                    (submission_id, status, error, last_heartbeat)
+                VALUES
+                    (%s, %s, %s, %s)
+                ON CONFLICT (submission_id) DO UPDATE
+                SET
+                    status         = EXCLUDED.status,
+                    error          = COALESCE(EXCLUDED.error, s.error),
+                    last_heartbeat = EXCLUDED.last_heartbeat
+                """,
+                (submission, "hacked", error, now),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            logger.error("Could not mark submission '%s' as hacked.", submission, exc_info=e)
+            self.connection.rollback()
+            raise KernelBotError("Error while recording hacked submission") from e
+
     def update_heartbeat_if_active(self, sub_id: int, ts: datetime.datetime) -> None:
         try:
             self.cursor.execute(
