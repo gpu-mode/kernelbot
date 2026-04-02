@@ -5,18 +5,19 @@
 | Name                                                |    Stmts |     Miss |   Cover |   Missing |
 |---------------------------------------------------- | -------: | -------: | ------: | --------: |
 | src/libkernelbot/\_\_init\_\_.py                    |        0 |        0 |    100% |           |
-| src/libkernelbot/backend.py                         |       82 |        9 |     89% |38-39, 62, 204-206, 236-238 |
-| src/libkernelbot/background\_submission\_manager.py |      160 |       31 |     81% |36, 38-40, 42, 45, 47, 176-177, 203-206, 224-229, 246-271 |
-| src/libkernelbot/consts.py                          |       71 |        2 |     97% |   50, 108 |
+| src/libkernelbot/backend.py                         |       99 |       13 |     87% |43-44, 94-101, 233-235, 265-267 |
+| src/libkernelbot/background\_submission\_manager.py |      169 |       32 |     81% |37, 39-41, 43, 46, 48, 177-178, 204-207, 225-230, 248-250, 267-288 |
+| src/libkernelbot/consts.py                          |       71 |        1 |     99% |        50 |
 | src/libkernelbot/db\_types.py                       |       15 |        1 |     93% |         7 |
 | src/libkernelbot/hf\_export.py                      |       77 |        4 |     95% |62, 84, 150, 179 |
-| src/libkernelbot/leaderboard\_db.py                 |      473 |       75 |     84% |66, 101, 381-391, 638, 685-686, 737, 772-773, 784-799, 818-819, 928-930, 944, 1033-1058, 1365-1389, 1401-1440, 1447-1468, 1475-1482, 1498-1507, 1516-1526, 1534-1544, 1552-1561, 1584 |
+| src/libkernelbot/kernelguard.py                     |       97 |       47 |     52% |43-48, 52-53, 57-58, 66-71, 75-78, 82-118, 128, 156-159 |
+| src/libkernelbot/leaderboard\_db.py                 |      479 |       80 |     83% |66, 101, 381-405, 412-422, 669, 716-717, 768, 803-804, 815-830, 849-850, 959-961, 975, 1064-1089, 1396-1420, 1432-1471, 1478-1499, 1506-1513, 1529-1538, 1547-1557, 1565-1575, 1583-1592, 1615 |
 | src/libkernelbot/problem\_sync.py                   |      128 |      105 |     18% |72-101, 121-206, 235-302 |
 | src/libkernelbot/report.py                          |      269 |        9 |     97% |75, 326, 345, 356, 395, 422, 429-430, 437 |
 | src/libkernelbot/submission.py                      |      140 |       10 |     93% |18, 54, 72-77, 81-84 |
 | src/libkernelbot/task.py                            |      113 |        6 |     95% |68, 121, 126-128, 167 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
-| **TOTAL**                                           | **1632** |  **263** | **84%** |           |
+| **TOTAL**                                           | **1761** |  **319** | **82%** |           |
 
 
 ## Setup coverage badge
