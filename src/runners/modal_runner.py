@@ -9,7 +9,7 @@ from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
 app = App("discord-bot-runner")
-cuda_version = "13.1.0"
+cuda_version = "12.9.1"
 flavor = "devel"
 operating_sys = "ubuntu24.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
@@ -37,6 +37,7 @@ cuda_image = (
     .run_commands("ln -sf $(which python) /usr/local/bin/python3")
     .apt_install(
         "git",
+        "curl",
         "gcc-13",
         "g++-13",
         "clang-18",
@@ -49,12 +50,6 @@ cuda_image = (
         "numpy~=2.3",
         "pytest",
         "PyYAML",
-    )
-    .uv_pip_install(
-        "torch==2.9.1",
-        "torchvision",
-        "torchaudio",
-        index_url="https://download.pytorch.org/whl/cu130",
     )
     # other frameworks
     .uv_pip_install(
@@ -69,6 +64,11 @@ cuda_image = (
         "cuda-python[all]==13.0",
         # "nvmath-python[cu13]~=0.4",
         # "numba-cuda[cu13]~=0.15",
+    )
+    # Install torch last so its CUDA/NCCL dependency set wins over broader CUDA Python packages.
+    .uv_pip_install(
+        "torch==2.11.0",
+        index_url="https://download.pytorch.org/whl/cu129",
     )
     # CUTLASS C++ headers for #include <cutlass/...>
     .run_commands(
