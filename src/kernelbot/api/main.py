@@ -569,7 +569,7 @@ async def run_submission_async(
             try:
                 await asyncio.wait_for(
                     asyncio.to_thread(enforce_submission_precheck, req.code, req.file_name),
-                    timeout=5.0,
+                    timeout=20.0,
                 )
             except asyncio.TimeoutError as e:
                 raise HTTPException(status_code=504, detail="KernelGuard pre-check timed out") from e
