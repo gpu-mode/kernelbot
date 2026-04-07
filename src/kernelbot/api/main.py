@@ -689,6 +689,25 @@ async def admin_delete_leaderboard(
     return {"status": "ok", "leaderboard": leaderboard_name, "force": force}
 
 
+@app.get("/admin/leaderboards/{leaderboard_name}/submissions")
+async def admin_list_leaderboard_submissions(
+    leaderboard_name: str,
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
+    with db_context as db:
+        submissions = db.get_leaderboard_submission_history(leaderboard_name, limit, offset)
+    return {
+        "status": "ok",
+        "leaderboard": leaderboard_name,
+        "limit": limit,
+        "offset": offset,
+        "submissions": submissions,
+    }
+
+
 @app.delete("/admin/submissions/{submission_id}")
 async def admin_delete_submission(
     submission_id: int,

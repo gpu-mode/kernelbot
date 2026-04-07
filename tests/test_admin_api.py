@@ -141,6 +141,66 @@ class TestAdminStats:
 class TestAdminSubmissions:
     """Test admin submission endpoints."""
 
+    def test_list_leaderboard_submissions(self, test_client, mock_backend):
+        """GET /admin/leaderboards/{name}/submissions returns all submission metadata."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.get_leaderboard_submission_history = MagicMock(return_value=[
+            {
+                "id": 123,
+                "leaderboard_name": "test-lb",
+                "file_name": "submission.py",
+                "user_id": "42",
+                "user_name": "alice",
+                "submission_time": "2026-04-07T12:00:00Z",
+                "done": True,
+            },
+            {
+                "id": 122,
+                "leaderboard_name": "test-lb",
+                "file_name": "submission_old.py",
+                "user_id": "43",
+                "user_name": "bob",
+                "submission_time": "2026-04-07T11:00:00Z",
+                "done": False,
+            },
+        ])
+
+        response = test_client.get(
+            "/admin/leaderboards/test-lb/submissions?limit=50&offset=10",
+            headers={"Authorization": "Bearer test_token"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "leaderboard": "test-lb",
+            "limit": 50,
+            "offset": 10,
+            "submissions": [
+                {
+                    "id": 123,
+                    "leaderboard_name": "test-lb",
+                    "file_name": "submission.py",
+                    "user_id": "42",
+                    "user_name": "alice",
+                    "submission_time": "2026-04-07T12:00:00Z",
+                    "done": True,
+                },
+                {
+                    "id": 122,
+                    "leaderboard_name": "test-lb",
+                    "file_name": "submission_old.py",
+                    "user_id": "43",
+                    "user_name": "bob",
+                    "submission_time": "2026-04-07T11:00:00Z",
+                    "done": False,
+                },
+            ],
+        }
+        mock_backend.db.get_leaderboard_submission_history.assert_called_once_with(
+            "test-lb", 50, 10
+        )
+
     def test_get_submission(self, test_client, mock_backend):
         """GET /admin/submissions/{id} returns submission."""
         mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)

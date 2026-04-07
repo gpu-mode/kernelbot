@@ -1276,6 +1276,55 @@ class LeaderboardDB:
             logger.exception("Error fetching user submissions for user %s", user_id, exc_info=e)
             raise KernelBotError("Error fetching user submissions") from e
 
+    def get_leaderboard_submission_history(
+        self,
+        leaderboard_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Get all submissions for a leaderboard with admin-oriented metadata."""
+        limit = max(1, min(limit, 1000))
+        offset = max(0, offset)
+
+        try:
+            self.get_leaderboard_id(leaderboard_name)
+            self.cursor.execute(
+                """
+                SELECT s.id, lb.name, s.file_name, s.user_id, ui.user_name,
+                       s.submission_time, s.done
+                FROM leaderboard.submission s
+                JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                LEFT JOIN leaderboard.user_info ui ON ui.id = s.user_id
+                WHERE lb.name = %s
+                ORDER BY s.submission_time DESC, s.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (leaderboard_name, limit, offset),
+            )
+            return [
+                {
+                    "id": row[0],
+                    "leaderboard_name": row[1],
+                    "file_name": row[2],
+                    "user_id": row[3],
+                    "user_name": row[4],
+                    "submission_time": row[5],
+                    "done": row[6],
+                }
+                for row in self.cursor.fetchall()
+            ]
+        except KernelBotError:
+            self.connection.rollback()
+            raise
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception(
+                "Error fetching submissions for leaderboard %s",
+                leaderboard_name,
+                exc_info=e,
+            )
+            raise KernelBotError("Error fetching leaderboard submissions") from e
+
     def get_submission_by_id(self, submission_id: int) -> Optional["SubmissionItem"]:
         query = """
                 SELECT s.leaderboard_id, lb.name, s.file_name, s.user_id,
