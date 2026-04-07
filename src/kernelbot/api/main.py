@@ -698,13 +698,13 @@ async def admin_list_leaderboard_submissions(
     offset: int = 0,
 ) -> dict:
     with db_context as db:
-        submissions = db.get_leaderboard_submission_history(leaderboard_name, limit, offset)
+        submission_ids = db.get_leaderboard_submission_ids(leaderboard_name, limit, offset)
     return {
         "status": "ok",
         "leaderboard": leaderboard_name,
         "limit": limit,
         "offset": offset,
-        "submissions": submissions,
+        "submission_ids": submission_ids,
     }
 
 
