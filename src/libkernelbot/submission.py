@@ -7,7 +7,13 @@ from typing import Optional, Union
 
 from better_profanity import profanity
 
-from libkernelbot.consts import RankCriterion, SubmissionMode, get_mode_category
+from libkernelbot.consts import (
+    MODAL_B200_MAX_SUBMISSIONS_PER_HOUR,
+    ModalGPU,
+    RankCriterion,
+    SubmissionMode,
+    get_mode_category,
+)
 from libkernelbot.db_types import RunItem, SubmissionItem
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
 from libkernelbot.run_eval import FullResult
@@ -39,6 +45,36 @@ class ProcessedSubmissionRequest(SubmissionRequest):
     secret_seed: int = None
     task_gpus: list = None
     mode_category: str = None
+
+
+def normalize_requested_gpus(gpus: Union[None, str, list]) -> list[str]:
+    if gpus is None:
+        return []
+    if isinstance(gpus, str):
+        return [gpus]
+    return list(gpus)
+
+
+def enforce_gpu_rate_limits(req: SubmissionRequest, db: LeaderboardDB) -> None:
+    requested_gpus = normalize_requested_gpus(req.gpus)
+    if ModalGPU.B200.value not in requested_gpus:
+        return
+
+    rate_check = db.check_gpu_submission_rate_limit(
+        str(req.user_id),
+        ModalGPU.B200.value,
+        MODAL_B200_MAX_SUBMISSIONS_PER_HOUR,
+    )
+    if rate_check["allowed"]:
+        return
+
+    raise KernelBotError(
+        "Rate limit exceeded: "
+        f"{rate_check['current_count']}/{rate_check['max_per_hour']} Modal B200 submissions "
+        "per hour. "
+        f"Try again in {rate_check['retry_after_seconds']}s.",
+        code=429,
+    )
 
 
 def prepare_submission(  # noqa: C901

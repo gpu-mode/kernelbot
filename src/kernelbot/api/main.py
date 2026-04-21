@@ -15,12 +15,17 @@ from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
-from libkernelbot.kernelguard import KernelGuardRejected, enforce_submission_precheck, should_precheck_submission
+from libkernelbot.kernelguard import (
+    KernelGuardRejected,
+    enforce_submission_precheck,
+    should_precheck_submission,
+)
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
 from libkernelbot.problem_sync import sync_problems
 from libkernelbot.submission import (
     ProcessedSubmissionRequest,
     SubmissionRequest,
+    enforce_gpu_rate_limits,
     prepare_submission,
 )
 from libkernelbot.task import make_task_definition
@@ -500,6 +505,7 @@ async def enqueue_background_job(
 ):
     # pre-create the submission for api returns
     with backend.db as db:
+        enforce_gpu_rate_limits(req, db)
         sub_id = db.create_submission(
             leaderboard=req.leaderboard,
             file_name=req.file_name,
@@ -508,6 +514,7 @@ async def enqueue_background_job(
             time=datetime.datetime.now(datetime.timezone.utc),
             user_name=req.user_name,
             mode_category=req.mode_category,
+            requested_gpus=req.gpus,
         )
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
