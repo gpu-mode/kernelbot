@@ -4,7 +4,13 @@ import datetime
 from types import SimpleNamespace
 from typing import Optional
 
-from libkernelbot.consts import GPU, GPU_TO_SM, SubmissionMode, get_gpu_by_name, get_mode_category
+from libkernelbot.consts import (
+    GPU,
+    GPU_TO_SM,
+    SubmissionMode,
+    get_gpu_by_name,
+    get_mode_category,
+)
 from libkernelbot.kernelguard import (
     KernelGuardRejected,
     enforce_submission_precheck,
@@ -19,7 +25,11 @@ from libkernelbot.report import (
     make_short_report,
 )
 from libkernelbot.run_eval import FullResult
-from libkernelbot.submission import ProcessedSubmissionRequest, compute_score
+from libkernelbot.submission import (
+    ProcessedSubmissionRequest,
+    compute_score,
+    enforce_gpu_rate_limits,
+)
 from libkernelbot.task import LeaderboardTask, build_task_config
 from libkernelbot.utils import setup_logging
 
@@ -68,6 +78,7 @@ class KernelBackend:
             sub_id = pre_sub_id
         else:
             with self.db as db:
+                enforce_gpu_rate_limits(req, db)
                 sub_id = db.create_submission(
                     leaderboard=req.leaderboard,
                     file_name=req.file_name,
@@ -76,6 +87,7 @@ class KernelBackend:
                     time=datetime.datetime.now(datetime.timezone.utc),
                     user_name=req.user_name,
                     mode_category=req.mode_category or get_mode_category(mode),
+                    requested_gpus=req.gpus,
                 )
         selected_gpus = [get_gpu_by_name(gpu) for gpu in req.gpus]
         submission_started = False

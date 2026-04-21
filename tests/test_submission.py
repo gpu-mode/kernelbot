@@ -32,6 +32,13 @@ def mock_backend():
     }
     db_context.get_leaderboard_gpu_types.return_value = ["A100", "V100"]
     db_context.is_user_banned.return_value = False
+    db_context.check_rate_limit.return_value = None
+    db_context.check_gpu_submission_rate_limit.return_value = {
+        "allowed": True,
+        "current_count": 0,
+        "max_per_hour": 1,
+        "retry_after_seconds": 0,
+    }
 
     return backend
 
@@ -295,6 +302,26 @@ def test_prepare_submission_checks(mock_backend):
         ),
     ):
         submission.prepare_submission(req, mock_backend)
+
+
+def test_enforce_gpu_rate_limits_blocks_modal_b200(mock_backend):
+    mock_backend.db.check_gpu_submission_rate_limit.return_value = {
+        "allowed": False,
+        "current_count": 1,
+        "max_per_hour": 1,
+        "retry_after_seconds": 123,
+    }
+    req = submission.SubmissionRequest(
+        code="print('hello world')",
+        file_name="test.py",
+        user_id=2,
+        user_name="test_user2",
+        gpus=["B200"],
+        leaderboard="test_board",
+    )
+
+    with pytest.raises(KernelBotError, match="Modal B200 submissions per hour"):
+        submission.enforce_gpu_rate_limits(req, mock_backend.db)
 
 
 def test_compute_score():
