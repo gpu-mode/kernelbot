@@ -644,7 +644,7 @@ async def create_dev_leaderboard(
     definition = make_task_definition(directory_path)
 
     # Auto-derive name and deadline like admin_cog.leaderboard_create_local
-    leaderboard_name = f"{directory}-dev"
+    leaderboard_name = f"{directory.replace('/', '_')}-dev"
     deadline_value = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=365)
 
     # GPUs must be specified in task.yml

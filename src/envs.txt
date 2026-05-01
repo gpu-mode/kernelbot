@@ -1,0 +1,3 @@
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+export ADMIN_TOKEN="your-admin-token"
+export PROBLEM_DEV_DIR="/Users/jackkhuu/Desktop/oss/reference-kernels/problems"

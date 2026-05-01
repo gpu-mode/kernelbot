@@ -19,7 +19,7 @@ from kernelbot.discord_utils import (
 )
 from kernelbot.env import env
 from kernelbot.ui.misc import ConfirmationView, DeleteConfirmationModal, GPUSelectionView
-from libkernelbot.consts import GitHubGPU, ModalGPU
+from libkernelbot.consts import GitHubGPU, MetalGPU, ModalGPU
 from libkernelbot.leaderboard_db import LeaderboardDoesNotExist, LeaderboardItem, SubmissionItem
 from libkernelbot.task import LeaderboardDefinition, make_task_definition
 from libkernelbot.utils import (
@@ -208,6 +208,7 @@ class AdminCog(commands.Cog):
     @app_commands.choices(
         gpu=[app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in GitHubGPU]
         + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in ModalGPU]
+        + [app_commands.Choice(name=gpu.name, value=gpu.value) for gpu in MetalGPU]
     )
     @with_error_handling
     async def leaderboard_create_local(
@@ -386,7 +387,7 @@ class AdminCog(commands.Cog):
         if gpu is None:
             # Ask the user to select GPUs
             view = GPUSelectionView(
-                [gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU]
+                [gpu.name for gpu in GitHubGPU] + [gpu.name for gpu in ModalGPU] + [gpu.name for gpu in MetalGPU]
             )
 
             await send_discord_message(
