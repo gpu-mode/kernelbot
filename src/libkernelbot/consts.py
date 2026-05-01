@@ -172,5 +172,10 @@ torch
 numpy
 """
 
+METAL_REQUIREMENTS = """
+mlx
+numpy
+"""
+
 # A buffer for timeouts to account for github setup time
 TIMEOUT_BUFFER_MINUTES = 2

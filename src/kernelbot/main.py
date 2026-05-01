@@ -26,10 +26,14 @@ def create_backend(debug_mode: bool = False) -> KernelBackend:
     """Create and configure a KernelBackend with launchers."""
     backend = KernelBackend(env=env, debug_mode=debug_mode)
     backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
-    backend.register_launcher(
-        GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
-    )
-    backend.register_launcher(LocalLauncher())
+    github_launcher = GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
+    backend.register_launcher(github_launcher)
+
+    if os.environ.get("METAL_LAUNCHER") == "arc":
+        for gpu in consts.MetalGPU:
+            backend.launcher_map[gpu.value] = github_launcher
+    else:
+        backend.register_launcher(LocalLauncher())
     return backend
 
 
