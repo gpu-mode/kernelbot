@@ -175,7 +175,7 @@ async def validate_user_header(
     if not user_info:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or unauthorized auth header elaine",
+            detail="Invalid or unauthorized auth header",
         )
     return user_info
 
