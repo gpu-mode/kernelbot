@@ -78,6 +78,16 @@ Use `/verifyruns` to test GitHub Actions integration and `/verifydb` to check da
 
 To donate a GPU, contact us to become a CI admin and add an org-level runner at https://github.com/organizations/gpu-mode/settings/actions/runners
 
+## License
+
+This project is licensed under the [June 9 Researcher Reciprocity License](LICENSE).
+
+The license adapts the Open RAIL-S structure and adds one specific use restriction: training, fine-tuning, distillation, synthetic-data generation for training, embedding for training, or otherwise using this project to improve an AI model or AI service requires Researcher Reciprocity.
+
+> If you train on it, you let us generate.
+
+Covered AI model and service providers may not use this project while imposing terms that prevent GPU Mode, project contributors, or authorized researchers from generating outputs, evaluating models, benchmarking, publishing research, or exploring their own research ideas on materially equal terms to ordinary users.
+
 ## Acknowledgements
 
 - Modal for credits
