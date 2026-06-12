@@ -590,6 +590,15 @@ def make_system_info() -> SystemInfo:  # noqa: C901
                 info.runtime = "ROCm"
             elif torch.version.cuda is not None:
                 info.runtime = "CUDA"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            info.runtime = "MPS"
+            info.device_count = 1
+            try:
+                info.gpu = subprocess.check_output(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"], encoding="utf-8"
+                ).strip()
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                info.gpu = "Apple Silicon"
     except ImportError:
         # get GPU info manually
         try:
@@ -598,7 +607,7 @@ def make_system_info() -> SystemInfo:  # noqa: C901
             )
             info.device_count = info.gpu.count("\n")
             info.runtime = "CUDA"
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             # try again for HIP
             try:
                 rocm_info = json.loads(
@@ -611,7 +620,7 @@ def make_system_info() -> SystemInfo:  # noqa: C901
 
                 info.device_count = len(rocm_info)
                 info.runtime = "ROCm"
-            except subprocess.CalledProcessError:
+            except (subprocess.CalledProcessError, FileNotFoundError):
                 # OK, no GPU info available
                 pass
 
@@ -628,8 +637,7 @@ def make_system_info() -> SystemInfo:  # noqa: C901
             # ¯\_(ツ)_/¯
             info.cpu = cpu_info_dict.get("vendor_id", "")
 
-    except PermissionError:
-        # nothing we can do here; we're not getting CPU info
+    except (PermissionError, FileNotFoundError):
         pass
     import platform
 

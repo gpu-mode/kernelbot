@@ -1,0 +1,9 @@
+name: MLX Problem Set
+deadline: "2026-05-01 03:59"
+description: "Test MLX"
+problems:
+  - directory: mlx/example
+    name: example_mlx
+    deadline: "2026-05-01 03:59"
+    gpus:
+      - M4_Max 

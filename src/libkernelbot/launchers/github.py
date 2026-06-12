@@ -24,9 +24,11 @@ from libkernelbot.consts import (
     AMD_REQUIREMENTS,
     DEFAULT_GITHUB_TIMEOUT_MINUTES,
     GPU,
+    METAL_REQUIREMENTS,
     NVIDIA_REQUIREMENTS,
     TIMEOUT_BUFFER_MINUTES,
     GitHubGPU,
+    MetalGPU,
     SubmissionMode,
 )
 from libkernelbot.report import RunProgressReporter
@@ -115,6 +117,11 @@ class GitHubLauncher(Launcher):
             runner_name = None
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
+        elif gpu_type.value in [g.value for g in MetalGPU]:
+            selected_workflow = "metal_workflow.yml"
+            runner_name = "arc-metal-runner-set"
+            gpu_vendor = "Apple"
+            requirements = METAL_REQUIREMENTS
         else:
             raise ValueError(f"Invalid GPU type: {gpu_type.value}")
 
@@ -122,6 +129,8 @@ class GitHubLauncher(Launcher):
         if lang == "cu" and gpu_vendor == "AMD":
             # TODO implement HIP
             raise NotImplementedError("Cannot use CUDA runs with AMD GPUs")
+        if lang == "cu" and gpu_vendor == "Apple":
+            raise NotImplementedError("CUDA is not supported on Metal GPUs")
 
         lang_name = {"py": "Python", "cu": "CUDA"}[lang]
 
@@ -311,6 +320,8 @@ class GitHubRun:
             expected_run_name = f"NVIDIA Job - {run_id}"
         elif self.workflow_file == "helion_workflow.yml":
             expected_run_name = f"Helion Job - {run_id}"
+        elif self.workflow_file == "metal_workflow.yml":
+            expected_run_name = f"Metal Job - {run_id}"
         else:
             raise ValueError(f"Unknown workflow file: {self.workflow_file}")
 

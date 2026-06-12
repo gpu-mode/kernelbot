@@ -1,0 +1,138 @@
+## Self-Hosted Metal Runner Setup
+
+Register a Mac with Apple Silicon as a GitHub Actions self-hosted runner
+so it can pick up Metal/MLX workflow jobs.
+
+### Prerequisites
+
+- macOS with Apple Silicon (M-series chip)
+- gh CLI installed and authenticated: `gh auth login`
+- workflow scope on your token: `gh auth refresh -s workflow`
+
+### Setup
+
+# 1. Create runner directory (outside the repo)
+mkdir -p ~/actions-runner && cd ~/actions-runner
+
+# 2. Download the runner agent (macOS ARM64)
+curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-osx-arm64-2.323.0.tar.gz
+
+# 3. Extract
+tar xzf actions-runner.tar.gz
+
+# 4. Get a registration token (expires in 1 hour)
+TOKEN=$(gh api -X POST repos/<OWNER>/<REPO>/actions/runners/registration-token --jq '.token')
+
+# 5. Configure the runner
+./config.sh --url https://github.com/<OWNER>/<REPO> \
+  --token $TOKEN \
+  --name metal-runner \
+  --labels arc-metal-runner-set \
+  --work _work
+
+# Accept defaults when prompted (runner group: Default, etc.)
+
+# 6. Start the runner (foreground)
+./run.sh
+
+# Or install as a background service:
+# ./svc.sh install && ./svc.sh start
+
+### Verify the runner is registered
+
+Go to your repo -> Settings -> Actions -> Runners.
+You should see "metal-runner" listed with status "Idle".
+
+---
+
+## Push the Workflow
+
+The metal_workflow.yml must exist on the branch that gets dispatched to.
+
+# Push your branch to the repo
+# (gh token needs workflow scope or this will be rejected)
+git push origin <branch>
+
+---
+
+## Test the Workflow
+
+### Option A: Smoke test via gh CLI
+
+Triggers the workflow with a dummy payload. The runner step will fail
+(bad payload), but confirms the job is picked up by your runner.
+
+gh workflow run metal_workflow.yml \
+  --repo <OWNER>/<REPO> \
+  --ref <branch> \
+  --field run_id=test-123 \
+  --field payload=dGVzdA==
+
+# Watch it
+gh run list --repo <OWNER>/<REPO> --workflow=metal_workflow.yml
+gh run watch --repo <OWNER>/<REPO>
+
+### Option B: Full end-to-end test via the API
+
+Start the API server with METAL_LAUNCHER=arc so submissions dispatch
+through GitHub Actions instead of running locally.
+
+# 1. Start Postgres
+brew services start postgresql@14
+
+# 2. Create DB and run migrations
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+createdb kernelbot  # skip if already exists
+cd /path/to/kernelbot
+uv run yoyo apply --database "$DATABASE_URL" src/migrations/
+
+# 3. Create test user
+psql "$DATABASE_URL" -c "INSERT INTO leaderboard.user_info (id, user_name, cli_id, cli_valid)
+VALUES ('999999', 'testuser', 'test-cli-id-123', true)
+ON CONFLICT (id) DO UPDATE SET cli_id = 'test-cli-id-123', cli_valid = true;"
+
+# 4. Install mlx
+uv pip install mlx
+
+# 5. Start the API server with ARC mode
+cd src/kernelbot
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+export ADMIN_TOKEN="your-admin-token"
+export PROBLEM_DEV_DIR="/path/to/kernelbot/examples"
+export GITHUB_TOKEN="<your-github-token>"
+export GITHUB_REPO="<OWNER>/<REPO>"
+export GITHUB_WORKFLOW_BRANCH="<branch>"
+export METAL_LAUNCHER=arc
+export DISABLE_SSL=1
+uv run python main.py --api-only
+
+# 6. (In another terminal) Create the dev leaderboard
+curl -X POST "http://localhost:8000/admin/leaderboards" \
+  -H "Authorization: Bearer your-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{"directory": "mlx/example"}'
+
+# 7. Submit a test (dispatches to your self-hosted runner via GitHub Actions)
+curl -X POST "http://localhost:8000/mlx_example-dev/M4_Max/test" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123" \
+  -F "file=@examples/mlx/example/submission.py"
+
+# 8. Submit a benchmark
+curl -X POST "http://localhost:8000/mlx_example-dev/M4_Max/benchmark" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123" \
+  -F "file=@examples/mlx/example/submission.py"
+
+---
+
+## Scaling to Multiple Machines
+
+Register additional Macs with the same label (arc-metal-runner-set).
+GitHub Actions automatically queues and distributes jobs across all
+runners sharing that label.
+
+# On each additional Mac, repeat the setup steps above with a unique --name:
+./config.sh --url https://github.com/<OWNER>/<REPO> \
+  --token $TOKEN \
+  --name metal-runner-2 \
+  --labels arc-metal-runner-set \
+  --work _work

@@ -16,7 +16,7 @@ from env import env, init_environment
 from libkernelbot import consts
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
-from libkernelbot.launchers import GitHubLauncher, ModalLauncher
+from libkernelbot.launchers import GitHubLauncher, LocalLauncher, ModalLauncher
 from libkernelbot.utils import setup_logging
 
 logger = setup_logging(__name__)
@@ -26,9 +26,14 @@ def create_backend(debug_mode: bool = False) -> KernelBackend:
     """Create and configure a KernelBackend with launchers."""
     backend = KernelBackend(env=env, debug_mode=debug_mode)
     backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
-    backend.register_launcher(
-        GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
-    )
+    github_launcher = GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
+    backend.register_launcher(github_launcher)
+
+    if os.environ.get("METAL_LAUNCHER") == "arc":
+        for gpu in consts.MetalGPU:
+            backend.launcher_map[gpu.value] = github_launcher
+    else:
+        backend.register_launcher(LocalLauncher())
     return backend
 
 

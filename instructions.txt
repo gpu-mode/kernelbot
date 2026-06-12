@@ -1,0 +1,73 @@
+## Changes Summary
+
+### New files
+- src/libkernelbot/launchers/local.py — LocalLauncher that runs submissions directly on the host machine via run_config(). Blocks CUDA submissions.
+
+### Modified files — Adding Metal/MLX support
+
+1. src/libkernelbot/consts.py
+   - Added MetalGPU enum (M4_Max)
+   - Registered it in _GPU_LOOKUP under "Local" runner
+   - Added M4_Max: None to GPU_TO_SM
+
+2. src/libkernelbot/launchers/__init__.py — Exports LocalLauncher
+
+3. src/kernelbot/main.py — Registers LocalLauncher() in create_backend()
+
+4. src/kernelbot/cogs/admin_cog.py — Added MetalGPU to Discord GPU dropdowns
+
+### Modified files — Bug fixes for macOS compatibility
+
+5. src/libkernelbot/run_eval.py — Three fixes in make_system_info():
+   - Added MPS/Metal detection via torch.backends.mps
+   - Catch FileNotFoundError for nvidia-smi/rocm-smi (don't exist on macOS)
+   - Catch FileNotFoundError for /proc/cpuinfo (doesn't exist on macOS)
+
+6. src/kernelbot/api/main.py — Replace / with _ in auto-derived dev leaderboard names so nested directories don't break API routing
+
+---
+
+## Manual Test Steps
+
+# 1. Start Postgres (if not already running)
+brew services start postgresql@14
+
+# 2. Create DB and run migrations
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+createdb kernelbot  # skip if already exists
+cd /path/to/kernelbot
+uv run yoyo apply --database "$DATABASE_URL" src/migrations/
+
+# 3. Create test user
+psql "$DATABASE_URL" -c "INSERT INTO leaderboard.user_info (id, user_name, cli_id, cli_valid)
+VALUES ('999999', 'testuser', 'test-cli-id-123', true)
+ON CONFLICT (id) DO UPDATE SET cli_id = 'test-cli-id-123', cli_valid = true;"
+
+# 4. Install mlx
+uv pip install mlx
+
+# 5. Start the API server
+cd src/kernelbot
+export DATABASE_URL="postgresql://$(whoami)@localhost:5432/kernelbot"
+export ADMIN_TOKEN="your-admin-token"
+export PROBLEM_DEV_DIR="/path/to/kernelbot/examples"
+export GITHUB_TOKEN="dummy"
+export GITHUB_REPO="dummy/dummy"
+export DISABLE_SSL=1
+uv run python main.py --api-only
+
+# 6. (In another terminal) Create the dev leaderboard
+curl -X POST "http://localhost:8000/admin/leaderboards" \
+  -H "Authorization: Bearer your-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{"directory": "mlx/example"}'
+
+# 7. Submit a test
+curl -X POST "http://localhost:8000/mlx_example-dev/M4_Max/test" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123" \
+  -F "file=@examples/mlx/example/submission.py"
+
+# 8. Submit a benchmark
+curl -X POST "http://localhost:8000/mlx_example-dev/M4_Max/benchmark" \
+  -H "X-Popcorn-Cli-Id: test-cli-id-123" \
+  -F "file=@examples/mlx/example/submission.py"
