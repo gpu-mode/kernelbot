@@ -71,7 +71,7 @@ cuda_image = (
     )
     # CUTLASS C++ headers for #include <cutlass/...>
     .run_commands(
-        "git clone --depth 1 --branch v4.5.2 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
+        "git clone --depth 1 --branch v4.5.1 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
     )
     .env({
         "CUTLASS_PATH": "/opt/cutlass",
