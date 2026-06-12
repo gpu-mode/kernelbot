@@ -59,7 +59,7 @@ cuda_image = (
     # nvidia cuda packages
     .uv_pip_install(
         "nvidia-cupynumeric~=25.3",
-        "nvidia-cutlass-dsl==4.3.5",
+        "nvidia-cutlass-dsl==4.5.2",
         "cuda-core[cu13]",
         "cuda-python[all]==13.0",
         # "nvmath-python[cu13]~=0.4",
@@ -67,12 +67,11 @@ cuda_image = (
     )
     # Install torch last so its CUDA/NCCL dependency set wins over broader CUDA Python packages.
     .uv_pip_install(
-        "torch==2.11.0",
-        index_url="https://download.pytorch.org/whl/cu129",
+        "torch==2.12.0",
     )
     # CUTLASS C++ headers for #include <cutlass/...>
     .run_commands(
-        "git clone --depth 1 --branch v4.3.5 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
+        "git clone --depth 1 --branch v4.5.1 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
     )
     .env({
         "CUTLASS_PATH": "/opt/cutlass",
