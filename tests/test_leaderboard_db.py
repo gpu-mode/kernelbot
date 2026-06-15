@@ -368,6 +368,75 @@ def test_leaderboard_submission_ranked(database, submit_leaderboard):
             },
         ]
 
+
+def test_failed_secret_run_hides_submission_from_rankings(database, submit_leaderboard):
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+    failed_secret = dataclasses.replace(sample_run_result(), passed=False)
+
+    with database as db:
+        hacked = db.create_submission(
+            "submit-leaderboard", "fast.py", 5, "fast", submit_time, user_name="user5"
+        )
+        _create_submission_run(db, hacked, mode="leaderboard", runner="A100", score=1.0)
+        _create_submission_run(
+            db,
+            hacked,
+            mode="leaderboard",
+            secret=True,
+            runner="A100",
+            score=None,
+            result=failed_secret,
+        )
+        db.mark_submission_done(hacked)
+
+        valid = db.create_submission(
+            "submit-leaderboard", "valid.py", 6, "valid", submit_time, user_name="user6"
+        )
+        _create_submission_run(db, valid, mode="leaderboard", runner="A100", score=2.0)
+        _create_submission_run(
+            db,
+            valid,
+            mode="leaderboard",
+            secret=True,
+            runner="A100",
+            score=None,
+        )
+        db.mark_submission_done(valid)
+
+    with database as db:
+        ranked = db.get_leaderboard_submissions("submit-leaderboard", "A100")
+        assert [row["submission_id"] for row in ranked] == [valid]
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100") == 1
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "5") == 0
+
+
+def test_failed_secret_run_hides_user_submission_scores(database, submit_leaderboard):
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+    failed_secret = dataclasses.replace(sample_run_result(), passed=False)
+
+    with database as db:
+        sub_id = db.create_submission(
+            "submit-leaderboard", "fast.py", 5, "fast", submit_time, user_name="user5"
+        )
+        _create_submission_run(db, sub_id, mode="leaderboard", runner="A100", score=1.0)
+        _create_submission_run(
+            db,
+            sub_id,
+            mode="leaderboard",
+            secret=True,
+            runner="A100",
+            score=None,
+            result=failed_secret,
+        )
+        db.mark_submission_done(sub_id)
+
+    with database as db:
+        submissions = db.get_user_submissions("5", leaderboard_name="submit-leaderboard")
+        assert len(submissions) == 1
+        assert submissions[0]["id"] == sub_id
+        assert submissions[0]["runs"] == []
+
+
 def test_validate_identity_web_auth_happy_path(database, submit_leaderboard):
     with database as db:
         db.cursor.execute(
