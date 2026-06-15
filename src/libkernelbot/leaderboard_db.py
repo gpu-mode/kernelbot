@@ -884,6 +884,15 @@ class LeaderboardDB:
                     AND r.score IS NOT NULL
                     AND r.passed
                     AND s.user_id = %s
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = r.mode
+                            AND sr.passed = FALSE
+                    )
                 ORDER BY r.score ASC
                 LIMIT %s OFFSET %s
                 """
@@ -905,6 +914,15 @@ class LeaderboardDB:
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM leaderboard.runs sr
+                              WHERE sr.submission_id = s.id
+                                  AND sr.secret
+                                  AND sr.runner = r.runner
+                                  AND sr.mode = r.mode
+                                  AND sr.passed = FALSE
+                          )
                     ORDER BY s.user_id, r.score ASC
                 )
                 SELECT
@@ -1244,8 +1262,19 @@ class LeaderboardDB:
             submission_ids = [row[0] for row in submissions]
             runs_query = """
                 SELECT submission_id, runner as gpu_type, score
-                FROM leaderboard.runs
-                WHERE submission_id = ANY(%s) AND NOT secret AND passed
+                FROM leaderboard.runs r
+                WHERE submission_id = ANY(%s)
+                    AND NOT secret
+                    AND passed
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = r.submission_id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = r.mode
+                            AND sr.passed = FALSE
+                    )
             """
             self.cursor.execute(runs_query, (submission_ids,))
             runs_by_submission: dict = {}
@@ -1384,6 +1413,15 @@ class LeaderboardDB:
                     AND r.score IS NOT NULL
                     AND r.passed
                     AND s.user_id = %s
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = r.mode
+                            AND sr.passed = FALSE
+                    )
                 """
             args = (leaderboard_name, gpu_name, user_id)
         else:
@@ -1397,6 +1435,15 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = r.mode
+                            AND sr.passed = FALSE
+                    )
                 """
             args = (leaderboard_name, gpu_name)
 
