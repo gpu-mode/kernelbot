@@ -1153,6 +1153,16 @@ def test_check_rate_limit_no_config(database, submit_leaderboard):
         assert result is None
 
 
+def test_check_rate_limit_zero_limit_blocks_submissions(database, submit_leaderboard):
+    """A zero rate limit keeps a leaderboard visible while rejecting submissions."""
+    with database as db:
+        db.set_rate_limit("submit-leaderboard", "leaderboard", 0)
+        result = db.check_rate_limit("submit-leaderboard", "123", "leaderboard")
+        assert result["allowed"] is False
+        assert result["current_count"] == 0
+        assert result["max_per_hour"] == 0
+
+
 def test_check_rate_limit_under_limit(database, submit_leaderboard):
     """check_rate_limit allows submissions under the limit."""
     with database as db:
