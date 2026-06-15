@@ -800,11 +800,11 @@ class TestAdminRateLimits:
         assert response.status_code == 400
 
     def test_set_rate_limit_invalid_count(self, test_client):
-        """PUT /admin/leaderboards/{name}/rate-limits rejects non-positive count."""
+        """PUT /admin/leaderboards/{name}/rate-limits rejects negative count."""
         response = test_client.put(
             "/admin/leaderboards/test-lb/rate-limits",
             headers={"Authorization": "Bearer test_token"},
-            json={"mode_category": "test", "max_submissions_per_hour": 0},
+            json={"mode_category": "test", "max_submissions_per_hour": -1},
         )
         assert response.status_code == 400
 

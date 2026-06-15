@@ -1131,8 +1131,8 @@ async def admin_set_rate_limit(
     if mode_category not in ("test", "leaderboard"):
         raise HTTPException(status_code=400, detail="mode_category must be 'test' or 'leaderboard'")
     max_per_hour = payload.get("max_submissions_per_hour")
-    if not isinstance(max_per_hour, int) or max_per_hour < 1:
-        raise HTTPException(status_code=400, detail="max_submissions_per_hour must be a positive integer")
+    if not isinstance(max_per_hour, int) or max_per_hour < 0:
+        raise HTTPException(status_code=400, detail="max_submissions_per_hour must be a non-negative integer")
     try:
         with db_context as db:
             result = db.set_rate_limit(leaderboard_name, mode_category, max_per_hour)
