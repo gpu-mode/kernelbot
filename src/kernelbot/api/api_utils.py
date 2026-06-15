@@ -1,13 +1,13 @@
 import asyncio
-from dataclasses import asdict
 import datetime
-from re import sub
-import time
-from typing import Any, Optional, Tuple
-import requests
-from fastapi import HTTPException, UploadFile
-from fastapi import BackgroundTasks
 import json
+import time
+from dataclasses import asdict
+from typing import Any, Optional
+
+import requests
+from fastapi import BackgroundTasks, HTTPException, UploadFile
+
 from kernelbot.env import env
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
@@ -19,7 +19,6 @@ from libkernelbot.report import (
     Text,
 )
 from libkernelbot.submission import SubmissionRequest, prepare_submission
-from src.kernelbot.api.main import simple_rate_limit
 from src.libkernelbot.leaderboard_db import LeaderboardDB
 
 

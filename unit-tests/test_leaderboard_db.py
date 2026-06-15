@@ -5,11 +5,11 @@ import subprocess
 import time
 
 import pytest
-from libkernelbot.db_types import IdentityType
 from test_report import sample_compile_result, sample_run_result, sample_system_info
 from test_task import task_directory
 
 from libkernelbot import leaderboard_db
+from libkernelbot.db_types import IdentityType
 from libkernelbot.utils import KernelBotError
 
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/clusterdev"
@@ -439,7 +439,7 @@ def test_validate_identity_web_auth_happy_path(database, submit_leaderboard):
                 INSERT INTO leaderboard.user_info (id, user_name, web_auth_id)
                 VALUES (%s, %s, %s)
                 """,
-                (f"1234", f"sara_jojo","2345" ),
+                ("1234", "sara_jojo","2345" ),
             )
     user_info = db.validate_identity("2345",IdentityType.WEB)
     assert user_info["user_id"] =="1234"
@@ -453,7 +453,7 @@ def test_validate_identity_web_auth_missing(database, submit_leaderboard):
                 INSERT INTO leaderboard.user_info (id, user_name)
                 VALUES (%s, %s)
                 """,
-                (f"1234", f"sara_jojo"),
+                ("1234", "sara_jojo"),
             )
         res = db.validate_identity("2345",IdentityType.WEB)
         assert res is None

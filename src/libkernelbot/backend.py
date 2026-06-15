@@ -1,8 +1,6 @@
 import asyncio
 import copy
 from datetime import datetime
-from os import stat
-from re import sub
 from types import SimpleNamespace
 from typing import Optional
 
