@@ -654,35 +654,6 @@ class LeaderboardDB:
         else:
             raise LeaderboardDoesNotExist(leaderboard_name)
 
-    def get_leaderboard_by_id(self, leaderboard_id: int) -> "LeaderboardItem":
-        self.cursor.execute(
-            """
-            SELECT id, name, deadline, task, creator_id, forum_id, secret_seed, description, visibility
-            FROM leaderboard.leaderboard
-            WHERE id = %s
-            """,
-            (leaderboard_id,),
-        )
-
-        res = self.cursor.fetchone()
-
-        if res:
-            task = LeaderboardTask.from_dict(res[3])
-            return LeaderboardItem(
-                id=res[0],
-                name=res[1],
-                deadline=res[2],
-                task=task,
-                creator_id=res[4],
-                forum_id=res[5],
-                secret_seed=res[6],
-                gpu_types=self.get_leaderboard_gpu_types(res[1]),
-                description=res[7],
-                visibility=res[8],
-            )
-        else:
-            raise LeaderboardDoesNotExist(str(leaderboard_id))
-
     def check_leaderboard_access(self, leaderboard_name: str, user_id: str) -> bool:
         """Returns True if leaderboard is public or user has claimed an invite covering this leaderboard."""
         self.cursor.execute(
@@ -894,14 +865,6 @@ class LeaderboardDB:
         if user_id:
             # Query all if user_id (means called from show-personal)
             query = """
-                WITH submission_counts AS (
-                    SELECT s.user_id, r.runner, COUNT(DISTINCT s.id) AS submission_count
-                    FROM leaderboard.submission s
-                    JOIN leaderboard.runs r ON r.submission_id = s.id
-                    JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
-                    WHERE l.name = %s
-                    GROUP BY s.user_id, r.runner
-                )
                 SELECT
                     s.file_name,
                     s.id,
@@ -910,13 +873,11 @@ class LeaderboardDB:
                     r.score,
                     r.runner,
                     ui.user_name,
-                    RANK() OVER (ORDER BY r.score ASC) as rank,
-                    COALESCE(sc.submission_count, 0) AS submission_count
+                    RANK() OVER (ORDER BY r.score ASC) as rank
                 FROM leaderboard.runs r
                 JOIN leaderboard.submission s ON r.submission_id = s.id
                 JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
                 JOIN leaderboard.user_info ui ON s.user_id = ui.id
-                LEFT JOIN submission_counts sc ON s.user_id = sc.user_id AND r.runner = sc.runner
                 WHERE l.name = %s
                     AND r.runner = %s
                     AND NOT r.secret
@@ -934,19 +895,11 @@ class LeaderboardDB:
                 ORDER BY r.score ASC
                 LIMIT %s OFFSET %s
                 """
-            args = (leaderboard_name, leaderboard_name, gpu_name, user_id, limit, offset)
+            args = (leaderboard_name, gpu_name, user_id, limit, offset)
         else:
             # Query best submission per user if no user_id (means called from show)
             query = """
-                WITH submission_counts AS (
-                    SELECT s.user_id, r.runner, COUNT(DISTINCT s.id) AS submission_count
-                    FROM leaderboard.submission s
-                    JOIN leaderboard.runs r ON r.submission_id = s.id
-                    JOIN leaderboard.leaderboard l ON s.leaderboard_id = l.id
-                    WHERE l.name = %s
-                    GROUP BY s.user_id, r.runner
-                ),
-                best_submissions AS (
+                WITH best_submissions AS (
                     SELECT DISTINCT ON (s.user_id)
                         s.id as submission_id,
                         s.file_name,
@@ -978,15 +931,13 @@ class LeaderboardDB:
                     bs.score,
                     bs.runner,
                     ui.user_name,
-                    RANK() OVER (ORDER BY bs.score ASC) as rank,
-                    COALESCE(sc.submission_count, 0) AS submission_count
+                    RANK() OVER (ORDER BY bs.score ASC) as rank
                 FROM best_submissions bs
                 JOIN leaderboard.user_info ui ON bs.user_id = ui.id
-                LEFT JOIN submission_counts sc ON bs.user_id = sc.user_id AND bs.runner = sc.runner
                 ORDER BY bs.score ASC
                 LIMIT %s OFFSET %s
                 """
-            args = (leaderboard_name, leaderboard_name, gpu_name, limit, offset)
+            args = (leaderboard_name, gpu_name, limit, offset)
 
         self.cursor.execute(query, args)
 
@@ -999,7 +950,6 @@ class LeaderboardDB:
                 submission_score=submission[4],
                 user_name=submission[6],
                 rank=submission[7],
-                submission_count=submission[8],
                 leaderboard_name=leaderboard_name,
                 gpu_type=gpu_name,
             )
