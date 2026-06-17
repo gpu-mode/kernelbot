@@ -8,14 +8,11 @@ WITH ranked AS (
         s.code_id,
         s.file_name,
         s.submission_time,
-        COALESCE(
-            sjs.status,
-            CASE
-                WHEN s.done AND r.score IS NOT NULL AND r.passed THEN 'succeeded'
-                WHEN s.done THEN 'failed'
-                ELSE s.status
-            END
-        ) as status,
+        CASE
+            WHEN s.done AND r.score IS NOT NULL AND r.passed THEN 'succeeded'
+            WHEN s.done THEN COALESCE(NULLIF(sjs.status, 'succeeded'), 'failed')
+            ELSE COALESCE(sjs.status, s.status)
+        END as status,
         r.score,
         r.passed,
         r.mode,
@@ -30,7 +27,26 @@ WITH ranked AS (
     LEFT JOIN leaderboard.user_info u ON s.user_id = u.id
     LEFT JOIN leaderboard.submission_job_status sjs ON s.id = sjs.submission_id
     LEFT JOIN leaderboard.runs r
-        ON s.id = r.submission_id AND r.mode = 'leaderboard' AND NOT r.secret
+        ON s.id = r.submission_id
+            AND r.mode = 'leaderboard'
+            AND NOT r.secret
+            AND EXISTS (
+                SELECT 1
+                FROM leaderboard.runs sr
+                WHERE sr.submission_id = s.id
+                    AND sr.secret
+                    AND sr.runner = r.runner
+                    AND sr.mode = 'leaderboard'
+                    AND sr.passed
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM leaderboard.runs sr
+                WHERE sr.submission_id = s.id
+                    AND sr.secret
+                    AND sr.runner = r.runner
+                    AND sr.passed = FALSE
+            )
     LEFT JOIN leaderboard.code_files c ON s.code_id = c.id
     WHERE s.leaderboard_id = ANY(%s)
 )

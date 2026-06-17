@@ -287,9 +287,10 @@ def test_leaderboard_submission_count(database, submit_leaderboard):
         _create_submission_run(
             db, sub_id, mode="leaderboard", secret=False, runner="A100", score=1.5
         )
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100")
         submission = db.get_submission_by_id(sub_id)
 
-        assert len(submission["runs"]) == 3
+        assert len(submission["runs"]) == 4
 
         db.mark_submission_done(sub_id)
     with database as db:
@@ -313,30 +314,35 @@ def test_leaderboard_submission_ranked(database, submit_leaderboard):
             "submit-leaderboard", "submission.py", 5, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="leaderboard", runner="A100", score=5.5)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100")
         db.mark_submission_done(sub_id)
 
         sub_id = db.create_submission(
             "submit-leaderboard", "submission.py", 5, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="leaderboard", runner="A100", score=4.5)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100")
         db.mark_submission_done(sub_id)
 
         sub_id = db.create_submission(
             "submit-leaderboard", "submission.py", 5, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="leaderboard", runner="A100", score=5.0)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100")
         db.mark_submission_done(sub_id)
 
         sub_id = db.create_submission(
             "submit-leaderboard", "submission.py", 6, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="leaderboard", runner="A100", score=8.0)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="A100")
         db.mark_submission_done(sub_id)
 
         sub_id = db.create_submission(
             "submit-leaderboard", "submission.py", 6, dangerous_code, submit_time, user_name="user"
         )
         _create_submission_run(db, sub_id, mode="leaderboard", runner="H100", score=2.0)
+        _create_submission_run(db, sub_id, mode="leaderboard", secret=True, runner="H100")
         db.mark_submission_done(sub_id)
 
     with database as db:
@@ -435,6 +441,7 @@ def test_failed_secret_benchmark_hides_public_leaderboard_score(database, submit
         )
         _create_submission_run(db, valid, mode="leaderboard", runner="A100", score=2.0)
         _create_submission_run(db, valid, mode="benchmark", secret=True, runner="A100")
+        _create_submission_run(db, valid, mode="leaderboard", secret=True, runner="A100")
         db.mark_submission_done(valid)
 
     with database as db:
@@ -442,6 +449,42 @@ def test_failed_secret_benchmark_hides_public_leaderboard_score(database, submit
         assert [row["submission_id"] for row in ranked] == [valid]
         assert db.get_leaderboard_submission_count("submit-leaderboard", "A100") == 1
         assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "5") == 0
+
+
+def test_missing_secret_leaderboard_run_hides_public_leaderboard_score(
+    database, submit_leaderboard
+):
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+
+    with database as db:
+        public_only = db.create_submission(
+            "submit-leaderboard", "public_only.py", 5, "fast", submit_time, user_name="user5"
+        )
+        _create_submission_run(db, public_only, mode="leaderboard", runner="A100", score=1.0)
+        db.mark_submission_done(public_only)
+
+        secret_test_only = db.create_submission(
+            "submit-leaderboard", "secret_test_only.py", 6, "fast", submit_time, user_name="user6"
+        )
+        _create_submission_run(db, secret_test_only, mode="leaderboard", runner="A100", score=1.5)
+        _create_submission_run(
+            db, secret_test_only, mode="test", secret=True, runner="A100"
+        )
+        db.mark_submission_done(secret_test_only)
+
+        valid = db.create_submission(
+            "submit-leaderboard", "valid.py", 7, "valid", submit_time, user_name="user7"
+        )
+        _create_submission_run(db, valid, mode="leaderboard", runner="A100", score=2.0)
+        _create_submission_run(db, valid, mode="leaderboard", secret=True, runner="A100")
+        db.mark_submission_done(valid)
+
+    with database as db:
+        ranked = db.get_leaderboard_submissions("submit-leaderboard", "A100")
+        assert [row["submission_id"] for row in ranked] == [valid]
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100") == 1
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "5") == 0
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "6") == 0
 
 
 def test_failed_secret_run_hides_user_submission_scores(database, submit_leaderboard):
@@ -943,7 +986,9 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
 
         # Add multiple runs on different GPUs
         _create_submission_run(db, sub1, runner="A100", score=1.5, secret=False)
+        _create_submission_run(db, sub1, runner="A100", secret=True)
         _create_submission_run(db, sub1, runner="H100", score=2.0, secret=False)
+        _create_submission_run(db, sub1, runner="H100", secret=True)
         db.mark_submission_done(sub1)
 
         # Get submissions

@@ -181,6 +181,8 @@ class TestGetHfExportRows:
         get_hf_export_rows(db, [763])
         sql = db.cursor.execute.call_args[0][0]
         assert "NOT r.secret" in sql
+        assert "sr.mode = 'leaderboard'" in sql
+        assert "sr.passed = FALSE" in sql
 
     def test_query_partitions_by_runner(self):
         db = MagicMock()
@@ -196,7 +198,7 @@ class TestGetHfExportRows:
         get_hf_export_rows(db, [763])
         sql = db.cursor.execute.call_args[0][0]
         assert "submission_job_status" in sql
-        assert "COALESCE(" in sql
+        assert "COALESCE(NULLIF(sjs.status, 'succeeded'), 'failed')" in sql
         assert "sjs.status" in sql
 
     def test_query_falls_back_to_derived_status_for_legacy_rows(self):
@@ -205,7 +207,10 @@ class TestGetHfExportRows:
         get_hf_export_rows(db, [763])
         sql = db.cursor.execute.call_args[0][0]
         assert "WHEN s.done AND r.score IS NOT NULL AND r.passed THEN 'succeeded'" in sql
-        assert "WHEN s.done THEN 'failed'" in sql
+        assert "r.score IS NOT NULL" in sql
+        assert "r.passed" in sql
+        assert "sr.mode = 'leaderboard'" in sql
+        assert "WHEN s.done THEN COALESCE(NULLIF(sjs.status, 'succeeded'), 'failed')" in sql
 
     def test_passes_leaderboard_ids_as_param(self):
         db = MagicMock()
