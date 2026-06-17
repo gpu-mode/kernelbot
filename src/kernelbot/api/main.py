@@ -887,6 +887,55 @@ async def get_gpus(
         raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
 
 
+@app.get("/leaderboard/{leaderboard_id}/rankings")
+async def get_leaderboard_rankings(
+    leaderboard_id: int,
+    user_info: Annotated[Optional[Any], Depends(optional_user_header)] = None,
+    db_context=Depends(get_db),
+) -> dict:
+    """Return canonical leaderboard metadata and rankings for all runners."""
+    await simple_rate_limit()
+    try:
+        with db_context as db:
+            leaderboard = db.get_leaderboard_by_id(leaderboard_id)
+            enforce_leaderboard_access(db, leaderboard["name"], user_info)
+
+            rankings = {}
+            for gpu_type in leaderboard["gpu_types"]:
+                ranked_entries = db.get_leaderboard_submissions(leaderboard["name"], gpu_type)
+                rankings[gpu_type] = [
+                    {
+                        "user_name": entry["user_name"],
+                        "score": entry["submission_score"],
+                        "file_name": entry["submission_name"],
+                        "submission_id": entry["submission_id"],
+                        "submission_count": entry.get("submission_count", 0),
+                        "submission_time": entry["submission_time"],
+                    }
+                    for entry in ranked_entries
+                ]
+
+            task = leaderboard["task"]
+            return {
+                "rankings": rankings,
+                "leaderboard": {
+                    "name": leaderboard["name"],
+                    "deadline": leaderboard["deadline"],
+                    "lang": task.lang.value,
+                    "description": leaderboard["description"],
+                    "reference": task.files.get("reference.py", ""),
+                    "benchmarks": task.benchmarks,
+                    "gpu_types": leaderboard["gpu_types"],
+                },
+            }
+    except HTTPException:
+        raise
+    except KernelBotError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching leaderboard rankings: {e}") from e
+
+
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
 async def get_submissions(
     leaderboard_name: str,
