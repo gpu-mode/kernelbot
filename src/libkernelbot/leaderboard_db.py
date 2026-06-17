@@ -890,7 +890,6 @@ class LeaderboardDB:
                         WHERE sr.submission_id = s.id
                             AND sr.secret
                             AND sr.runner = r.runner
-                            AND sr.mode = r.mode
                             AND sr.passed = FALSE
                     )
                 ORDER BY r.score ASC
@@ -920,7 +919,6 @@ class LeaderboardDB:
                               WHERE sr.submission_id = s.id
                                   AND sr.secret
                                   AND sr.runner = r.runner
-                                  AND sr.mode = r.mode
                                   AND sr.passed = FALSE
                           )
                     ORDER BY s.user_id, r.score ASC
@@ -1272,7 +1270,6 @@ class LeaderboardDB:
                         WHERE sr.submission_id = r.submission_id
                             AND sr.secret
                             AND sr.runner = r.runner
-                            AND sr.mode = r.mode
                             AND sr.passed = FALSE
                     )
             """
@@ -1419,7 +1416,6 @@ class LeaderboardDB:
                         WHERE sr.submission_id = s.id
                             AND sr.secret
                             AND sr.runner = r.runner
-                            AND sr.mode = r.mode
                             AND sr.passed = FALSE
                     )
                 """
@@ -1441,7 +1437,6 @@ class LeaderboardDB:
                         WHERE sr.submission_id = s.id
                             AND sr.secret
                             AND sr.runner = r.runner
-                            AND sr.mode = r.mode
                             AND sr.passed = FALSE
                     )
                 """
