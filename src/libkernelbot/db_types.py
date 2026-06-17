@@ -30,7 +30,6 @@ class LeaderboardRankedEntry(TypedDict):
     submission_name: str
     submission_time: datetime.datetime
     submission_score: float
-    submission_count: NotRequired[int]
     leaderboard_name: str
     user_id: int
     user_name: str
