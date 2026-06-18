@@ -33,6 +33,8 @@ yoyo apply src/migrations -d postgresql://user:password@localhost/clusterdev
 
 See [docs/database.md](docs/database.md) for migration patterns and creating new migrations.
 
+For production incident triage, see [docs/production-debugging.md](docs/production-debugging.md).
+
 ### Environment Variables
 
 Create a `.env` file:
