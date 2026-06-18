@@ -172,6 +172,9 @@ async def test_submit_leaderboard(bot: backend.KernelBackend, task_directory):
             "code": "pass",
             "done": False,
             "file_name": "submit.py",
+            "job_error": None,
+            "job_last_heartbeat": None,
+            "job_status": None,
             "leaderboard_id": s_id,
             "leaderboard_name": "submit-leaderboard",
             "runs": [
@@ -279,6 +282,9 @@ async def test_submit_full(bot: backend.KernelBackend, task_directory):
             "code": "pass",
             "done": True,
             "file_name": "submission.py",
+            "job_error": None,
+            "job_last_heartbeat": None,
+            "job_status": None,
             "leaderboard_id": 1,
             "leaderboard_name": "submit-leaderboard",
             "runs": [
