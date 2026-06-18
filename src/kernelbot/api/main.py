@@ -1008,6 +1008,11 @@ async def get_user_submission(
                 "done": submission["done"],
                 "code": submission["code"],
                 "runs": [{k: r[k] for k in run_fields} for r in submission["runs"]],
+                "job": {
+                    "status": submission.get("job_status"),
+                    "error": submission.get("job_error"),
+                    "last_heartbeat": submission.get("job_last_heartbeat"),
+                },
             }
     except HTTPException:
         raise

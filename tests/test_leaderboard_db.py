@@ -199,6 +199,16 @@ def test_leaderboard_submission_basic(database, submit_leaderboard):
         assert submission["done"] is False
         assert submission["code"] == dangerous_code
         assert submission["runs"] == []
+        assert submission["job_status"] is None
+        assert submission["job_error"] is None
+        assert submission["job_last_heartbeat"] is None
+
+        heartbeat = datetime.datetime.now(tz=datetime.timezone.utc)
+        db.upsert_submission_job_status(sub_id, "running", "still working", heartbeat)
+        submission = db.get_submission_by_id(sub_id)
+        assert submission["job_status"] == "running"
+        assert submission["job_error"] == "still working"
+        assert submission["job_last_heartbeat"] == heartbeat
 
     # add a submission run
     run_result = sample_run_result()

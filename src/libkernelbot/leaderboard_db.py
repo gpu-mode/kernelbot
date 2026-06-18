@@ -1368,10 +1368,12 @@ class LeaderboardDB:
     def get_submission_by_id(self, submission_id: int) -> Optional["SubmissionItem"]:
         query = """
                 SELECT s.leaderboard_id, lb.name, s.file_name, s.user_id,
-                       s.submission_time, s.done, c.code
+                       s.submission_time, s.done, c.code,
+                       js.status, js.error, js.last_heartbeat
                 FROM leaderboard.submission s
                 JOIN leaderboard.code_files c ON s.code_id = c.id
                 JOIN leaderboard.leaderboard lb ON s.leaderboard_id = lb.id
+                LEFT JOIN leaderboard.submission_job_status js ON js.submission_id = s.id
                 WHERE s.id = %s
                 """
         self.cursor.execute(query, (submission_id,))
@@ -1416,6 +1418,9 @@ class LeaderboardDB:
             done=submission[5],
             code=bytes(submission[6]).decode("utf-8"),
             runs=runs,
+            job_status=submission[7],
+            job_error=submission[8],
+            job_last_heartbeat=submission[9],
         )
 
     def get_leaderboard_submission_count(
