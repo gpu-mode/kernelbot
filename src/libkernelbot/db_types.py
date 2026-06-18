@@ -60,6 +60,9 @@ class SubmissionItem(TypedDict):
     done: bool
     code: str
     runs: List[RunItem]
+    job_status: NotRequired[Optional[str]]
+    job_error: NotRequired[Optional[str]]
+    job_last_heartbeat: NotRequired[Optional[datetime.datetime]]
 
 
 class RateLimitItem(TypedDict):
