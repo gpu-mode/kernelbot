@@ -884,6 +884,15 @@ class LeaderboardDB:
                     AND r.score IS NOT NULL
                     AND r.passed
                     AND s.user_id = %s
+                    AND EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = 'leaderboard'
+                            AND sr.passed
+                    )
                     AND NOT EXISTS (
                         SELECT 1
                         FROM leaderboard.runs sr
@@ -913,6 +922,15 @@ class LeaderboardDB:
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
+                          AND EXISTS (
+                              SELECT 1
+                              FROM leaderboard.runs sr
+                              WHERE sr.submission_id = s.id
+                                  AND sr.secret
+                                  AND sr.runner = r.runner
+                                  AND sr.mode = 'leaderboard'
+                                  AND sr.passed
+                          )
                           AND NOT EXISTS (
                               SELECT 1
                               FROM leaderboard.runs sr
@@ -1264,6 +1282,15 @@ class LeaderboardDB:
                 WHERE submission_id = ANY(%s)
                     AND NOT secret
                     AND passed
+                    AND EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = r.submission_id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = 'leaderboard'
+                            AND sr.passed
+                    )
                     AND NOT EXISTS (
                         SELECT 1
                         FROM leaderboard.runs sr
@@ -1410,6 +1437,15 @@ class LeaderboardDB:
                     AND r.score IS NOT NULL
                     AND r.passed
                     AND s.user_id = %s
+                    AND EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = 'leaderboard'
+                            AND sr.passed
+                    )
                     AND NOT EXISTS (
                         SELECT 1
                         FROM leaderboard.runs sr
@@ -1431,6 +1467,15 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND EXISTS (
+                        SELECT 1
+                        FROM leaderboard.runs sr
+                        WHERE sr.submission_id = s.id
+                            AND sr.secret
+                            AND sr.runner = r.runner
+                            AND sr.mode = 'leaderboard'
+                            AND sr.passed
+                    )
                     AND NOT EXISTS (
                         SELECT 1
                         FROM leaderboard.runs sr
