@@ -15,7 +15,11 @@ from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.db_types import IdentityType
-from libkernelbot.kernelguard import KernelGuardRejected, enforce_submission_precheck, should_precheck_submission
+from libkernelbot.kernelguard import (
+    KernelGuardRejected,
+    enforce_submission_precheck,
+    should_precheck_submission,
+)
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
 from libkernelbot.problem_sync import sync_problems
 from libkernelbot.submission import (
@@ -499,16 +503,8 @@ async def enqueue_background_job(
     manager: BackgroundSubmissionManager,
 ):
     # pre-create the submission for api returns
+    sub_id = backend.create_submission_record(req, mode)
     with backend.db as db:
-        sub_id = db.create_submission(
-            leaderboard=req.leaderboard,
-            file_name=req.file_name,
-            code=req.code,
-            user_id=req.user_id,
-            time=datetime.datetime.now(datetime.timezone.utc),
-            user_name=req.user_name,
-            mode_category=req.mode_category,
-        )
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)

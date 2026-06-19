@@ -278,11 +278,16 @@ class LeaderboardDB:
         time: datetime.datetime,
         user_name: str = None,
         mode_category: str = None,
+        requested_gpus: Optional[list[str] | str] = None,
     ) -> Optional[int]:
         try:
             if time.tzinfo is None:
                 time = time.astimezone()
             time = time.astimezone(datetime.timezone.utc)
+            if requested_gpus is None:
+                requested_gpus = []
+            elif isinstance(requested_gpus, str):
+                requested_gpus = [requested_gpus]
 
             # check if we already have the code
             self.cursor.execute(
@@ -329,10 +334,10 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 INSERT INTO leaderboard.submission (leaderboard_id, file_name,
-                    user_id, code_id, submission_time, mode_category)
+                    user_id, code_id, submission_time, mode_category, requested_gpus)
                 VALUES (
                     (SELECT id FROM leaderboard.leaderboard WHERE name = %s),
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -342,6 +347,7 @@ class LeaderboardDB:
                     code_id,
                     time,
                     mode_category,
+                    requested_gpus,
                 ),
             )
             submission_id = self.cursor.fetchone()[0]
@@ -1869,6 +1875,40 @@ class LeaderboardDB:
             self.connection.rollback()
             logger.exception("Error checking rate limit", exc_info=e)
             raise KernelBotError("Error checking rate limit") from e
+
+    def check_gpu_submission_rate_limit(
+        self, user_id: str, gpu_type: str, max_per_hour: int
+    ) -> dict:
+        """Check if a user has exceeded a per-GPU submission limit over the last hour."""
+        try:
+            self.cursor.execute(
+                """
+                SELECT COUNT(*), MIN(submission_time)
+                FROM leaderboard.submission
+                WHERE user_id = %s
+                    AND requested_gpus @> ARRAY[%s]::TEXT[]
+                    AND submission_time > NOW() - INTERVAL '1 hour'
+                """,
+                (str(user_id), gpu_type),
+            )
+            current_count, oldest_time = self.cursor.fetchone()
+            allowed = current_count < max_per_hour
+            retry_after = 0
+            if not allowed and oldest_time is not None:
+                expiry = oldest_time + datetime.timedelta(hours=1)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                retry_after = max(0, int((expiry - now).total_seconds()))
+
+            return {
+                "allowed": allowed,
+                "current_count": current_count,
+                "max_per_hour": max_per_hour,
+                "retry_after_seconds": retry_after,
+            }
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error checking GPU submission rate limit", exc_info=e)
+            raise KernelBotError("Error checking GPU submission rate limit") from e
 
 
 class LeaderboardDoesNotExist(KernelBotError):

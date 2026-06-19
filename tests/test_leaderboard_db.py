@@ -1366,3 +1366,47 @@ def test_check_rate_limit_categories_independent(database, submit_leaderboard):
         # Test should be blocked
         result = db.check_rate_limit("submit-leaderboard", "123", "test")
         assert result["allowed"] is False
+
+
+def test_check_gpu_submission_rate_limit_under_limit(database, submit_leaderboard):
+    """GPU-specific rate limit counts only submissions that requested that GPU."""
+    with database as db:
+        db.create_submission(
+            "submit-leaderboard",
+            "test.py",
+            123,
+            "code1",
+            datetime.datetime.now(),
+            requested_gpus=["A100", "B200"],
+        )
+        db.create_submission(
+            "submit-leaderboard",
+            "other.py",
+            123,
+            "code2",
+            datetime.datetime.now(),
+            requested_gpus=["A100"],
+        )
+        result = db.check_gpu_submission_rate_limit("123", "B200", 2)
+        assert result["allowed"] is True
+        assert result["current_count"] == 1
+        assert result["max_per_hour"] == 2
+
+
+def test_check_gpu_submission_rate_limit_at_limit(database, submit_leaderboard):
+    """GPU-specific rate limit blocks once the hourly cap is reached."""
+    with database as db:
+        for i in range(2):
+            db.create_submission(
+                "submit-leaderboard",
+                f"test{i}.py",
+                123,
+                f"code{i}",
+                datetime.datetime.now(),
+                requested_gpus=["B200"],
+            )
+        result = db.check_gpu_submission_rate_limit("123", "B200", 2)
+        assert result["allowed"] is False
+        assert result["current_count"] == 2
+        assert result["max_per_hour"] == 2
+        assert result["retry_after_seconds"] >= 0

@@ -119,6 +119,9 @@ class RankCriterion(Enum):
     GEOM = "geom"  # geometric mean of all benchmarks
 
 
+MODAL_B200_MAX_SUBMISSIONS_PER_HOUR = 1
+
+
 GPU_TO_SM = {
     "T4": "75",
     "L4": "89",
