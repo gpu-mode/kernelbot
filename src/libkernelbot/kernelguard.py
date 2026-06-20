@@ -11,7 +11,7 @@ from libkernelbot.utils import KernelBotError, limit_length, setup_logging
 logger = setup_logging(__name__)
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
-_DEFAULT_TIMEOUT_SEC = 30
+_DEFAULT_TIMEOUT_SEC = 5 * 60
 _GUARDED_MODES = frozenset(
     {
         SubmissionMode.BENCHMARK,
