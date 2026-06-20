@@ -10,14 +10,14 @@
 | src/libkernelbot/consts.py                          |       71 |        1 |     99% |        50 |
 | src/libkernelbot/db\_types.py                       |       15 |        1 |     93% |         7 |
 | src/libkernelbot/hf\_export.py                      |       77 |        4 |     95% |62, 84, 150, 179 |
-| src/libkernelbot/kernelguard.py                     |       97 |       47 |     52% |43-48, 52-53, 57-58, 66-71, 75-78, 82-118, 128, 156-159 |
+| src/libkernelbot/kernelguard.py                     |       97 |       44 |     55% |46-48, 52-53, 57-58, 66-71, 75-78, 82-118, 128, 156-159 |
 | src/libkernelbot/leaderboard\_db.py                 |      489 |       89 |     82% |66, 101, 381-405, 412-422, 669, 716-717, 768, 803-804, 815-830, 849-850, 993-995, 1009, 1098-1123, 1339-1358, 1524-1548, 1560-1599, 1606-1627, 1634-1641, 1657-1666, 1675-1685, 1693-1703, 1711-1720, 1743 |
 | src/libkernelbot/problem\_sync.py                   |      128 |      105 |     18% |72-101, 121-206, 235-302 |
 | src/libkernelbot/report.py                          |      269 |        9 |     97% |75, 326, 345, 356, 395, 422, 429-430, 437 |
 | src/libkernelbot/submission.py                      |      140 |       10 |     93% |18, 54, 72-77, 81-84 |
 | src/libkernelbot/task.py                            |      113 |        6 |     95% |68, 121, 126-128, 167 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
-| **TOTAL**                                           | **1771** |  **328** | **81%** |           |
+| **TOTAL**                                           | **1771** |  **325** | **82%** |           |
 
 
 ## Setup coverage badge
