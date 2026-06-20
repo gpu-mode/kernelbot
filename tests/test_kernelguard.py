@@ -20,6 +20,16 @@ def test_should_precheck_submission_disabled(monkeypatch):
     assert not kernelguard.should_precheck_submission(SubmissionMode.BENCHMARK)
 
 
+def test_timeout_sec_defaults_to_five_minutes(monkeypatch):
+    monkeypatch.delenv("KERNELGUARD_TIMEOUT_SEC", raising=False)
+    assert kernelguard._timeout_sec() == 5 * 60
+
+
+def test_timeout_sec_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("KERNELGUARD_TIMEOUT_SEC", "240")
+    assert kernelguard._timeout_sec() == 240
+
+
 def test_enforce_submission_precheck_rejects_filtered_code(monkeypatch):
     monkeypatch.setenv("KERNELGUARD_ENABLED", "1")
     monkeypatch.setattr(
