@@ -234,7 +234,7 @@ class BackgroundSubmissionManager:
             reporter = BackgroundSubmissionManagerReporter()
             await asyncio.wait_for(
                 self.backend.submit_full(
-                    item.req, item.mode, reporter, sub_id, skip_precheck=True
+                    item.req, item.mode, reporter, sub_id, skip_precheck=False
                 ),
                 timeout=HARD_TIMEOUT_SEC,
             )

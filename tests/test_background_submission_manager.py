@@ -57,8 +57,11 @@ async def test_enqueue_and_run_job(mock_backend):
     )
     db_context.update_heartbeat_if_active = mock.Mock()
 
+    submit_calls = []
+
     # mock submit_full
     async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        submit_calls.append((sub_id, skip_precheck))
         await asyncio.sleep(0.01)  # simulate a long-running job
         return None, None
 
@@ -90,6 +93,7 @@ async def test_enqueue_and_run_job(mock_backend):
         mock.call(42, status="succeeded", last_heartbeat=mock.ANY)
         in db_context.upsert_submission_job_status.call_args_list
     )
+    assert submit_calls == [(42, False)]
 
     await manager.stop()
 
