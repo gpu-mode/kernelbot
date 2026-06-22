@@ -385,6 +385,52 @@ def test_leaderboard_submission_ranked(database, submit_leaderboard):
         ]
 
 
+def test_hacked_submissions_are_hidden_from_leaderboard_rankings(database, submit_leaderboard):
+    submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
+
+    with database as db:
+        submission_status_hacked = db.create_submission(
+            "submit-leaderboard", "submission_status_hacked.py", 5, "fast", submit_time, user_name="user5"
+        )
+        _create_submission_run(
+            db, submission_status_hacked, mode="leaderboard", runner="A100", score=1.0
+        )
+        _create_submission_run(
+            db, submission_status_hacked, mode="leaderboard", secret=True, runner="A100"
+        )
+        db.mark_submission_hacked(submission_status_hacked, error="blocked")
+
+        job_status_hacked = db.create_submission(
+            "submit-leaderboard", "job_status_hacked.py", 6, "fast", submit_time, user_name="user6"
+        )
+        _create_submission_run(db, job_status_hacked, mode="leaderboard", runner="A100", score=0.5)
+        _create_submission_run(db, job_status_hacked, mode="leaderboard", secret=True, runner="A100")
+        db.mark_submission_done(job_status_hacked)
+        db.upsert_submission_job_status(job_status_hacked, "hacked", "blocked")
+
+        valid = db.create_submission(
+            "submit-leaderboard", "valid.py", 7, "valid", submit_time, user_name="user7"
+        )
+        _create_submission_run(db, valid, mode="leaderboard", runner="A100", score=2.0)
+        _create_submission_run(db, valid, mode="leaderboard", secret=True, runner="A100")
+        db.mark_submission_done(valid)
+
+    with database as db:
+        ranked = db.get_leaderboard_submissions("submit-leaderboard", "A100")
+        assert [row["submission_id"] for row in ranked] == [valid]
+
+        assert db.get_leaderboard_submissions("submit-leaderboard", "A100", "5") == []
+        assert db.get_leaderboard_submissions("submit-leaderboard", "A100", "6") == []
+        assert [row["submission_id"] for row in db.get_leaderboard_submissions(
+            "submit-leaderboard", "A100", "7"
+        )] == [valid]
+
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100") == 1
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "5") == 0
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "6") == 0
+        assert db.get_leaderboard_submission_count("submit-leaderboard", "A100", "7") == 1
+
+
 def test_failed_secret_run_hides_submission_from_rankings(database, submit_leaderboard):
     submit_time = datetime.datetime.now(tz=datetime.timezone.utc)
     failed_secret = dataclasses.replace(sample_run_result(), passed=False)

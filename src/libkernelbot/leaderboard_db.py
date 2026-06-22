@@ -883,6 +883,13 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND s.status <> 'hacked'
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.submission_job_status sjs
+                        WHERE sjs.submission_id = s.id
+                            AND sjs.status = 'hacked'
+                    )
                     AND s.user_id = %s
                     AND EXISTS (
                         SELECT 1
@@ -922,6 +929,13 @@ class LeaderboardDB:
                     JOIN leaderboard.user_info ui ON s.user_id = ui.id
                     WHERE l.name = %s AND r.runner = %s AND NOT r.secret
                           AND r.score IS NOT NULL AND r.passed
+                          AND s.status <> 'hacked'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM leaderboard.submission_job_status sjs
+                              WHERE sjs.submission_id = s.id
+                                  AND sjs.status = 'hacked'
+                          )
                           AND EXISTS (
                               SELECT 1
                               FROM leaderboard.runs sr
@@ -1441,6 +1455,13 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND s.status <> 'hacked'
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.submission_job_status sjs
+                        WHERE sjs.submission_id = s.id
+                            AND sjs.status = 'hacked'
+                    )
                     AND s.user_id = %s
                     AND EXISTS (
                         SELECT 1
@@ -1472,6 +1493,13 @@ class LeaderboardDB:
                     AND NOT r.secret
                     AND r.score IS NOT NULL
                     AND r.passed
+                    AND s.status <> 'hacked'
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM leaderboard.submission_job_status sjs
+                        WHERE sjs.submission_id = s.id
+                            AND sjs.status = 'hacked'
+                    )
                     AND EXISTS (
                         SELECT 1
                         FROM leaderboard.runs sr

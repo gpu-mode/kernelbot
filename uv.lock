@@ -574,7 +574,7 @@ requires-dist = [
     { name = "fastapi", extras = ["all"] },
     { name = "huggingface-hub", specifier = ">=0.20" },
     { name = "jinja2" },
-    { name = "kernelguard", specifier = ">=0.1.1" },
+    { name = "kernelguard", specifier = "==0.3.1" },
     { name = "modal" },
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "psycopg2-binary" },
@@ -1024,11 +1024,11 @@ wheels = [
 
 [[package]]
 name = "kernelguard"
-version = "0.1.1"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1a/c1/0171bf0c75c935f5caa357ad748a910c302d4c6ec8261b708518761f783b/kernelguard-0.1.1.tar.gz", hash = "sha256:1e31ca28ebff67a09cba706c60c0f1b1dd6c098697ebf70248d85ee8d2d30eff", size = 49892, upload-time = "2026-03-19T22:34:13.652Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/63/91e85e4dd05535452a134941cdc5c41d73bc23f1b23693cd66ee0b4d4fe3/kernelguard-0.3.1.tar.gz", hash = "sha256:e4ae135ae940450fd530a77c97f1369e8400bbe32932ca5b8f090dc94f641ae0", size = 86864, upload-time = "2026-06-22T00:02:59.494Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/64/809f8a4c9aa66af2eb458f84fdcc6240363d6face44095e8d7c978fd9171/kernelguard-0.1.1-py3-none-any.whl", hash = "sha256:584810dc5fbc05781d348eb3c96af11b678b4ef571bcc260ef182cf758ccc122", size = 49469, upload-time = "2026-03-19T22:34:12.396Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/09/e175afea22d809cf24b55f7c602a4de0a8330ebfc3f5f1f40747a8b9c2d9/kernelguard-0.3.1-py3-none-any.whl", hash = "sha256:9cd39734d4aada04873e9d8f6a8498635095cf929dd311b726f3d9d253c2bac7", size = 89097, upload-time = "2026-06-22T00:02:58.095Z" },
 ]
 
 [[package]]
