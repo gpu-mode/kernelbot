@@ -1088,6 +1088,14 @@ def test_get_user_submissions_status_and_secret_score_on_success(database, submi
         # Public score is unchanged: still exposed per-run.
         assert [float(r["score"]) for r in result[0]["runs"]] == [1.5]
 
+        # Backward compat: the change is purely additive. The pre-existing
+        # fields must still be present so existing clients (popcorn-cli,
+        # kernelboard) keep working; new fields are added alongside.
+        assert {"id", "leaderboard_name", "file_name", "submission_time", "done", "runs"} <= set(
+            result[0]
+        )
+        assert {"gpu_type", "score"} <= set(result[0]["runs"][0])
+
 
 def test_get_user_submissions_status_failed_when_secret_run_failed(database, submit_leaderboard):
     """A failed secret run -> status 'failed'; runs/scores stay hidden (anti-cheat)."""
