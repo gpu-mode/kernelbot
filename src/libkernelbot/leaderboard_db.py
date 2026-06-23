@@ -1258,9 +1258,10 @@ class LeaderboardDB:
 
         Returns:
             List of submission dictionaries with summary info and runs. Each
-            entry includes ``status`` ("pending"/"failed"/"done"),
-            ``public_score`` and ``secret_score`` (the geomean leaderboard
-            scores, either may be ``None``), plus the public ``runs`` list.
+            entry includes ``status`` ("pending"/"failed"/"done") and
+            ``secret_score`` (the secret leaderboard geomean score, the ranking
+            metric; ``None`` if absent). The public leaderboard score remains
+            available per-run in ``runs[].score``.
         """
         # Validate and clamp inputs
         limit = max(1, min(limit, 100))
@@ -1328,13 +1329,21 @@ class LeaderboardDB:
                     "score": run_row[2],
                 })
 
-            # Per-submission status and leaderboard scores. The public `runs`
-            # above are ranking-filtered (anti-cheat: the public score is hidden
-            # unless the matching secret run passed). Here we additionally
-            # surface the secret leaderboard score (visible to the owner, as the
-            # detail endpoint already does) and whether any run failed, so
-            # callers can show an accurate status and both scores without an
-            # extra request per submission.
+            # Per-submission status + secret score. The `runs` above already
+            # carry the public leaderboard score (in runs[].score), but they are
+            # ranking-filtered (anti-cheat: only public runs whose matching
+            # secret run passed) and never include secret runs, so two things
+            # are not derivable from them:
+            #   - secret_score: the secret leaderboard run's score (the actual
+            #     ranking metric). Visible to the owner, as the detail endpoint
+            #     already exposes it; the list endpoint just never selected it.
+            #   - whether any run failed, so a finished-but-failed submission can
+            #     be told apart from a clean one (both otherwise look "done").
+            # One extra aggregate over the same runs rows (keyed by
+            # submission_id, like runs_query) avoids an N+1 detail fetch per row.
+            #
+            # MIN(score): a submission can have a secret leaderboard run per GPU;
+            # take the best (lowest) to match how the public score is summarized.
             agg_query = """
                 SELECT submission_id,
                        MIN(score) FILTER (
@@ -1356,13 +1365,7 @@ class LeaderboardDB:
             for row in submissions:
                 sub_id = row[0]
                 done = row[4]
-                public_runs = runs_by_submission.get(sub_id, [])
                 agg = agg_by_submission.get(sub_id, {})
-
-                # The public leaderboard score (lowest across GPUs), already
-                # ranking-eligible by construction of `runs_query`.
-                public_scores = [r["score"] for r in public_runs if r["score"] is not None]
-                public_score = min(public_scores) if public_scores else None
 
                 if not done:
                     status = "pending"
@@ -1378,9 +1381,8 @@ class LeaderboardDB:
                     "submission_time": row[3],
                     "done": done,
                     "status": status,
-                    "public_score": public_score,
                     "secret_score": agg.get("secret_score"),
-                    "runs": public_runs,
+                    "runs": runs_by_submission.get(sub_id, []),
                 })
             return results
         except psycopg2.Error as e:
