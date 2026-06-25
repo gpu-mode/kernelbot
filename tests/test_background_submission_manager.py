@@ -154,6 +154,35 @@ async def test_scale_up_and_down(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_queue_snapshot_reports_position(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(
+        side_effect=lambda *a, **k: a[0]
+    )
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=0, max_workers=0, idle_seconds=0.1
+    )
+    await manager.start()
+
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=41)
+    await manager.enqueue(get_req(2), SubmissionMode.TEST, sub_id=42)
+
+    snapshot = await manager.queue_snapshot(42)
+
+    assert snapshot["stage"] == "queued"
+    assert snapshot["message"] == "In KernelBot queue"
+    assert snapshot["position"] == 2
+    assert snapshot["jobs_ahead"] == 1
+
+    manager.queue.get_nowait()
+    manager.queue.task_done()
+    manager.queue.get_nowait()
+    manager.queue.task_done()
+    await manager.stop()
+
+
+@pytest.mark.asyncio
 async def test_hacked_submission_sets_hacked_status(mock_backend):
     db_context = mock_backend.db
     db_context.upsert_submission_job_status = mock.Mock(

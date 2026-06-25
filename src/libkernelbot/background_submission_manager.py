@@ -3,6 +3,7 @@ import contextlib
 import datetime as dt
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
@@ -139,6 +140,27 @@ class BackgroundSubmissionManager:
         # if we have no workers and it does not hit maximum, start one
         await self._autoscale_up()
         return job_id, sub_id
+
+    async def queue_snapshot(self, sub_id: int | None = None) -> dict[str, Any]:
+        async with self._state_lock:
+            queued = list(self.queue._queue)  # noqa: SLF001 - asyncio.Queue has no public snapshot API.
+            queued_ids = [item.sub_id for item in queued]
+            position = None
+            if sub_id in queued_ids:
+                position = queued_ids.index(sub_id) + 1
+            stage = "queued" if position is not None else "dispatched"
+            message = (
+                "In KernelBot queue"
+                if stage == "queued"
+                else "Job dispatched to Modal/GitHub runner"
+            )
+
+            return {
+                "stage": stage,
+                "message": message,
+                "position": position,
+                "jobs_ahead": None if position is None else position - 1,
+            }
 
     async def _worker_loop(self):
         """

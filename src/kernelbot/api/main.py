@@ -88,6 +88,12 @@ def init_background_submission_manager(_manager: BackgroundSubmissionManager):
     return background_submission_manager
 
 
+async def get_queue_snapshot(submission_id: int | None = None) -> dict[str, Any] | None:
+    if background_submission_manager is None:
+        return None
+    return await background_submission_manager.queue_snapshot(submission_id)
+
+
 @app.exception_handler(KernelBotError)
 async def kernel_bot_error_handler(req: Request, exc: KernelBotError):
     return JSONResponse(status_code=exc.http_code, content={"message": str(exc)})
@@ -511,7 +517,8 @@ async def enqueue_background_job(
         job_id = db.upsert_submission_job_status(sub_id, "initial", None)
     # put submission request in queue
     await manager.enqueue(req, mode, sub_id)
-    return sub_id, job_id
+    queue = await get_queue_snapshot(sub_id)
+    return sub_id, job_id, queue
 
 
 @app.post("/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
@@ -564,7 +571,7 @@ async def run_submission_async(
             raise HTTPException(status_code=400, detail="Invalid GPU type")
 
         # put submission request to background manager to run in background
-        sub_id, job_status_id = await enqueue_background_job(
+        sub_id, job_status_id, queue = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
 
@@ -572,6 +579,7 @@ async def run_submission_async(
             status_code=202,
             content={
                 "details": {"id": sub_id, "job_status_id": job_status_id},
+                "queue": queue,
                 "status": "accepted",
             },
         )
@@ -1000,6 +1008,7 @@ async def get_user_submission(
                     "error": submission.get("job_error"),
                     "last_heartbeat": submission.get("job_last_heartbeat"),
                 },
+                "queue": await get_queue_snapshot(submission_id),
             }
     except HTTPException:
         raise
