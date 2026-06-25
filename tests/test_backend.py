@@ -8,6 +8,7 @@ from test_report import create_eval_result, sample_system_info
 
 from libkernelbot import backend, consts, report
 from libkernelbot.kernelguard import KernelGuardRejected
+from libkernelbot.launchers import RunnerQueueStatus
 from libkernelbot.run_eval import FullResult
 
 
@@ -39,6 +40,38 @@ def _mock_launcher(bot: backend.KernelBackend, runs: dict, name="launcher"):
     )
     bot.register_launcher(mock_launcher)
     return mock_launcher
+
+
+@pytest.mark.asyncio
+async def test_get_runner_queue_status_routes_to_registered_launcher():
+    bot = object.__new__(backend.KernelBackend)
+    bot.launcher_map = {}
+    mock_launcher = _mock_launcher(bot, {}, name="Modal")
+    mock_launcher.get_queue_status = AsyncMock(
+        return_value=RunnerQueueStatus(
+            runner="Modal",
+            gpu="A100",
+            queued_jobs=4,
+            available_runners=2,
+        )
+    )
+
+    status = await bot.get_runner_queue_status("A100", {"lang": "py"})
+
+    assert status.queued_jobs == 4
+    assert status.available_runners == 2
+    mock_launcher.get_queue_status.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_runner_queue_status_unknown_gpu():
+    bot = object.__new__(backend.KernelBackend)
+    bot.launcher_map = {}
+    status = await bot.get_runner_queue_status("not-a-gpu")
+
+    assert status.status == "unavailable"
+    assert status.queued_jobs is None
+    assert status.error == "unknown gpu"
 
 
 @pytest.mark.asyncio

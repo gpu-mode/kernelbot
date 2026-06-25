@@ -106,6 +106,28 @@ def get_db():
     return backend_instance.db
 
 
+async def get_runner_queue_status(
+    gpu_type: str,
+    req: ProcessedSubmissionRequest | None = None,
+) -> dict[str, Any]:
+    if not backend_instance:
+        raise HTTPException(status_code=500, detail="Bot instance not initialized")
+
+    config = None
+    if req is not None and req.task is not None:
+        config = {"lang": req.task.lang.value}
+
+    status = await backend_instance.get_runner_queue_status(gpu_type, config)
+    return status.to_dict()
+
+
+async def get_submission_runner_queue_status(submission: dict) -> dict[str, Any] | None:
+    runs = submission.get("runs") or []
+    if not runs:
+        return None
+    return await get_runner_queue_status(runs[0]["runner"])
+
+
 async def validate_cli_header(
     x_popcorn_cli_id: Optional[str] = Header(None, alias="X-Popcorn-Cli-Id"),
     db_context=Depends(get_db),
@@ -567,11 +589,13 @@ async def run_submission_async(
         sub_id, job_status_id = await enqueue_background_job(
             req, submission_mode_enum, backend_instance, background_submission_manager
         )
+        runner_queue = await get_runner_queue_status(req.gpus[0], req)
 
         return JSONResponse(
             status_code=202,
             content={
                 "details": {"id": sub_id, "job_status_id": job_status_id},
+                "runner_queue": runner_queue,
                 "status": "accepted",
             },
         )
@@ -874,6 +898,12 @@ async def get_gpus(
         raise HTTPException(status_code=500, detail=f"Error fetching GPU data: {e}") from e
 
 
+@app.get("/runner_queue/{gpu_type}")
+async def get_runner_queue(gpu_type: str) -> dict:
+    await simple_rate_limit()
+    return await get_runner_queue_status(gpu_type)
+
+
 @app.get("/submissions/{leaderboard_name}/{gpu_name}")
 async def get_submissions(
     leaderboard_name: str,
@@ -985,6 +1015,7 @@ async def get_user_submission(
 
             # RunItem is a TypedDict (already a dict), select fields to expose
             run_fields = ("start_time", "end_time", "mode", "secret", "runner", "score", "passed")
+            runner_queue = await get_submission_runner_queue_status(submission)
             return {
                 "id": submission["submission_id"],
                 "leaderboard_id": submission["leaderboard_id"],
@@ -1000,6 +1031,7 @@ async def get_user_submission(
                     "error": submission.get("job_error"),
                     "last_heartbeat": submission.get("job_last_heartbeat"),
                 },
+                "runner_queue": runner_queue,
             }
     except HTTPException:
         raise

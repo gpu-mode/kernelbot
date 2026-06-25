@@ -2,11 +2,12 @@ import os
 import subprocess
 from collections import namedtuple
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from dotenv import load_dotenv
 
-from libkernelbot.consts import GitHubGPU, SubmissionMode
+from libkernelbot.consts import GitHubGPU, SubmissionMode, get_gpu_by_name
 from libkernelbot.launchers import GitHubLauncher
 from libkernelbot.report import RunProgressReporter
 from libkernelbot.task import build_task_config, make_task_definition
@@ -29,6 +30,43 @@ class MockProgressReporter(RunProgressReporter):
 
     async def update(self, message: str):
         self.updates.append(message)
+
+
+@pytest.mark.asyncio
+async def test_github_queue_status_counts_queued_workflow_runs():
+    launcher = GitHubLauncher(repo="gpu-mode/kernelbot", token="token", branch="main")
+    workflow = MagicMock()
+    queued_runs = MagicMock()
+    queued_runs.totalCount = 7
+    workflow.get_runs.return_value = queued_runs
+
+    with patch("libkernelbot.launchers.github.GitHubRun") as run_cls:
+        run_cls.return_value.get_workflow = AsyncMock(return_value=workflow)
+
+        status = await launcher.get_queue_status(get_gpu_by_name("NVIDIA"))
+
+    assert status.runner == "GitHub"
+    assert status.gpu == "NVIDIA"
+    assert status.queued_jobs == 7
+    workflow.get_runs.assert_called_once_with(
+        event="workflow_dispatch",
+        status="queued",
+    )
+
+
+@pytest.mark.asyncio
+async def test_github_queue_status_reports_unavailable_on_error():
+    launcher = GitHubLauncher(repo="gpu-mode/kernelbot", token="token", branch="main")
+
+    with patch("libkernelbot.launchers.github.GitHubRun") as run_cls:
+        run_cls.return_value.get_workflow = AsyncMock(side_effect=RuntimeError("rate limited"))
+
+        status = await launcher.get_queue_status(get_gpu_by_name("NVIDIA"))
+
+    assert status.runner == "GitHub"
+    assert status.queued_jobs is None
+    assert status.status == "unavailable"
+    assert status.error == "rate limited"
 
 
 def get_github_repo():

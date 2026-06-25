@@ -2,11 +2,13 @@ import os
 import pprint
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Tuple
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from libkernelbot.consts import GPU_TO_SM, ModalGPU, SubmissionMode
+from libkernelbot.consts import GPU_TO_SM, ModalGPU, SubmissionMode, get_gpu_by_name
 from libkernelbot.launchers import ModalLauncher
 from libkernelbot.report import RunProgressReporter
 from libkernelbot.task import build_task_config, make_task_definition
@@ -25,6 +27,40 @@ class MockProgressReporter(RunProgressReporter):
 
     async def update(self, message: str):
         self.updates.append(message)
+
+
+@pytest.mark.asyncio
+async def test_modal_queue_status_uses_function_stats():
+    launcher = ModalLauncher(add_include_dirs=[])
+    function = MagicMock()
+    function.get_current_stats.return_value = SimpleNamespace(
+        backlog=5,
+        num_total_runners=2,
+    )
+
+    with patch("libkernelbot.launchers.modal.modal.Function.from_name", return_value=function):
+        status = await launcher.get_queue_status(get_gpu_by_name("B200"), {"lang": "cu"})
+
+    assert status.runner == "Modal"
+    assert status.gpu == "B200"
+    assert status.queued_jobs == 5
+    assert status.available_runners == 2
+
+
+@pytest.mark.asyncio
+async def test_modal_queue_status_reports_unavailable_on_error():
+    launcher = ModalLauncher(add_include_dirs=[])
+
+    with patch(
+        "libkernelbot.launchers.modal.modal.Function.from_name",
+        side_effect=RuntimeError("modal unavailable"),
+    ):
+        status = await launcher.get_queue_status(get_gpu_by_name("B200"), {"lang": "cu"})
+
+    assert status.runner == "Modal"
+    assert status.queued_jobs is None
+    assert status.status == "unavailable"
+    assert status.error == "modal unavailable"
 
 
 @pytest.fixture(scope="session")

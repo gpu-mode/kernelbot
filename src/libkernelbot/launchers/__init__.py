@@ -1,5 +1,5 @@
 from .github import GitHubLauncher
-from .launcher import Launcher
+from .launcher import Launcher, RunnerQueueStatus
 from .modal import ModalLauncher
 
-__all__ = [Launcher, GitHubLauncher, ModalLauncher]
+__all__ = [Launcher, RunnerQueueStatus, GitHubLauncher, ModalLauncher]

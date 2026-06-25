@@ -1,9 +1,11 @@
 """Tests for admin API endpoints."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from libkernelbot.launchers import RunnerQueueStatus
 
 
 @pytest.fixture
@@ -78,6 +80,32 @@ class TestAdminStartStop:
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "accepts_jobs": False}
         assert mock_backend.accepts_jobs is False
+
+
+class TestRunnerQueue:
+    def test_get_runner_queue(self, test_client, mock_backend):
+        """GET /runner_queue/{gpu_type} returns runner backlog."""
+        mock_backend.get_runner_queue_status = AsyncMock(
+            return_value=RunnerQueueStatus(
+                runner="Modal",
+                gpu="B200",
+                queued_jobs=6,
+                available_runners=1,
+            )
+        )
+
+        response = test_client.get("/runner_queue/B200")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "runner": "Modal",
+            "gpu": "B200",
+            "queued_jobs": 6,
+            "running_jobs": None,
+            "available_runners": 1,
+            "status": "available",
+            "error": None,
+        }
 
 
 class TestAdminStats:

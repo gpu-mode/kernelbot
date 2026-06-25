@@ -40,7 +40,7 @@ from libkernelbot.run_eval import (
 )
 from libkernelbot.utils import KernelBotError, setup_logging
 
-from .launcher import Launcher
+from .launcher import Launcher, RunnerQueueStatus
 
 logger = setup_logging()
 
@@ -65,6 +65,21 @@ class GitHubLauncher(Launcher):
         self._token_lock = threading.Lock()
         self._token_idx = 0
         self.branch = branch
+
+    @staticmethod
+    def _workflow_for_gpu(gpu_type: GPU) -> tuple[str, str | None]:
+        if gpu_type.value in ["MI300", "MI250", "MI300x8", "MI355X"]:
+            return "amd_workflow.yml", {
+                "MI300": "amdgpu-mi300-x86-64",
+                "MI250": "amdgpu-mi250-x86-64",
+                "MI300x8": "amdgpu-mi300-8-x86-64",
+                "MI355X": "arc-runner-set",
+            }[gpu_type.value]
+        if gpu_type.value == "B200_Nebius":
+            return "helion_workflow.yml", None
+        if gpu_type.value == "NVIDIA":
+            return "nvidia_workflow.yml", None
+        raise ValueError(f"Invalid GPU type: {gpu_type.value}")
 
     @staticmethod
     def _load_github_tokens(fallback_token: str) -> list[str]:
@@ -94,29 +109,16 @@ class GitHubLauncher(Launcher):
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
     ) -> FullResult:
         gpu_vendor = None
-        runner_name = None
+        selected_workflow, runner_name = self._workflow_for_gpu(gpu_type)
         if gpu_type.value in ["MI300", "MI250", "MI300x8", "MI355X"]:
-            selected_workflow = "amd_workflow.yml"
-            runner_name = {
-                "MI300": "amdgpu-mi300-x86-64",
-                "MI250": "amdgpu-mi250-x86-64",
-                "MI300x8": "amdgpu-mi300-8-x86-64",
-                "MI355X": "arc-runner-set",
-            }[gpu_type.value]
             gpu_vendor = "AMD"
             requirements = AMD_REQUIREMENTS
         elif gpu_type.value == "B200_Nebius":
-            selected_workflow = "helion_workflow.yml"
-            runner_name = None
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
         elif gpu_type.value == "NVIDIA":
-            selected_workflow = "nvidia_workflow.yml"
-            runner_name = None
             gpu_vendor = "NVIDIA"
             requirements = NVIDIA_REQUIREMENTS
-        else:
-            raise ValueError(f"Invalid GPU type: {gpu_type.value}")
 
         lang = config["lang"]
         if lang == "cu" and gpu_vendor == "AMD":
@@ -199,6 +201,35 @@ class GitHubLauncher(Launcher):
         system = SystemInfo(**data.get("system", {}))
         return FullResult(success=True, error="", runs=runs, system=system)
 
+    async def get_queue_status(
+        self, gpu_type: GPU, config: dict | None = None
+    ) -> RunnerQueueStatus:
+        try:
+            selected_workflow, _ = self._workflow_for_gpu(gpu_type)
+            run = GitHubRun(self.repo, self._next_token(), self.branch, selected_workflow)
+            workflow = await run.get_workflow()
+            queued_runs = await asyncio.to_thread(
+                workflow.get_runs,
+                event="workflow_dispatch",
+                status="queued",
+            )
+            queued_jobs = await asyncio.to_thread(lambda: queued_runs.totalCount)
+        except Exception as e:
+            logger.warning("Could not get GitHub queue stats for %s", gpu_type.name, exc_info=e)
+            return RunnerQueueStatus(
+                runner=self.name,
+                gpu=gpu_type.name,
+                queued_jobs=None,
+                status="unavailable",
+                error=str(e),
+            )
+
+        return RunnerQueueStatus(
+            runner=self.name,
+            gpu=gpu_type.name,
+            queued_jobs=queued_jobs,
+        )
+
     async def wait_callback(self, run: "GitHubRun", status: RunProgressReporter):
         await status.update(
             f"⏳ Workflow [{run.run_id}](<{run.html_url}>): {run.status} "
@@ -244,7 +275,6 @@ def patched_create_dispatch(
     )
 
     return status == 200 or status == 204
-
 
 
 class GitHubRun:

@@ -10,7 +10,7 @@ from libkernelbot.kernelguard import (
     enforce_submission_precheck,
     should_precheck_submission,
 )
-from libkernelbot.launchers import Launcher
+from libkernelbot.launchers import Launcher, RunnerQueueStatus
 from libkernelbot.leaderboard_db import LeaderboardDB
 from libkernelbot.report import (
     MultiProgressReporter,
@@ -51,6 +51,31 @@ class KernelBackend:
     def register_launcher(self, launcher: Launcher):
         for gpu in launcher.gpus:
             self.launcher_map[gpu.value] = launcher
+
+    async def get_runner_queue_status(
+        self, gpu_name: str, config: dict | None = None
+    ) -> RunnerQueueStatus:
+        gpu = get_gpu_by_name(gpu_name)
+        if gpu is None:
+            return RunnerQueueStatus(
+                runner="unknown",
+                gpu=gpu_name,
+                queued_jobs=None,
+                status="unavailable",
+                error="unknown gpu",
+            )
+
+        launcher = self.launcher_map.get(gpu.value)
+        if launcher is None:
+            return RunnerQueueStatus(
+                runner=gpu.runner,
+                gpu=gpu.name,
+                queued_jobs=None,
+                status="unavailable",
+                error="runner is not registered",
+            )
+
+        return await launcher.get_queue_status(gpu, config)
 
     async def submit_full(
         self,
