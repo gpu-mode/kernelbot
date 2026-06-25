@@ -5,7 +5,7 @@
 | Name                                                |    Stmts |     Miss |   Cover |   Missing |
 |---------------------------------------------------- | -------: | -------: | ------: | --------: |
 | src/libkernelbot/\_\_init\_\_.py                    |        0 |        0 |    100% |           |
-| src/libkernelbot/backend.py                         |       99 |       13 |     87% |43-44, 94-101, 233-235, 265-267 |
+| src/libkernelbot/backend.py                         |      107 |       14 |     87% |43-44, 70, 119-126, 258-260, 290-292 |
 | src/libkernelbot/background\_submission\_manager.py |      169 |       32 |     81% |37, 39-41, 43, 46, 48, 177-178, 204-207, 225-230, 248-250, 267-288 |
 | src/libkernelbot/consts.py                          |       71 |        1 |     99% |        50 |
 | src/libkernelbot/db\_types.py                       |       15 |        1 |     93% |         7 |
@@ -17,7 +17,7 @@
 | src/libkernelbot/submission.py                      |      140 |       10 |     93% |18, 54, 72-77, 81-84 |
 | src/libkernelbot/task.py                            |      113 |        6 |     95% |68, 121, 126-128, 167 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
-| **TOTAL**                                           | **1771** |  **320** | **82%** |           |
+| **TOTAL**                                           | **1779** |  **321** | **82%** |           |
 
 
 ## Setup coverage badge
