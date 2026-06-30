@@ -42,7 +42,11 @@ class ProcessedSubmissionRequest(SubmissionRequest):
 
 
 def prepare_submission(  # noqa: C901
-    req: SubmissionRequest, backend: "KernelBackend", mode: SubmissionMode = None
+    req: SubmissionRequest,
+    backend: "KernelBackend",
+    mode: SubmissionMode = None,
+    *,
+    allow_after_deadline: bool = False,
 ) -> ProcessedSubmissionRequest:
     if not backend.accepts_jobs:
         raise KernelBotError(
@@ -88,7 +92,8 @@ def prepare_submission(  # noqa: C901
                         code=429,
                     )
 
-    check_deadline(leaderboard)
+    if not allow_after_deadline:
+        check_deadline(leaderboard)
 
     task_gpus = get_avail_gpus(req.leaderboard, backend.db)
 

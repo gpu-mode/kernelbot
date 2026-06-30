@@ -56,6 +56,42 @@ def test_check_deadline():
         submission.check_deadline(past_deadline)
 
 
+def test_prepare_submission_rejects_expired_deadline_by_default(mock_backend):
+    mock_backend.db.get_leaderboard.return_value["deadline"] = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    )
+    req = submission.SubmissionRequest(
+        code="print('hello world')",
+        file_name="test.py",
+        user_id=1,
+        user_name="test_user",
+        gpus=["A100"],
+        leaderboard="test_board",
+    )
+
+    with pytest.raises(KernelBotError, match="The deadline to submit to test_board has passed"):
+        submission.prepare_submission(req, mock_backend)
+
+
+def test_prepare_submission_allows_expired_deadline_with_override(mock_backend):
+    mock_backend.db.get_leaderboard.return_value["deadline"] = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    )
+    req = submission.SubmissionRequest(
+        code="print('hello world')",
+        file_name="test.py",
+        user_id=1,
+        user_name="test_user",
+        gpus=["A100"],
+        leaderboard="test_board",
+    )
+
+    result = submission.prepare_submission(req, mock_backend, allow_after_deadline=True)
+
+    assert result.leaderboard == "test_board"
+    assert result.gpus == ["A100"]
+
+
 def test_get_avail_gpus(mock_backend):
     db = mock_backend.db
     # Test with available GPUs

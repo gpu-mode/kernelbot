@@ -1,5 +1,6 @@
 """Tests for admin API endpoints."""
 
+import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,12 +19,20 @@ def mock_backend():
 
 
 @pytest.fixture
-def test_client(mock_backend):
+def mock_background_manager():
+    manager = MagicMock()
+    manager.enqueue = AsyncMock()
+    return manager
+
+
+@pytest.fixture
+def test_client(mock_backend, mock_background_manager):
     """Create a test client with mocked backend."""
     # Patch env before importing the app
     with patch.dict('os.environ', {'ADMIN_TOKEN': 'test_token'}):
-        from kernelbot.api.main import app, init_api
+        from kernelbot.api.main import app, init_api, init_background_submission_manager
         init_api(mock_backend)
+        init_background_submission_manager(mock_background_manager)
         yield TestClient(app)
 
 
@@ -168,6 +177,58 @@ class TestAdminStats:
 
 class TestAdminSubmissions:
     """Test admin submission endpoints."""
+
+    def test_admin_submission_allows_after_deadline(
+        self, test_client, mock_backend, mock_background_manager
+    ):
+        """POST /admin/submission queues an authenticated user submission after deadline."""
+        mock_backend.accepts_jobs = True
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.validate_identity = MagicMock(return_value={
+            "user_id": "123",
+            "user_name": "admin_user",
+            "id_type": "cli",
+        })
+        mock_task = MagicMock()
+        mock_backend.db.get_leaderboard = MagicMock(return_value={
+            "task": mock_task,
+            "secret_seed": 12345,
+            "deadline": datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1),
+            "name": "expired-lb",
+            "gpu_types": ["B200"],
+            "visibility": "public",
+        })
+        mock_backend.db.get_leaderboard_gpu_types = MagicMock(return_value=["B200"])
+        mock_backend.db.is_user_banned = MagicMock(return_value=False)
+        mock_backend.db.check_rate_limit = MagicMock(return_value=None)
+        mock_backend.db.create_submission = MagicMock(return_value=123)
+        mock_backend.db.upsert_submission_job_status = MagicMock(return_value=456)
+        mock_backend.get_runner_queue_status = AsyncMock(
+            return_value=RunnerQueueStatus(
+                runner="Modal",
+                gpu="B200",
+                queued_jobs=0,
+                available_runners=1,
+            )
+        )
+
+        response = test_client.post(
+            "/admin/submission/expired-lb/B200/leaderboard",
+            headers={
+                "Authorization": "Bearer test_token",
+                "X-Popcorn-Cli-Id": "cli-token",
+            },
+            files={"file": ("submission.py", b"print('ok')", "text/x-python")},
+        )
+
+        assert response.status_code == 202
+        assert response.json()["status"] == "accepted"
+        assert response.json()["details"] == {"id": 123, "job_status_id": 456}
+        mock_background_manager.enqueue.assert_awaited_once()
+        queued_req, _, sub_id = mock_background_manager.enqueue.await_args.args
+        assert queued_req.leaderboard == "expired-lb"
+        assert sub_id == 123
 
     def test_list_leaderboard_submissions(self, test_client, mock_backend):
         """GET /admin/leaderboards/{name}/submissions returns submission IDs."""
