@@ -154,6 +154,77 @@ async def test_scale_up_and_down(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_enqueue_prunes_dead_workers_before_autoscaling(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(
+        side_effect=lambda *a, **k: a[0]
+    )
+    db_context.update_heartbeat_if_active = mock.Mock()
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        return None, None
+
+    mock_backend.submit_full = fake_submit_full
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=0, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+
+    async def dead_worker():
+        raise RuntimeError("dead worker")
+
+    dead_task = asyncio.create_task(dead_worker(), name="dead-bg-worker")
+    await asyncio.sleep(0)
+    async with manager._state_lock:
+        manager._workers.append(dead_task)
+
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=99)
+    await manager.queue.join()
+
+    assert (
+        mock.call(99, status="succeeded", last_heartbeat=mock.ANY)
+        in db_context.upsert_submission_job_status.call_args_list
+    )
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_run_one_initial_status_failure_marks_failed(mock_backend):
+    db_context = mock_backend.db
+    statuses = []
+
+    def fake_upsert(sub_id, status=None, error=None, last_heartbeat=None):
+        statuses.append((status, error))
+        if status == "running":
+            raise RuntimeError("database unavailable")
+        return sub_id
+
+    db_context.upsert_submission_job_status = mock.Mock(side_effect=fake_upsert)
+    db_context.update_heartbeat_if_active = mock.Mock()
+    mock_backend.submit_full = mock.AsyncMock()
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=123)
+    await manager.queue.join()
+
+    assert ("pending", None) in statuses
+    assert ("running", None) in statuses
+    assert any(status == "failed" and error == "database unavailable" for status, error in statuses)
+    mock_backend.submit_full.assert_not_called()
+
+    async with manager._state_lock:
+        assert len(manager._workers) == 1
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
 async def test_hacked_submission_sets_hacked_status(mock_backend):
     db_context = mock_backend.db
     db_context.upsert_submission_job_status = mock.Mock(

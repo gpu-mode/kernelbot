@@ -86,10 +86,34 @@ class BackgroundSubmissionManager:
         self.min_workers = min_workers
         self.max_workers = max_workers
 
+    def _prune_finished_workers_locked(self):
+        """Drop finished worker tasks before using _workers as capacity."""
+        alive = []
+        for task in self._workers:
+            if not task.done():
+                alive.append(task)
+                continue
+
+            if task.cancelled():
+                logger.info("[Background Job] pruned cancelled worker %r", task.get_name())
+                continue
+
+            exc = task.exception()
+            if exc is not None:
+                logger.error(
+                    "[Background Job] pruned failed worker %r",
+                    task.get_name(),
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
+            else:
+                logger.info("[Background Job] pruned finished worker %r", task.get_name())
+        self._workers = alive
+
     async def start(self):
         logger.info("[Background Job] starting background submission manager")
         async with self._state_lock:
             self._accepting = True
+            self._prune_finished_workers_locked()
             need = max(0, self.min_workers - len(self._workers))
         for _ in range(need):
             t = asyncio.create_task(self._worker_loop(), name="bg-worker")
@@ -140,12 +164,51 @@ class BackgroundSubmissionManager:
         await self._autoscale_up()
         return job_id, sub_id
 
+    async def _maybe_scale_down_idle_worker(self) -> bool:
+        async with self._state_lock:
+            self._prune_finished_workers_locked()
+            me = asyncio.current_task()
+            if len(self._workers) <= self.min_workers or me not in self._workers:
+                return False
+
+            try:
+                self._workers.remove(me)
+                logger.info(
+                    "[Background Job][worker %r] idle too long,"
+                    "scale down; existing workers=%d",
+                    me.get_name() if hasattr(me, "get_name") else id(me),
+                    len(self._workers),
+                )
+            except ValueError:
+                pass
+            return True
+
+    async def _mark_job_failed_after_worker_crash(self, item: JobItem):
+        ts = dt.datetime.now(dt.timezone.utc)
+        try:
+            with self.backend.db as db:
+                db.upsert_submission_job_status(
+                    item.sub_id,
+                    status="failed",
+                    last_heartbeat=ts,
+                    error="worker crashed while processing submission",
+                )
+        except Exception:
+            logger.error(
+                "[Background Job][worker %r] failed to mark crashed "
+                "submission job `%s`",
+                id(asyncio.current_task()),
+                item.sub_id,
+                exc_info=True,
+            )
+
     async def _worker_loop(self):
         """
         A worker will keep listening to the queue, and process the job in the queue.
         If the queue is empty, it will exit after idle_seconds.
         Each worker only handles one submission job at a time
         """
+        crashed = False
         try:
             while True:
                 try:
@@ -158,26 +221,8 @@ class BackgroundSubmissionManager:
                         item.sub_id,
                     )
                 except asyncio.TimeoutError:
-                    async with self._state_lock:
-                        me = asyncio.current_task()
-                        if (
-                            len(self._workers) > self.min_workers
-                            and me in self._workers
-                        ):
-                            try:
-                                self._workers.remove(me)
-                                logger.info(
-                                    "[Background Job][worker %r] idle too long,"
-                                    "scale down; existing workers=%d",
-                                    me.get_name()
-                                    if hasattr(me, "get_name")
-                                    else id(me),
-                                    len(self._workers),
-                                )
-                            except ValueError:
-                                pass
-                            return  # scale down: exit
-
+                    if await self._maybe_scale_down_idle_worker():
+                        return  # scale down: exit
                     continue
 
                 t = asyncio.create_task(
@@ -188,6 +233,14 @@ class BackgroundSubmissionManager:
                     self._live_tasks.add(t)
                 try:
                     await t  # wait submission job to finish
+                except Exception:
+                    logger.error(
+                        "[Background Job][worker %r] submission job `%s` crashed",
+                        id(asyncio.current_task()),
+                        item.sub_id,
+                        exc_info=True,
+                    )
+                    await self._mark_job_failed_after_worker_crash(item)
                 finally:
                     logger.info(
                         "[Background Job][worker %r] finishes the submission job `%s`",
@@ -199,6 +252,20 @@ class BackgroundSubmissionManager:
                     self.queue.task_done()
         except asyncio.CancelledError:
             return
+        except Exception:
+            crashed = True
+            logger.error(
+                "[Background Job][worker %r] worker loop crashed",
+                id(asyncio.current_task()),
+                exc_info=True,
+            )
+        finally:
+            me = asyncio.current_task()
+            async with self._state_lock:
+                if me in self._workers:
+                    self._workers.remove(me)
+        if crashed:
+            await self._autoscale_up()
 
     async def _task_done_async(self, tt: asyncio.Task, item: JobItem):
         async with self._state_lock:
@@ -211,13 +278,9 @@ class BackgroundSubmissionManager:
         now = dt.datetime.now(dt.timezone.utc)
 
         logger.info("[Background Job] start processing submission %s", sub_id)
-        with self.backend.db as db:
-            db.upsert_submission_job_status(
-                sub_id, status="running", last_heartbeat=now
-            )
-
         # heartbeat loop continuously update the last heartbeat time for the submission status
         stop_heartbeat = asyncio.Event()
+        hb_task = None
 
         async def heartbeat():
             while not stop_heartbeat.is_set():
@@ -229,8 +292,13 @@ class BackgroundSubmissionManager:
                 except Exception:
                     pass
 
-        hb_task = asyncio.create_task(heartbeat(), name=f"hb-{sub_id}")
         try:
+            with self.backend.db as db:
+                db.upsert_submission_job_status(
+                    sub_id, status="running", last_heartbeat=now
+                )
+
+            hb_task = asyncio.create_task(heartbeat(), name=f"hb-{sub_id}")
             reporter = BackgroundSubmissionManagerReporter()
             await asyncio.wait_for(
                 self.backend.submit_full(
@@ -291,12 +359,14 @@ class BackgroundSubmissionManager:
                 )
         finally:
             stop_heartbeat.set()
-            hb_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await hb_task
+            if hb_task is not None:
+                hb_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await hb_task
 
     async def _autoscale_up(self):
         async with self._state_lock:
+            self._prune_finished_workers_locked()
             running = len(self._live_tasks)
             workers = len(self._workers)
             qsize = self.queue.qsize()
