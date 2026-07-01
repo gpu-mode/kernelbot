@@ -62,6 +62,11 @@ cuda_image = (
         "nvidia-cutlass-dsl==4.5.2",
         "cuda-core[cu13]",
         "cuda-python[all]==13.0",
+        # cuTile: the CUDA Tile programming model in Python (`import cuda.tile`).
+        # The [tileiras] extra adds the Tile IR assembler so kernels can be
+        # compiled in-process. tileiras 13.2+ targets Blackwell and Ampere/Ada
+        # and needs driver r580+, both satisfied by the B200 runners.
+        "cuda-tile[tileiras]==1.4.0",
         # "nvmath-python[cu13]~=0.4",
         # "numba-cuda[cu13]~=0.15",
     )
