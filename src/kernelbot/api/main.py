@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import datetime
+import hmac
 import json
 import os
 import time
@@ -239,7 +240,9 @@ def require_admin(
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {env.ADMIN_TOKEN}"
-    if authorization != expected:
+    # Compare on bytes: hmac.compare_digest raises TypeError on non-ASCII str
+    # (Starlette decodes headers as latin-1), which would surface as a 500 instead of 401.
+    if not hmac.compare_digest(authorization.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
@@ -609,6 +612,69 @@ async def run_submission_async(
     # All other unexpected errors → 500
     except Exception as e:
         # logger.exception("Unexpected error in run_submission_v2")
+        logger.error(f"Unexpected error in api submissoin: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@app.post("/admin/submission/{leaderboard_name}/{gpu_type}/{submission_mode}")
+async def admin_run_submission_after_deadline(
+    leaderboard_name: str,
+    gpu_type: str,
+    submission_mode: str,
+    file: UploadFile,
+    user_info: Annotated[dict, Depends(validate_user_header)],
+    _: Annotated[None, Depends(require_admin)],
+    db_context=Depends(get_db),
+) -> Any:
+    """Queue a submission from an authenticated user through an admin-only after-deadline path."""
+    try:
+        await simple_rate_limit()
+        logger.info(
+            f"Received admin submission request for {leaderboard_name} {gpu_type} {submission_mode} "
+            f"user_id={user_info['user_id']} user_name={user_info.get('user_name')} "
+            f"id_type={user_info.get('id_type')}"
+        )
+
+        try:
+            submission_request, submission_mode_enum = await to_submit_info(
+                user_info, submission_mode, file, leaderboard_name, gpu_type, db_context
+            )
+
+            req = prepare_submission(
+                submission_request,
+                backend_instance,
+                submission_mode_enum,
+                allow_after_deadline=True,
+            )
+
+        except KernelBotError as e:
+            raise HTTPException(status_code=e.http_code, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, detail=f"failed to prepare submission request: {str(e)}"
+            ) from e
+
+        if not req.gpus or len(req.gpus) != 1:
+            raise HTTPException(status_code=400, detail="Invalid GPU type")
+
+        sub_id, job_status_id = await enqueue_background_job(
+            req, submission_mode_enum, backend_instance, background_submission_manager
+        )
+        runner_queue = await get_runner_queue_status(req.gpus[0], req)
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "details": {"id": sub_id, "job_status_id": job_status_id},
+                "runner_queue": runner_queue,
+                "status": "accepted",
+            },
+        )
+    except HTTPException:
+        raise
+    except KernelBotError as e:
+        raise HTTPException(status_code=getattr(e, "http_code", 400), detail=str(e)) from e
+    except Exception as e:
         logger.error(f"Unexpected error in api submissoin: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
