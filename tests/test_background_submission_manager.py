@@ -3,10 +3,12 @@ import datetime
 from unittest import mock
 
 import pytest
+from test_report import create_eval_result, sample_system_info
 
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.kernelguard import KernelGuardRejected
+from libkernelbot.run_eval import FullResult
 from libkernelbot.submission import ProcessedSubmissionRequest
 
 
@@ -46,6 +48,17 @@ def get_req(i: int) -> ProcessedSubmissionRequest:
         user_name="tester",
         gpus=None,
     )
+
+
+def _full_result(*modes: str, failing_mode: str | None = None) -> FullResult:
+    runs = {}
+    for mode in modes:
+        eval_mode = "test" if mode == "test" else "benchmark"
+        eval_result = create_eval_result(eval_mode)
+        if mode == failing_mode:
+            eval_result.run.passed = False
+        runs[mode] = eval_result
+    return FullResult(success=True, error="", system=sample_system_info(), runs=runs)
 
 
 @pytest.mark.asyncio
@@ -94,6 +107,45 @@ async def test_enqueue_and_run_job(mock_backend):
         in db_context.upsert_submission_job_status.call_args_list
     )
     assert submit_calls == [(42, False)]
+
+    await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_secret_failure_marks_job_failed(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(
+        side_effect=lambda *a, **k: a[0]
+    )
+    db_context.update_heartbeat_if_active = mock.Mock()
+
+    public_result = _full_result("test", "benchmark", "leaderboard")
+    secret_result = _full_result("test", "benchmark", failing_mode="benchmark")
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        return sub_id, [public_result, secret_result]
+
+    mock_backend.submit_full = fake_submit_full
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+
+    req = get_req(1)
+    req.gpus = ["A100"]
+    await manager.enqueue(req, SubmissionMode.LEADERBOARD, sub_id=42)
+    await manager.queue.join()
+
+    assert (
+        mock.call(
+            42,
+            status="failed",
+            last_heartbeat=mock.ANY,
+            error="secret validation failed on A100; submission will not appear on the leaderboard",
+        )
+        in db_context.upsert_submission_job_status.call_args_list
+    )
 
     await manager.stop()
 

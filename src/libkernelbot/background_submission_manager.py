@@ -2,12 +2,14 @@ import asyncio
 import contextlib
 import datetime as dt
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from libkernelbot.backend import KernelBackend
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.report import MultiProgressReporter, RunProgressReporter, RunResultReport
+from libkernelbot.run_eval import FullResult
 from libkernelbot.submission import ProcessedSubmissionRequest
 from libkernelbot.utils import setup_logging
 
@@ -46,6 +48,78 @@ class BackgroundSubmissionManagerReporterRunProgressReporter(RunProgressReporter
         pass
     async def display_report(self, title: str, report: RunResultReport):
         pass
+
+
+def _run_passed(result: FullResult | None, mode: str) -> bool:
+    if result is None or not result.success:
+        return False
+
+    eval_result = result.runs.get(mode)
+    if eval_result is None or eval_result.run is None:
+        return False
+    return bool(eval_result.run.success and eval_result.run.passed)
+
+
+def _all_recorded_runs_passed(result: FullResult | None) -> bool:
+    if result is None or not result.success:
+        return False
+
+    for eval_result in result.runs.values():
+        if eval_result.run is None or not eval_result.run.success or not eval_result.run.passed:
+            return False
+    return True
+
+
+def _ranked_completion_status(
+    mode: SubmissionMode,
+    gpus: Sequence[str] | None,
+    results: Sequence[FullResult] | None,
+) -> tuple[str, str | None]:
+    if mode != SubmissionMode.LEADERBOARD:
+        return "succeeded", None
+
+    result_list = list(results or [])
+    gpu_names = list(gpus or [])
+    gpu_count = len(gpu_names)
+    if gpu_count == 0 and result_list:
+        gpu_count = len(result_list) // 2
+        gpu_names = [f"GPU {i + 1}" for i in range(gpu_count)]
+
+    if gpu_count == 0 or len(result_list) < gpu_count * 2:
+        return (
+            "failed",
+            "ranked validation did not complete all public and secret runs",
+        )
+
+    public_results = result_list[:gpu_count]
+    secret_results = result_list[gpu_count:gpu_count * 2]
+
+    for gpu, result in zip(gpu_names, public_results, strict=True):
+        if not _run_passed(result, "leaderboard"):
+            return (
+                "failed",
+                f"ranked validation failed on {gpu}; submission will not appear on the leaderboard",
+            )
+
+    for gpu, result in zip(gpu_names, secret_results, strict=True):
+        if not _run_passed(result, "leaderboard") or not _all_recorded_runs_passed(result):
+            return (
+                "failed",
+                f"secret validation failed on {gpu}; submission will not appear on the leaderboard",
+            )
+
+    return "succeeded", None
+
+
+def _job_status_update(
+    status: str,
+    last_heartbeat: dt.datetime,
+    error: str | None,
+) -> dict:
+    status_update = {"status": status, "last_heartbeat": last_heartbeat}
+    if error is not None:
+        status_update["error"] = error
+    return status_update
 
 
 class BackgroundSubmissionManager:
@@ -300,18 +374,22 @@ class BackgroundSubmissionManager:
 
             hb_task = asyncio.create_task(heartbeat(), name=f"hb-{sub_id}")
             reporter = BackgroundSubmissionManagerReporter()
-            await asyncio.wait_for(
+            _, results = await asyncio.wait_for(
                 self.backend.submit_full(
                     item.req, item.mode, reporter, sub_id, skip_precheck=False
                 ),
                 timeout=HARD_TIMEOUT_SEC,
             )
             ts = dt.datetime.now(dt.timezone.utc)
-            logger.info("[Background Job] submission %s succeeded", sub_id)
+            final_status, error = _ranked_completion_status(item.mode, item.req.gpus, results)
+            status_update = _job_status_update(final_status, ts, error)
+            logger.info(
+                "[Background Job] submission %s finished with status %s",
+                sub_id,
+                final_status,
+            )
             with self.backend.db as db:
-                db.upsert_submission_job_status(
-                    sub_id, status="succeeded", last_heartbeat=ts
-                )
+                db.upsert_submission_job_status(sub_id, **status_update)
         except asyncio.TimeoutError:
             ts = dt.datetime.now(dt.timezone.utc)
             with self.backend.db as db:
