@@ -117,6 +117,161 @@ class TestRunnerQueue:
         }
 
 
+class TestUserSubmissions:
+    def test_submission_details_require_authentication(self, test_client):
+        response = test_client.get("/user/submissions/42")
+
+        assert response.status_code == 400
+
+    def test_submission_details_return_not_found(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.validate_identity = MagicMock(
+            return_value={"user_id": "123", "user_name": "test-user"}
+        )
+        mock_backend.db.get_submission_by_id = MagicMock(return_value=None)
+
+        response = test_client.get(
+            "/user/submissions/42",
+            headers={"X-Popcorn-Cli-Id": "cli-token"},
+        )
+
+        assert response.status_code == 404
+
+    def test_submission_details_reject_other_owner(self, test_client, mock_backend):
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.validate_identity = MagicMock(
+            return_value={"user_id": "123", "user_name": "test-user"}
+        )
+        mock_backend.db.get_submission_by_id = MagicMock(return_value={"user_id": "456"})
+
+        response = test_client.get(
+            "/user/submissions/42",
+            headers={"X-Popcorn-Cli-Id": "cli-token"},
+        )
+
+        assert response.status_code == 403
+
+    def test_submission_details_include_stored_run_results(self, test_client, mock_backend):
+        """Polling clients receive the per-row data stored for completed runs."""
+        mock_backend.db.__enter__ = MagicMock(return_value=mock_backend.db)
+        mock_backend.db.__exit__ = MagicMock(return_value=None)
+        mock_backend.db.validate_identity = MagicMock(
+            return_value={"user_id": "123", "user_name": "test-user"}
+        )
+        benchmark_result = {
+            "benchmark-count": "2",
+            "benchmark.0.status": "pass",
+            "benchmark.0.spec": "shape-0",
+            "benchmark.0.mean": "1.5",
+            "benchmark.1.status": "pass",
+            "benchmark.1.spec": "shape-1",
+            "benchmark.1.mean": "2.5",
+        }
+        test_result = {
+            "test-count": "2",
+            "test.0.status": "pass",
+            "test.0.spec": "case-0",
+            "test.0.message": "correct",
+            "test.1.status": "fail",
+            "test.1.spec": "case-1",
+            "test.1.error": "mismatch",
+        }
+        mock_backend.db.get_submission_by_id = MagicMock(
+            return_value={
+                "submission_id": 42,
+                "leaderboard_id": 7,
+                "leaderboard_name": "test-leaderboard",
+                "file_name": "submission.py",
+                "user_id": "123",
+                "submission_time": "2026-07-06T12:00:00Z",
+                "done": True,
+                "code": "print('ok')",
+                "runs": [
+                    {
+                        "start_time": "2026-07-06T12:00:00Z",
+                        "end_time": "2026-07-06T12:01:00Z",
+                        "mode": "test",
+                        "secret": False,
+                        "runner": "B200",
+                        "score": None,
+                        "passed": False,
+                        "result": test_result,
+                    },
+                    {
+                        "start_time": "2026-07-06T12:00:00Z",
+                        "end_time": "2026-07-06T12:01:00Z",
+                        "mode": "benchmark",
+                        "secret": False,
+                        "runner": "B200",
+                        "score": None,
+                        "passed": True,
+                        "result": benchmark_result,
+                    },
+                    {
+                        "start_time": "2026-07-06T12:00:00Z",
+                        "end_time": "2026-07-06T12:01:00Z",
+                        "mode": "benchmark",
+                        "secret": True,
+                        "runner": "B200",
+                        "score": None,
+                        "passed": True,
+                        "result": {"secret-result": "must not be exposed"},
+                    },
+                    {
+                        "start_time": "2026-07-06T12:00:00Z",
+                        "end_time": "2026-07-06T12:01:00Z",
+                        "mode": "leaderboard",
+                        "secret": False,
+                        "runner": "B200",
+                        "score": 1.5,
+                        "passed": True,
+                        "result": {"leaderboard-result": "not part of this contract"},
+                    },
+                    {
+                        "start_time": "2026-07-06T12:00:00Z",
+                        "end_time": "2026-07-06T12:01:00Z",
+                        "mode": "profile0",
+                        "secret": False,
+                        "runner": "B200",
+                        "score": None,
+                        "passed": True,
+                        "result": {"profile-report": "PROFILE_SENTINEL"},
+                    },
+                ],
+                "job_status": "succeeded",
+                "job_error": None,
+                "job_last_heartbeat": "2026-07-06T12:01:00Z",
+            }
+        )
+        mock_backend.get_runner_queue_status = AsyncMock(
+            return_value=RunnerQueueStatus(
+                runner="Modal",
+                gpu="B200",
+                queued_jobs=0,
+                available_runners=1,
+            )
+        )
+
+        response = test_client.get(
+            "/user/submissions/42",
+            headers={"X-Popcorn-Cli-Id": "cli-token"},
+        )
+
+        assert response.status_code == 200
+        runs = response.json()["runs"]
+        assert runs[0]["result"] == test_result
+        assert runs[1]["result"] == benchmark_result
+        assert "result" not in runs[2]
+        assert runs[2]["secret"] is True
+        assert runs[2]["passed"] is True
+        assert "result" not in runs[3]
+        assert "result" not in runs[4]
+        assert "must not be exposed" not in response.text
+        assert "PROFILE_SENTINEL" not in response.text
+
+
 class TestAdminStats:
     """Test admin stats endpoint."""
 
