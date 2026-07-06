@@ -1079,8 +1079,16 @@ async def get_user_submission(
                     status_code=403, detail="Not authorized to view this submission"
                 )
 
-            # RunItem is a TypedDict (already a dict), select fields to expose
+            # RunItem is a TypedDict (already a dict), select fields to expose.
+            # Detailed results are limited to public test/benchmark runs because
+            # private results can contain secret validation specs and errors.
             run_fields = ("start_time", "end_time", "mode", "secret", "runner", "score", "passed")
+            runs = []
+            for run in submission["runs"]:
+                response_run = {key: run[key] for key in run_fields}
+                if not run["secret"] and run["mode"] in ("test", "benchmark"):
+                    response_run["result"] = run["result"]
+                runs.append(response_run)
             runner_queue = await get_submission_runner_queue_status(submission)
             return {
                 "id": submission["submission_id"],
@@ -1091,7 +1099,7 @@ async def get_user_submission(
                 "submission_time": submission["submission_time"],
                 "done": submission["done"],
                 "code": submission["code"],
-                "runs": [{k: r[k] for k in run_fields} for r in submission["runs"]],
+                "runs": runs,
                 "job": {
                     "status": submission.get("job_status"),
                     "error": submission.get("job_error"),

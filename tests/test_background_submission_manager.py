@@ -112,6 +112,63 @@ async def test_enqueue_and_run_job(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_accepted_job_survives_request_task_cancellation(mock_backend):
+    """Disconnecting an accepted request must not cancel its background job."""
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(side_effect=lambda *args, **kwargs: args[0])
+    db_context.update_heartbeat_if_active = mock.Mock()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    backend_cancelled = False
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        nonlocal backend_cancelled
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            backend_cancelled = True
+            raise
+        return None, None
+
+    mock_backend.submit_full = fake_submit_full
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+    request_accepted = asyncio.Event()
+
+    async def simulated_request():
+        await manager.enqueue(get_req(1), SubmissionMode.BENCHMARK, sub_id=42)
+        request_accepted.set()
+        await asyncio.Event().wait()
+
+    request_task = asyncio.create_task(simulated_request())
+    try:
+        await asyncio.wait_for(request_accepted.wait(), timeout=1)
+        await asyncio.wait_for(started.wait(), timeout=1)
+
+        request_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request_task
+
+        assert not backend_cancelled
+        release.set()
+        await asyncio.wait_for(manager.queue.join(), timeout=1)
+
+        assert not backend_cancelled
+        assert (
+            mock.call(42, status="succeeded", last_heartbeat=mock.ANY)
+            in db_context.upsert_submission_job_status.call_args_list
+        )
+    finally:
+        release.set()
+        if not request_task.done():
+            request_task.cancel()
+        await manager.stop()
+
+
+@pytest.mark.asyncio
 async def test_leaderboard_secret_failure_marks_job_failed(mock_backend):
     db_context = mock_backend.db
     db_context.upsert_submission_job_status = mock.Mock(
