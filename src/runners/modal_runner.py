@@ -9,10 +9,18 @@ from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
 app = App("discord-bot-runner")
-cuda_version = "12.9.1"
+cuda_version = "13.3.0"
 flavor = "devel"
 operating_sys = "ubuntu24.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
+
+mathdx_version = "26.06.0"
+mathdx_archive = f"nvidia-mathdx-{mathdx_version}-cuda13.tar.gz"
+mathdx_url = (
+    "https://developer.download.nvidia.com/compute/cublasdx/redist/"
+    f"cublasdx/cuda13/{mathdx_archive}"
+)
+mathdx_sha256 = "042b7c57a636c271cca32dffcc0a822ed6b2abc0b8ef5703ab2445d58563a1e6"
 
 # === Image Definition ===
 #
@@ -58,16 +66,16 @@ cuda_image = (
     )
     # nvidia cuda packages
     .uv_pip_install(
-        "nvidia-cupynumeric~=25.3",
         "nvidia-cutlass-dsl==4.5.2",
         "cuda-core[cu13]",
         "cuda-python[all]==13.0",
         # cuTile: the CUDA Tile programming model in Python (`import cuda.tile`).
-        # The [tileiras] extra adds the Tile IR assembler so kernels can be
-        # compiled in-process. tileiras 13.2+ targets Blackwell and Ampere/Ada
-        # and needs driver r580+, both satisfied by the B200 runners.
-        "cuda-tile[tileiras]==1.4.0",
-        # "nvmath-python[cu13]~=0.4",
+        # CUDA 13.3 supplies tileiras; the extra's toolkit constraint conflicts
+        # with the CUDA 13.0 dependency set used by the PyTorch wheel.
+        "cuda-tile==1.4.0",
+        "nvmath-python[cu13-dx]==0.9.0",
+        "nvidia-libmathdx-cu13==0.3.2.6",
+        "cuda-toolkit[cccl,nvrtc]==13.0.2",
         # "numba-cuda[cu13]~=0.15",
     )
     # Install torch last so its CUDA/NCCL dependency set wins over broader CUDA Python packages.
@@ -76,12 +84,33 @@ cuda_image = (
     )
     # CUTLASS C++ headers for #include <cutlass/...>
     .run_commands(
-        "git clone --depth 1 --branch v4.5.1 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
+        "git clone --depth 1 --branch v4.5.2 https://github.com/NVIDIA/cutlass.git /opt/cutlass",
+        (
+            f"curl -fsSL {mathdx_url} -o /tmp/{mathdx_archive} && "
+            f"echo '{mathdx_sha256}  /tmp/{mathdx_archive}' | sha256sum -c - && "
+            "mkdir -p /opt/mathdx && "
+            f"tar -xzf /tmp/{mathdx_archive} --strip-components=4 -C /opt/mathdx && "
+            f"rm /tmp/{mathdx_archive}"
+        ),
     )
     .env({
         "CUTLASS_PATH": "/opt/cutlass",
-        "CPLUS_INCLUDE_PATH": "/opt/cutlass/include:/opt/cutlass/tools/util/include",
+        "MATHDX_HOME": "/opt/mathdx",
+        "CPLUS_INCLUDE_PATH": (
+            "/opt/mathdx/include:/opt/mathdx/external/cutlass/include:"
+            "/opt/cutlass/include:/opt/cutlass/tools/util/include"
+        ),
     })
+    .run_commands(
+        "python -m pip check",
+        'python -c "import cuda.tile, nvmath"',
+        "tileiras --version",
+        (
+            "printf '#include <cublasdx.hpp>\\n' | "
+            "nvcc -std=c++17 -x cu -c - -o /tmp/cublasdx-smoke.o && "
+            "rm /tmp/cublasdx-smoke.o"
+        ),
+    )
 )
 
 cuda_image = cuda_image.add_local_python_source(
