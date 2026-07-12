@@ -8,6 +8,7 @@ from api.main import app, init_api, init_background_submission_manager
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
+from cogs.top_three_cog import TopThreeCog
 from cogs.verify_run_cog import VerifyRunCog
 from discord import app_commands
 from discord.ext import commands
@@ -87,6 +88,7 @@ class ClusterBot(commands.Bot):
             await self.add_cog(LeaderboardCog(self))
             await self.add_cog(VerifyRunCog(self))
             await self.add_cog(AdminCog(self))
+            await self.add_cog(TopThreeCog(self))
 
             guild_id = (
                 env.DISCORD_CLUSTER_STAGING_ID
