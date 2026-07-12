@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 
 from discord.ext import commands, tasks
 
@@ -23,8 +24,11 @@ class TopThreeCog(commands.Cog):
 
     def _read_standings(self):
         standings = {}
+        now = datetime.datetime.now(datetime.timezone.utc)
         with self.bot.leaderboard_db as db:
             for leaderboard in db.get_leaderboards():
+                if leaderboard["visibility"] != "public" or leaderboard["deadline"] <= now:
+                    continue
                 for gpu_type in leaderboard["gpu_types"]:
                     key = (leaderboard["name"], gpu_type)
                     standings[key] = db.get_leaderboard_submissions(

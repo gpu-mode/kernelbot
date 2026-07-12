@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -123,7 +124,15 @@ async def test_end_to_end_seed_api_update_and_discord_send():
             pass
 
         def get_leaderboards(self):
-            return [{"name": "vector-add", "gpu_types": ["H100"]}]
+            return [
+                {
+                    "name": "vector-add",
+                    "gpu_types": ["H100"],
+                    "visibility": "public",
+                    "deadline": datetime.datetime.now(datetime.timezone.utc)
+                    + datetime.timedelta(days=1),
+                }
+            ]
 
         def get_leaderboard_submissions(self, leaderboard, gpu, limit):
             assert (leaderboard, gpu, limit) == ("vector-add", "H100", 3)
@@ -149,3 +158,48 @@ async def test_end_to_end_seed_api_update_and_discord_send():
     assert "**speed-demon** just took **#1**" in message
     assert "**third** has been evicted" in message
     assert "<@" not in message
+
+
+def test_watcher_ignores_expired_and_closed_competitions():
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    class FakeDB:
+        queried = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get_leaderboards(self):
+            return [
+                {
+                    "name": "active-public",
+                    "gpu_types": ["H100"],
+                    "visibility": "public",
+                    "deadline": now + datetime.timedelta(days=1),
+                },
+                {
+                    "name": "expired",
+                    "gpu_types": ["H100"],
+                    "visibility": "public",
+                    "deadline": now - datetime.timedelta(days=1),
+                },
+                {
+                    "name": "closed",
+                    "gpu_types": ["H100"],
+                    "visibility": "closed",
+                    "deadline": now + datetime.timedelta(days=1),
+                },
+            ]
+
+        def get_leaderboard_submissions(self, leaderboard, gpu, limit):
+            self.queried.append((leaderboard, gpu, limit))
+            return []
+
+    watcher = object.__new__(TopThreeCog)
+    watcher.bot = Mock(leaderboard_db=FakeDB())
+
+    assert watcher._read_standings() == {("active-public", "H100"): []}
+    assert watcher.bot.leaderboard_db.queried == [("active-public", "H100", 3)]
