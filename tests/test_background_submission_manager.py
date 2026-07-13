@@ -226,6 +226,36 @@ async def test_stop_rejects_new_jobs(mock_backend):
 
 
 @pytest.mark.asyncio
+async def test_stop_marks_running_job_failed(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(side_effect=lambda *args, **kwargs: args[0])
+    db_context.update_heartbeat_if_active = mock.Mock()
+    db_context.fail_submission_job_if_active = mock.Mock(return_value=True)
+    started = asyncio.Event()
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        started.set()
+        await asyncio.Event().wait()
+
+    mock_backend.submit_full = fake_submit_full
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=99)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    await manager.stop()
+
+    db_context.fail_submission_job_if_active.assert_called_once_with(
+        99,
+        "job interrupted while kernelbot was shutting down; please resubmit",
+        mock.ANY,
+    )
+
+
+@pytest.mark.asyncio
 async def test_scale_up_and_down(mock_backend):
     db_context = mock_backend.db
     db_context.upsert_submission_job_status = mock.Mock(

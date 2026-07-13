@@ -210,6 +210,21 @@ def test_leaderboard_submission_basic(database, submit_leaderboard):
         assert submission["job_error"] == "still working"
         assert submission["job_last_heartbeat"] == heartbeat
 
+        interrupted_at = datetime.datetime.now(tz=datetime.timezone.utc)
+        assert db.fail_submission_job_if_active(
+            sub_id, "interrupted by shutdown", interrupted_at
+        )
+        submission = db.get_submission_by_id(sub_id)
+        assert submission["job_status"] == "failed"
+        assert submission["job_error"] == "interrupted by shutdown"
+        assert submission["job_last_heartbeat"] == interrupted_at
+
+        assert not db.fail_submission_job_if_active(
+            sub_id, "must not replace a terminal status", interrupted_at
+        )
+        submission = db.get_submission_by_id(sub_id)
+        assert submission["job_error"] == "interrupted by shutdown"
+
     # add a submission run
     run_result = sample_run_result()
     with database as db:
