@@ -9,6 +9,19 @@ from libkernelbot.utils import setup_logging
 
 logger = setup_logging(__name__)
 
+BEGINNER_LEADERBOARDS = frozenset(
+    {
+        "conv2d_v2",
+        "grayscale_v2",
+        "histogram_v2",
+        "matmul_v2",
+        "prefixsum_v2",
+        "sort_v2",
+        "vectoradd_v2",
+        "vectorsum_v2",
+    }
+)
+
 
 class TopThreeCog(commands.Cog):
     """Announce leaderboard podium changes, including API-originated submissions."""
@@ -27,7 +40,11 @@ class TopThreeCog(commands.Cog):
         now = datetime.datetime.now(datetime.timezone.utc)
         with self.bot.leaderboard_db as db:
             for leaderboard in db.get_leaderboards():
-                if leaderboard["visibility"] != "public" or leaderboard["deadline"] <= now:
+                if (
+                    leaderboard["name"] in BEGINNER_LEADERBOARDS
+                    or leaderboard["visibility"] != "public"
+                    or leaderboard["deadline"] <= now
+                ):
                     continue
                 for gpu_type in leaderboard["gpu_types"]:
                     key = (leaderboard["name"], gpu_type)
