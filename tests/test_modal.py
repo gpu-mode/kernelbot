@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Tuple
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -27,6 +27,26 @@ class MockProgressReporter(RunProgressReporter):
 
     async def update(self, message: str):
         self.updates.append(message)
+
+
+@pytest.mark.asyncio
+async def test_modal_submission_uses_native_async_api():
+    launcher = ModalLauncher(add_include_dirs=["/extra/include"])
+    reporter = MockProgressReporter()
+    function = MagicMock()
+    expected = object()
+    function.remote.aio = AsyncMock(return_value=expected)
+    config = {"lang": "cu"}
+
+    with patch("libkernelbot.launchers.modal.modal.Function.from_name", return_value=function):
+        result = await launcher.run_submission(config, get_gpu_by_name("B200"), reporter)
+
+    assert result is expected
+    assert config["include_dirs"] == ["/extra/include"]
+    function.remote.aio.assert_awaited_once_with(config=config)
+    function.remote.assert_not_called()
+    assert reporter.messages == ["⏳ Waiting for Modal run to finish..."]
+    assert reporter.updates == ["✅ Waiting for modal run to finish... Done"]
 
 
 @pytest.mark.asyncio

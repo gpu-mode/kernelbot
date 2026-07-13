@@ -20,7 +20,6 @@ class ModalLauncher(Launcher):
     async def run_submission(
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
     ) -> FullResult:
-        loop = asyncio.get_event_loop()
         if config["lang"] == "cu":
             config["include_dirs"] = config.get("include_dirs", []) + self.additional_include_dirs
         func_name = self._function_name(config, gpu_type)
@@ -29,10 +28,8 @@ class ModalLauncher(Launcher):
 
         await status.push("⏳ Waiting for Modal run to finish...")
 
-        result = await loop.run_in_executor(
-            None,
-            lambda: modal.Function.from_name("discord-bot-runner", func_name).remote(config=config),
-        )
+        function = modal.Function.from_name("discord-bot-runner", func_name)
+        result = await function.remote.aio(config=config)
 
         await status.update("✅ Waiting for modal run to finish... Done")
 
