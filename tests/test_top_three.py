@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from kernelbot.cogs.top_three_cog import TopThreeCog
+from kernelbot.cogs.top_three_cog import BEGINNER_LEADERBOARDS, TopThreeCog
 from kernelbot.top_three import (
     EVICTION_LINES,
     detect_podium_change,
@@ -85,6 +85,40 @@ def test_display_name_uses_public_leaderboard_username_without_ping():
 def test_trashtalk_has_variety():
     assert len(EVICTION_LINES) >= 8
     assert len(set(EVICTION_LINES)) == len(EVICTION_LINES)
+
+
+def test_watcher_does_not_read_beginner_leaderboard_standings():
+    deadline = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    beginner_leaderboards = [
+        {
+            "name": name,
+            "gpu_types": ["B200"],
+            "visibility": "public",
+            "deadline": deadline,
+        }
+        for name in BEGINNER_LEADERBOARDS
+    ]
+    regular_leaderboard = {
+        "name": "flash_attention",
+        "gpu_types": ["H100", "B200"],
+        "visibility": "public",
+        "deadline": deadline,
+    }
+    db = Mock()
+    db.get_leaderboards.return_value = [*beginner_leaderboards, regular_leaderboard]
+    bot = Mock()
+    bot.leaderboard_db.__enter__ = Mock(return_value=db)
+    bot.leaderboard_db.__exit__ = Mock(return_value=False)
+
+    watcher = object.__new__(TopThreeCog)
+    watcher.bot = bot
+
+    standings = watcher._read_standings()
+
+    assert set(standings) == {("flash_attention", "H100"), ("flash_attention", "B200")}
+    assert db.get_leaderboard_submissions.call_count == 2
+    db.get_leaderboard_submissions.assert_any_call("flash_attention", "H100", limit=3)
+    db.get_leaderboard_submissions.assert_any_call("flash_attention", "B200", limit=3)
 
 
 @pytest.mark.asyncio
