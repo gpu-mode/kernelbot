@@ -10,6 +10,7 @@ from libkernelbot.consts import SubmissionMode
 from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.run_eval import FullResult
 from libkernelbot.submission import ProcessedSubmissionRequest
+from libkernelbot.task import make_task_definition
 
 
 @pytest.fixture
@@ -252,6 +253,54 @@ async def test_stop_marks_running_job_failed(mock_backend):
         99,
         "job interrupted while kernelbot was shutting down; please resubmit",
         mock.ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_stop_marks_real_database_job_failed(database, task_directory):
+    definition = make_task_definition(task_directory / "task.yml")
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    with database as db:
+        db.create_leaderboard(
+            name="shutdown-test",
+            deadline=now + datetime.timedelta(days=1),
+            definition=definition,
+            creator_id=1,
+            forum_id=1,
+            gpu_types=["A100"],
+        )
+        sub_id = db.create_submission(
+            "shutdown-test",
+            "submission.py",
+            1,
+            "print('hello')",
+            now,
+            user_name="shutdown-test-user",
+        )
+
+    backend = mock.Mock()
+    backend.db = database
+    started = asyncio.Event()
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        started.set()
+        await asyncio.Event().wait()
+
+    backend.submit_full = fake_submit_full
+    manager = BackgroundSubmissionManager(
+        backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=sub_id)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    await manager.stop()
+
+    with database as db:
+        submission = db.get_submission_by_id(sub_id)
+    assert submission["job_status"] == "failed"
+    assert submission["job_error"] == (
+        "job interrupted while kernelbot was shutting down; please resubmit"
     )
 
 
