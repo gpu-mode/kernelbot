@@ -276,6 +276,23 @@ class BackgroundSubmissionManager:
                 exc_info=True,
             )
 
+    async def _mark_job_failed_after_shutdown(self, item: JobItem):
+        ts = dt.datetime.now(dt.timezone.utc)
+        try:
+            with self.backend.db as db:
+                db.fail_submission_job_if_active(
+                    item.sub_id,
+                    "job interrupted while kernelbot was shutting down; please resubmit",
+                    ts,
+                )
+        except Exception:
+            logger.error(
+                "[Background Job][worker %r] failed to mark interrupted submission job `%s`",
+                id(asyncio.current_task()),
+                item.sub_id,
+                exc_info=True,
+            )
+
     async def _worker_loop(self):
         """
         A worker will keep listening to the queue, and process the job in the queue.
@@ -307,6 +324,14 @@ class BackgroundSubmissionManager:
                     self._live_tasks.add(t)
                 try:
                     await t  # wait submission job to finish
+                except asyncio.CancelledError:
+                    logger.info(
+                        "[Background Job][worker %r] submission job `%s` interrupted by shutdown",
+                        id(asyncio.current_task()),
+                        item.sub_id,
+                    )
+                    await self._mark_job_failed_after_shutdown(item)
+                    raise
                 except Exception:
                     logger.error(
                         "[Background Job][worker %r] submission job `%s` crashed",

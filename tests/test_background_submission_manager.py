@@ -10,6 +10,7 @@ from libkernelbot.consts import SubmissionMode
 from libkernelbot.kernelguard import KernelGuardRejected
 from libkernelbot.run_eval import FullResult
 from libkernelbot.submission import ProcessedSubmissionRequest
+from libkernelbot.task import make_task_definition
 
 
 @pytest.fixture
@@ -223,6 +224,84 @@ async def test_stop_rejects_new_jobs(mock_backend):
     req = get_req(1)
     with pytest.raises(RuntimeError):
         await manager.enqueue(req, SubmissionMode.TEST, 99)
+
+
+@pytest.mark.asyncio
+async def test_stop_marks_running_job_failed(mock_backend):
+    db_context = mock_backend.db
+    db_context.upsert_submission_job_status = mock.Mock(side_effect=lambda *args, **kwargs: args[0])
+    db_context.update_heartbeat_if_active = mock.Mock()
+    db_context.fail_submission_job_if_active = mock.Mock(return_value=True)
+    started = asyncio.Event()
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        started.set()
+        await asyncio.Event().wait()
+
+    mock_backend.submit_full = fake_submit_full
+
+    manager = BackgroundSubmissionManager(
+        mock_backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=99)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    await manager.stop()
+
+    db_context.fail_submission_job_if_active.assert_called_once_with(
+        99,
+        "job interrupted while kernelbot was shutting down; please resubmit",
+        mock.ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_stop_marks_real_database_job_failed(database, task_directory):
+    definition = make_task_definition(task_directory / "task.yml")
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    with database as db:
+        db.create_leaderboard(
+            name="shutdown-test",
+            deadline=now + datetime.timedelta(days=1),
+            definition=definition,
+            creator_id=1,
+            forum_id=1,
+            gpu_types=["A100"],
+        )
+        sub_id = db.create_submission(
+            "shutdown-test",
+            "submission.py",
+            1,
+            "print('hello')",
+            now,
+            user_name="shutdown-test-user",
+        )
+
+    backend = mock.Mock()
+    backend.db = database
+    started = asyncio.Event()
+
+    async def fake_submit_full(req, mode, reporter, sub_id, skip_precheck=False):
+        started.set()
+        await asyncio.Event().wait()
+
+    backend.submit_full = fake_submit_full
+    manager = BackgroundSubmissionManager(
+        backend, min_workers=1, max_workers=1, idle_seconds=0.1
+    )
+    await manager.start()
+    await manager.enqueue(get_req(1), SubmissionMode.TEST, sub_id=sub_id)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    await manager.stop()
+
+    with database as db:
+        submission = db.get_submission_by_id(sub_id)
+    assert submission["job_status"] == "failed"
+    assert submission["job_error"] == (
+        "job interrupted while kernelbot was shutting down; please resubmit"
+    )
 
 
 @pytest.mark.asyncio

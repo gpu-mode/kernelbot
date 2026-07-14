@@ -425,6 +425,33 @@ class LeaderboardDB:
             logger.error("Failed to upsert submission job status. sub_id: '%s'", sub_id, exc_info=e)
             raise KernelBotError("Error updating job status") from e
 
+    def fail_submission_job_if_active(
+        self, sub_id: int, error: str, ts: datetime.datetime
+    ) -> bool:
+        """Fail a pending/running job without overwriting a terminal status."""
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.submission_job_status
+                SET status = 'failed', error = %s, last_heartbeat = %s
+                WHERE submission_id = %s
+                AND status IN ('pending','running')
+                RETURNING id
+                """,
+                (error, ts, sub_id),
+            )
+            updated = self.cursor.fetchone() is not None
+            self.connection.commit()
+            return updated
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.error(
+                "Failed to mark active submission job as failed. sub_id: '%s'",
+                sub_id,
+                exc_info=e,
+            )
+            raise KernelBotError("Error failing active job") from e
+
     def upsert_submission_job_status(
         self,
         sub_id: int,
