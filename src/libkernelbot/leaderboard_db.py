@@ -1284,7 +1284,11 @@ class LeaderboardDB:
             offset: Offset for pagination
 
         Returns:
-            List of submission dictionaries with summary info and runs
+            List of submission dictionaries with summary info and runs. Each
+            entry includes ``status`` ("pending"/"failed"/"done") and
+            ``secret_score`` (the secret leaderboard geomean score, the ranking
+            metric; ``None`` if absent). The public leaderboard score remains
+            available per-run in ``runs[].score``.
         """
         # Validate and clamp inputs
         limit = max(1, min(limit, 100))
@@ -1352,16 +1356,59 @@ class LeaderboardDB:
                     "score": run_row[2],
                 })
 
+            # Per-submission status + secret score. The `runs` above already
+            # carry the public leaderboard score (in runs[].score), but they are
+            # ranking-filtered (anti-cheat: only public runs whose matching
+            # secret run passed) and never include secret runs, so two things
+            # are not derivable from them:
+            #   - secret_score: the secret leaderboard run's score (the actual
+            #     ranking metric). Visible to the owner, as the detail endpoint
+            #     already exposes it; the list endpoint just never selected it.
+            #   - whether any run failed, so a finished-but-failed submission can
+            #     be told apart from a clean one (both otherwise look "done").
+            # One extra aggregate over the same runs rows (keyed by
+            # submission_id, like runs_query) avoids an N+1 detail fetch per row.
+            #
+            # MIN(score): a submission can have a secret leaderboard run per GPU;
+            # take the best (lowest) to match how the public score is summarized.
+            agg_query = """
+                SELECT submission_id,
+                       MIN(score) FILTER (
+                           WHERE mode = 'leaderboard' AND secret AND passed
+                       ) AS secret_score,
+                       bool_or(NOT passed) AS has_failed_run
+                FROM leaderboard.runs
+                WHERE submission_id = ANY(%s)
+                GROUP BY submission_id
+            """
+            self.cursor.execute(agg_query, (submission_ids,))
+            agg_by_submission: dict = {
+                row[0]: {"secret_score": row[1], "has_failed_run": row[2]}
+                for row in self.cursor.fetchall()
+            }
+
             # Build result with runs grouped by submission
             results = []
             for row in submissions:
                 sub_id = row[0]
+                done = row[4]
+                agg = agg_by_submission.get(sub_id, {})
+
+                if not done:
+                    status = "pending"
+                elif agg.get("has_failed_run"):
+                    status = "failed"
+                else:
+                    status = "done"
+
                 results.append({
                     "id": sub_id,
                     "leaderboard_name": row[1],
                     "file_name": row[2],
                     "submission_time": row[3],
-                    "done": row[4],
+                    "done": done,
+                    "status": status,
+                    "secret_score": agg.get("secret_score"),
                     "runs": runs_by_submission.get(sub_id, []),
                 })
             return results

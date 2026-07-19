@@ -1081,6 +1081,106 @@ def test_get_user_submissions_with_multiple_runs(database, submit_leaderboard):
         assert 2.0 in scores
 
 
+def test_get_user_submissions_status_and_secret_score_on_success(database, submit_leaderboard):
+    """A fully-passing submission reports status 'done' with the secret score.
+
+    The public score stays where it already was (runs[].score).
+    """
+    with database as db:
+        sub = db.create_submission(
+            "submit-leaderboard", "ok.py", 5, "code",
+            datetime.datetime.now(tz=datetime.timezone.utc), user_name="user5",
+        )
+        _create_submission_run(db, sub, mode="leaderboard", secret=False, runner="A100", score=1.5)
+        _create_submission_run(db, sub, mode="leaderboard", secret=True, runner="A100", score=1.7)
+        db.mark_submission_done(sub)
+
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 1
+        assert result[0]["status"] == "done"
+        # Scores come back as Decimal from Postgres; compare as float.
+        assert float(result[0]["secret_score"]) == 1.7
+        # Public score is unchanged: still exposed per-run.
+        assert [float(r["score"]) for r in result[0]["runs"]] == [1.5]
+
+        # Backward compat: the change is purely additive. The pre-existing
+        # fields must still be present so existing clients (popcorn-cli,
+        # kernelboard) keep working; new fields are added alongside.
+        assert {"id", "leaderboard_name", "file_name", "submission_time", "done", "runs"} <= set(
+            result[0]
+        )
+        assert {"gpu_type", "score"} <= set(result[0]["runs"][0])
+
+
+def test_get_user_submissions_status_failed_when_secret_run_failed(database, submit_leaderboard):
+    """A failed secret run -> status 'failed'; runs/scores stay hidden (anti-cheat)."""
+    failed = dataclasses.replace(sample_run_result(), passed=False)
+    with database as db:
+        sub = db.create_submission(
+            "submit-leaderboard", "bad.py", 5, "code",
+            datetime.datetime.now(tz=datetime.timezone.utc), user_name="user5",
+        )
+        _create_submission_run(db, sub, mode="leaderboard", secret=False, runner="A100", score=1.5)
+        _create_submission_run(
+            db, sub, mode="leaderboard", secret=True, runner="A100",
+            score=None, result=failed,
+        )
+        db.mark_submission_done(sub)
+
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 1
+        assert result[0]["status"] == "failed"
+        # The failed secret run withholds the public score (ranking filter) and
+        # there is no passing secret score either.
+        assert result[0]["secret_score"] is None
+        assert result[0]["runs"] == []
+
+
+def test_get_user_submissions_status_failed_keeps_runs_when_public_run_failed(
+    database, submit_leaderboard
+):
+    """A failed *public* run still reports its (passing) runs, with status 'failed'.
+
+    Unlike a failed secret run, a failed public run does not trigger the
+    anti-cheat full-hide, so the passing public runs remain visible.
+    """
+    failed = dataclasses.replace(sample_run_result(), passed=False)
+    with database as db:
+        sub = db.create_submission(
+            "submit-leaderboard", "bad_public.py", 5, "code",
+            datetime.datetime.now(tz=datetime.timezone.utc), user_name="user5",
+        )
+        # Passing public test, failing public leaderboard run, passing secret.
+        _create_submission_run(db, sub, mode="test", secret=False, runner="A100")
+        _create_submission_run(
+            db, sub, mode="leaderboard", secret=False, runner="A100",
+            score=None, result=failed,
+        )
+        _create_submission_run(db, sub, mode="leaderboard", secret=True, runner="A100", score=1.7)
+        db.mark_submission_done(sub)
+
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 1
+        assert result[0]["status"] == "failed"
+        # The passing public test run is still present (not a full hide).
+        assert len(result[0]["runs"]) >= 1
+
+
+def test_get_user_submissions_status_pending_when_not_done(database, submit_leaderboard):
+    """A not-yet-finished submission reports status 'pending'."""
+    with database as db:
+        sub = db.create_submission(
+            "submit-leaderboard", "wip.py", 5, "code",
+            datetime.datetime.now(tz=datetime.timezone.utc), user_name="user5",
+        )
+        _create_submission_run(db, sub, mode="leaderboard", secret=False, runner="A100", score=1.5)
+        # Not marked done.
+
+        result = db.get_user_submissions(user_id="5")
+        assert len(result) == 1
+        assert result[0]["status"] == "pending"
+
+
 def test_check_leaderboard_access_public(database, submit_leaderboard):
     """Public leaderboards grant access to everyone."""
     with database as db:
