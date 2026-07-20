@@ -33,10 +33,11 @@ mathdx_sha256 = "042b7c57a636c271cca32dffcc0a822ed6b2abc0b8ef5703ab2445d58563a1e
 #        cd src/runners && modal run test_cutlass_image.py
 #
 # For users writing submissions with torch.utils.cpp_extension.load_inline:
-#   C++ headers installed on the image (like CUTLASS) require explicit include paths:
+#   MathDx is already on CPLUS_INCLUDE_PATH. Include cuBLASDx in cuda_sources,
+#   which load_inline compiles with nvcc, rather than in cpp_sources:
 #     load_inline(
 #         ...
-#         extra_include_paths=["/opt/cutlass/include", "/opt/cutlass/tools/util/include"],
+#         cuda_sources=cuda_source,  # #include <cublasdx.hpp> goes here
 #     )
 #   For raw nvcc compilation, CPLUS_INCLUDE_PATH is set so includes work automatically.
 #
