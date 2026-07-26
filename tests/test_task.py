@@ -5,13 +5,16 @@ import pytest
 
 from libkernelbot.consts import SubmissionMode
 from libkernelbot.task import (
+    ApplicationValidation,
     CudaTaskData,
     Language,
     LeaderboardDefinition,
     LeaderboardTask,
     PythonTaskData,
     RankCriterion,
+    ValidationSchedule,
     build_task_config,
+    build_validation_config,
     make_task_definition,
 )
 from libkernelbot.utils import KernelBotError
@@ -250,3 +253,75 @@ def test_multi_gpu_task(task_directory):
 
     result = make_task_definition(task_directory / "multi-task.yml")
     assert result.task.multi_gpu is True
+
+
+def test_application_validation_roundtrip_and_config(leaderboard_task):
+    leaderboard_task.validation = ApplicationValidation(
+        name="optimizer",
+        version="optimizer-v1",
+        main="validate.py",
+        files={
+            "validate.py": "print('validate')",
+            "submission.py": "@SUBMISSION@",
+        },
+        shapes=[{"batch": 2, "n": 32, "steps": 4}],
+        settings={"min_speedup": 1.0, "require_no_torch_fallback": True},
+        schedule=ValidationSchedule(
+            hour=22,
+            minute=0,
+            timezone="America/Los_Angeles",
+        ),
+    )
+
+    reconstructed = LeaderboardTask.from_str(leaderboard_task.to_str())
+    assert reconstructed == leaderboard_task
+    assert build_validation_config(
+        reconstructed,
+        "def custom_kernel(x): return x",
+    ) == {
+        "name": "optimizer",
+        "version": "optimizer-v1",
+        "main": "validate.py",
+        "sources": {
+            "validate.py": "print('validate')",
+            "submission.py": "def custom_kernel(x): return x",
+        },
+        "shapes": [{"batch": 2, "n": 32, "steps": 4}],
+        "settings": {
+            "min_speedup": 1.0,
+            "require_no_torch_fallback": True,
+        },
+        "timeout": 900,
+    }
+
+
+def test_make_task_definition_loads_validation_files(task_directory):
+    (task_directory / "validation.py").write_text("print('validation')")
+    task_yaml = (task_directory / "task.yml").read_text()
+    task_yaml += """
+validation:
+  name: optimizer
+  version: optimizer-v1
+  main: validation.py
+  files:
+    - {name: submission.py, source: "@SUBMISSION@"}
+    - {name: validation.py, source: validation.py}
+  shapes:
+    - {batch: 2, n: 32, steps: 4}
+  settings:
+    min_speedup: 1.0
+  schedule:
+    hour: 22
+    timezone: America/Los_Angeles
+"""
+    (task_directory / "task.yml").write_text(task_yaml)
+
+    definition = make_task_definition(task_directory / "task.yml")
+    validation = definition.task.validation
+    assert validation is not None
+    assert validation.files == {
+        "submission.py": "@SUBMISSION@",
+        "validation.py": "print('validation')",
+    }
+    assert validation.schedule.hour == 22
+    assert validation.schedule.timezone == "America/Los_Angeles"

@@ -50,6 +50,56 @@ async def test_modal_submission_uses_native_async_api():
 
 
 @pytest.mark.asyncio
+async def test_modal_validation_uses_b200_validation_function():
+    launcher = ModalLauncher(add_include_dirs=[])
+    function = MagicMock()
+    expected = {"status": "completed", "result": {"fully_validated": True}}
+    function.remote.aio = AsyncMock(return_value=expected)
+    config = {"version": "v1"}
+
+    with patch(
+        "libkernelbot.launchers.modal.modal.Function.from_name",
+        return_value=function,
+    ) as from_name:
+        result = await launcher.run_validation(
+            config,
+            get_gpu_by_name("B200"),
+        )
+
+    assert result == expected
+    from_name.assert_called_once_with(
+        "discord-bot-runner",
+        "run_validation_script_b200",
+    )
+    function.remote.aio.assert_awaited_once_with(config=config)
+
+
+@pytest.mark.asyncio
+async def test_modal_validation_can_target_debug_environment():
+    launcher = ModalLauncher(
+        add_include_dirs=[],
+        environment_name="cholesky-validation-debug",
+    )
+    function = MagicMock()
+    function.remote.aio = AsyncMock(return_value={"status": "completed"})
+
+    with patch(
+        "libkernelbot.launchers.modal.modal.Function.from_name",
+        return_value=function,
+    ) as from_name:
+        await launcher.run_validation(
+            {"version": "v1"},
+            get_gpu_by_name("B200"),
+        )
+
+    from_name.assert_called_once_with(
+        "discord-bot-runner",
+        "run_validation_script_b200",
+        environment_name="cholesky-validation-debug",
+    )
+
+
+@pytest.mark.asyncio
 async def test_modal_queue_status_uses_function_stats():
     launcher = ModalLauncher(add_include_dirs=[])
     function = MagicMock()

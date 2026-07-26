@@ -28,6 +28,51 @@ TestCaseType = Dict[str, Union[int, str]]
 
 
 @dataclasses.dataclass
+class ValidationSchedule:
+    hour: int
+    minute: int = 0
+    timezone: str = "America/Los_Angeles"
+
+    def __post_init__(self):
+        if not 0 <= self.hour <= 23:
+            raise ValueError("validation schedule hour must be between 0 and 23")
+        if not 0 <= self.minute <= 59:
+            raise ValueError("validation schedule minute must be between 0 and 59")
+
+
+@dataclasses.dataclass
+class ApplicationValidation:
+    name: str
+    version: str
+    main: str
+    files: dict[str, str]
+    shapes: list[TestCaseType]
+    settings: dict[str, Union[bool, float, int, str]]
+    schedule: ValidationSchedule
+    timeout: int = 900
+    top_k: int = 10
+    max_concurrency: int = 2
+
+    def __post_init__(self):
+        if not self.name or not self.version:
+            raise ValueError("validation name and version must be non-empty")
+        if self.main not in self.files:
+            raise ValueError(f"validation main file {self.main!r} is not in validation files")
+        if "@SUBMISSION@" not in self.files.values():
+            raise ValueError("validation files must contain one @SUBMISSION@ source")
+        if not self.shapes:
+            raise ValueError("validation shapes must not be empty")
+        if self.timeout <= 0 or self.top_k <= 0 or self.max_concurrency <= 0:
+            raise ValueError("validation timeout, top_k, and max_concurrency must be positive")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ApplicationValidation":
+        values = copy.deepcopy(data)
+        values["schedule"] = ValidationSchedule(**values["schedule"])
+        return cls(**values)
+
+
+@dataclasses.dataclass
 class LeaderboardTask:
     """
     Dataclass containing the definition of a task for the leaderboard
@@ -62,6 +107,7 @@ class LeaderboardTask:
     ranking_by: RankCriterion = RankCriterion.LAST
     seed: Optional[int] = None
     multi_gpu: bool = False
+    validation: Optional[ApplicationValidation] = None
 
     def __post_init__(self):
         if self.lang == Language.Python and not isinstance(self.config, PythonTaskData):
@@ -77,6 +123,8 @@ class LeaderboardTask:
         data_["lang"] = lang
         data_["ranking_by"] = criterion
         data_["multi_gpu"] = data.get("multi_gpu", False)
+        if data.get("validation") is not None:
+            data_["validation"] = ApplicationValidation.from_dict(data["validation"])
         if lang == Language.Python:
             data_["config"] = PythonTaskData(**data["config"])
         else:
@@ -142,6 +190,19 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
             file_dict[name] = (root / source).read_text()
 
     raw["files"] = file_dict
+
+    validation = raw.get("validation")
+    if validation is not None:
+        validation_files = {}
+        for file_spec in validation["files"]:
+            name = file_spec["name"]
+            source = file_spec["source"]
+            validation_files[name] = (
+                "@SUBMISSION@"
+                if source == "@SUBMISSION@"
+                else (root / source).read_text()
+            )
+        validation["files"] = validation_files
 
     # load template files
     templates = {}
@@ -219,3 +280,25 @@ def build_task_config(
             "include_dirs": task.config.include_dirs,
             **common,
         }
+
+
+def build_validation_config(
+    task: LeaderboardTask,
+    submission_content: str,
+) -> dict:
+    validation = task.validation
+    if validation is None:
+        raise KernelBotError("leaderboard does not define application validation")
+    sources = {
+        name: submission_content if content == "@SUBMISSION@" else content
+        for name, content in validation.files.items()
+    }
+    return {
+        "name": validation.name,
+        "version": validation.version,
+        "main": validation.main,
+        "sources": sources,
+        "shapes": validation.shapes,
+        "settings": validation.settings,
+        "timeout": validation.timeout,
+    }

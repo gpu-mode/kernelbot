@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import datetime
+import json
 
 import pytest
 from test_report import sample_compile_result, sample_run_result, sample_system_info
@@ -88,6 +89,110 @@ def test_nested_enter(database):
     with database as db_outer:
         with db_outer as db_inner:
             assert db_inner.get_leaderboards() == []
+
+
+def test_application_validation_persistence(database, submit_leaderboard):
+    submitted_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    source = "def custom_kernel(matrix): return matrix"
+
+    with database as db:
+        db.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET task = jsonb_set(
+                task,
+                '{validation}',
+                %s::jsonb
+            )
+            WHERE id = %s
+            """,
+            (
+                json.dumps(
+                    {
+                        "name": "toy-training",
+                        "version": "v1",
+                        "main": "validation.py",
+                        "files": {
+                            "submission.py": "@SUBMISSION@",
+                            "validation.py": "print('ok')",
+                        },
+                        "shapes": [{"n": 1}],
+                        "settings": {},
+                        "schedule": {"hour": 22},
+                    }
+                ),
+                submit_leaderboard,
+            ),
+        )
+        db.connection.commit()
+        submission_id = db.create_submission(
+            "submit-leaderboard",
+            "submission.py",
+            5,
+            source,
+            submitted_at,
+            user_name="validator",
+        )
+        assert db.get_submission_code_for_validation(submission_id) == source
+
+        scheduled_for = datetime.date(2026, 7, 26)
+        sweep_id = db.claim_validation_sweep(
+            leaderboard_id=submit_leaderboard,
+            gpu_type="B200",
+            contract_version="v1",
+            scheduled_for=scheduled_for,
+            top_k=10,
+        )
+        assert sweep_id is not None
+        assert db.claim_validation_sweep(
+            leaderboard_id=submit_leaderboard,
+            gpu_type="B200",
+            contract_version="v1",
+            scheduled_for=scheduled_for,
+            top_k=10,
+        ) is None
+
+        db.upsert_submission_validation(
+            submission_id=submission_id,
+            gpu_type="B200",
+            contract_name="toy-training",
+            contract_version="v1",
+            status="completed",
+            passed_shapes=7,
+            total_shapes=8,
+            fully_validated=False,
+            geomean_sync_wall_speedup=1.2,
+            result={"passed_shapes": 7, "total_shapes": 8},
+        )
+        statuses = db.get_submission_validation_statuses(
+            [submission_id],
+            "B200",
+        )
+        assert statuses[submission_id]["validation_shapes_passed"] == 7
+        assert statuses[submission_id]["validation_shapes_total"] == 8
+        assert statuses[submission_id]["validation_fully_validated"] is False
+        assert statuses[submission_id]["validation_geomean_speedup"] == 1.2
+
+        db.upsert_submission_validation(
+            submission_id=submission_id,
+            gpu_type="B200",
+            contract_name="toy-training",
+            contract_version="v1",
+            status="completed",
+            passed_shapes=8,
+            total_shapes=8,
+            fully_validated=True,
+            geomean_sync_wall_speedup=1.3,
+            result={"passed_shapes": 8, "total_shapes": 8},
+        )
+        statuses = db.get_submission_validation_statuses(
+            [submission_id],
+            "B200",
+        )
+        assert statuses[submission_id]["validation_fully_validated"] is True
+        assert statuses[submission_id]["validation_geomean_speedup"] == 1.3
+
+        db.complete_validation_sweep(sweep_id, status="completed")
 
 
 def test_leaderboard_basics(database, task_directory):

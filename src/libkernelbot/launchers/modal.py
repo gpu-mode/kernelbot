@@ -13,9 +13,26 @@ logger = setup_logging(__name__)
 
 
 class ModalLauncher(Launcher):
-    def __init__(self, add_include_dirs: list):
+    def __init__(
+        self,
+        add_include_dirs: list,
+        environment_name: str | None = None,
+    ):
         super().__init__("Modal", gpus=ModalGPU)
         self.additional_include_dirs = add_include_dirs
+        self.environment_name = environment_name
+
+    def _lookup_function(self, func_name: str):
+        kwargs = (
+            {"environment_name": self.environment_name}
+            if self.environment_name
+            else {}
+        )
+        return modal.Function.from_name(
+            "discord-bot-runner",
+            func_name,
+            **kwargs,
+        )
 
     async def run_submission(
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
@@ -28,12 +45,22 @@ class ModalLauncher(Launcher):
 
         await status.push("⏳ Waiting for Modal run to finish...")
 
-        function = modal.Function.from_name("discord-bot-runner", func_name)
+        function = self._lookup_function(func_name)
         result = await function.remote.aio(config=config)
 
         await status.update("✅ Waiting for modal run to finish... Done")
 
         return result
+
+    async def run_validation(self, config: dict, gpu_type: GPU) -> dict:
+        func_name = f"run_validation_script_{gpu_type.value.lower()}"
+        logger.info(
+            "Starting Modal application validation using %s for contract %s",
+            func_name,
+            config.get("version"),
+        )
+        function = self._lookup_function(func_name)
+        return await function.remote.aio(config=config)
 
     def _function_name(self, config: dict, gpu_type: GPU) -> str:
         func_type = "pytorch" if config["lang"] == "py" else "cuda"
@@ -48,9 +75,7 @@ class ModalLauncher(Launcher):
         try:
             stats = await loop.run_in_executor(
                 None,
-                lambda: modal.Function.from_name(
-                    "discord-bot-runner", func_name
-                ).get_current_stats(),
+                lambda: self._lookup_function(func_name).get_current_stats(),
             )
         except Exception as e:
             logger.warning("Could not get Modal queue stats for %s", func_name, exc_info=e)

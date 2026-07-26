@@ -26,13 +26,32 @@ def mock_background_manager():
 
 
 @pytest.fixture
-def test_client(mock_backend, mock_background_manager):
+def mock_validation_service():
+    service = MagicMock()
+    service.run_sweep = AsyncMock(
+        return_value={
+            "status": "completed",
+            "leaderboard": "cholesky",
+            "gpu_type": "B200",
+        }
+    )
+    return service
+
+
+@pytest.fixture
+def test_client(mock_backend, mock_background_manager, mock_validation_service):
     """Create a test client with mocked backend."""
     # Patch env before importing the app
     with patch.dict('os.environ', {'ADMIN_TOKEN': 'test_token'}):
-        from kernelbot.api.main import app, init_api, init_background_submission_manager
+        from kernelbot.api.main import (
+            app,
+            init_api,
+            init_application_validation_service,
+            init_background_submission_manager,
+        )
         init_api(mock_backend)
         init_background_submission_manager(mock_background_manager)
+        init_application_validation_service(mock_validation_service)
         yield TestClient(app)
 
 
@@ -90,6 +109,46 @@ class TestAdminStartStop:
         assert response.json() == {"status": "ok", "accepts_jobs": False}
         assert mock_backend.accepts_jobs is False
 
+
+class TestAdminApplicationValidation:
+    def test_manual_validation_can_wait_for_debug_result(
+        self,
+        test_client,
+        mock_validation_service,
+    ):
+        response = test_client.post(
+            "/admin/application-validations/cholesky/B200?wait=true",
+            headers={"Authorization": "Bearer test_token"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        mock_validation_service.run_sweep.assert_awaited_once_with(
+            "cholesky",
+            "B200",
+            scheduled_for=None,
+        )
+
+    def test_manual_validation_is_async_by_default(
+        self,
+        test_client,
+        mock_validation_service,
+    ):
+        response = test_client.post(
+            "/admin/application-validations/cholesky/B200",
+            headers={"Authorization": "Bearer test_token"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "accepted",
+            "leaderboard": "cholesky",
+            "gpu_type": "B200",
+        }
+        mock_validation_service.enqueue_manual_sweep.assert_called_once_with(
+            "cholesky",
+            "B200",
+        )
 
 class TestRunnerQueue:
     def test_get_runner_queue(self, test_client, mock_backend):

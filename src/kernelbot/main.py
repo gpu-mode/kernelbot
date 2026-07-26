@@ -4,7 +4,12 @@ import os
 
 import discord
 import uvicorn
-from api.main import app, init_api, init_background_submission_manager
+from api.main import (
+    app,
+    init_api,
+    init_application_validation_service,
+    init_background_submission_manager,
+)
 from cogs.admin_cog import AdminCog
 from cogs.leaderboard_cog import LeaderboardCog
 from cogs.misc_cog import BotManagerCog
@@ -15,6 +20,7 @@ from discord.ext import commands
 from env import env, init_environment
 
 from libkernelbot import consts
+from libkernelbot.application_validation import ApplicationValidationService
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.launchers import GitHubLauncher, ModalLauncher
@@ -26,7 +32,12 @@ logger = setup_logging(__name__)
 def create_backend(debug_mode: bool = False) -> KernelBackend:
     """Create and configure a KernelBackend with launchers."""
     backend = KernelBackend(env=env, debug_mode=debug_mode)
-    backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
+    backend.register_launcher(
+        ModalLauncher(
+            consts.MODAL_CUDA_INCLUDE_DIRS,
+            environment_name=env.MODAL_ENVIRONMENT,
+        )
+    )
     backend.register_launcher(
         GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
     )
@@ -50,11 +61,20 @@ async def run_api_server(backend: KernelBackend):
     init_api(backend)
     manager = init_background_submission_manager(BackgroundSubmissionManager(backend))
     await manager.start()
+    validation_service = init_application_validation_service(
+        ApplicationValidationService(
+            backend,
+            enabled=env.APPLICATION_VALIDATION_ENABLED,
+            poll_seconds=env.APPLICATION_VALIDATION_POLL_SECONDS,
+        )
+    )
+    await validation_service.start()
 
     server = create_uvicorn_server()
     try:
         await server.serve()
     finally:
+        await validation_service.stop()
         await manager.stop()
 
 
@@ -241,9 +261,9 @@ class ClusterBot(commands.Bot):
             raise e
 
 
-async def start_api_only():
+async def start_api_only(debug_mode: bool = False):
     """Start only the FastAPI server without Discord bot."""
-    backend = create_backend(debug_mode=False)
+    backend = create_backend(debug_mode=debug_mode)
     await run_api_server(backend)
 
 
@@ -258,6 +278,14 @@ async def start_bot_and_api(debug_mode: bool):
     init_api(bot_instance.backend)
     manager = init_background_submission_manager(BackgroundSubmissionManager(bot_instance.backend))
     await manager.start()
+    validation_service = init_application_validation_service(
+        ApplicationValidationService(
+            bot_instance.backend,
+            enabled=env.APPLICATION_VALIDATION_ENABLED,
+            poll_seconds=env.APPLICATION_VALIDATION_POLL_SECONDS,
+        )
+    )
+    await validation_service.start()
 
     server = create_uvicorn_server()
     try:
@@ -266,6 +294,7 @@ async def start_bot_and_api(debug_mode: bool):
             server.serve(),
         )
     finally:
+        await validation_service.stop()
         await manager.stop()
 
 def on_unhandled_exception(loop, context):
@@ -283,9 +312,9 @@ def main():
 
     if args.api_only:
         logger.info("Starting API server only (no Discord bot)...")
-        with asyncio.Runner() as runner:
+        with asyncio.Runner(debug=args.debug) as runner:
             runner.get_loop().set_exception_handler(on_unhandled_exception)
-            runner.run(start_api_only())
+            runner.run(start_api_only(debug_mode=args.debug))
     else:
         logger.info("Starting kernelbot and API server...")
         with asyncio.Runner(debug=args.debug) as runner:

@@ -34,6 +34,13 @@ class LeaderboardRankedEntry(TypedDict):
     user_id: int
     user_name: str
     gpu_type: str
+    validation_status: NotRequired[Optional[str]]
+    validation_shapes_passed: NotRequired[Optional[int]]
+    validation_shapes_total: NotRequired[Optional[int]]
+    validation_fully_validated: NotRequired[Optional[bool]]
+    validation_geomean_speedup: NotRequired[Optional[float]]
+    validation_contract_version: NotRequired[Optional[str]]
+    validation_checked_at: NotRequired[Optional[datetime.datetime]]
 
 
 class RunItem(TypedDict):
