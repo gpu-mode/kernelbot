@@ -54,10 +54,13 @@ python src/kernelbot/main.py --api-only --debug
 Run one sweep synchronously:
 
 ```bash
-curl -X POST \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
-  "http://localhost:8000/admin/application-validations/cholesky/B200?wait=true"
+kernelbot-admin --api-url http://localhost:8000 \
+  validate-top10 cholesky B200 --wait
 ```
+
+Omit `--wait` to enqueue the sweep and return immediately. The command reads
+`ADMIN_TOKEN` and, unless `--api-url` is supplied,
+`DISCORD_CLUSTER_MANAGER_API_BASE_URL` from the environment.
 
 Roll out KernelBot's migration and runner first, then the reference-kernels
 contract, then the Kernelboard badge.
