@@ -503,7 +503,6 @@ async def admin_run_application_validation(
         return await application_validation_service.run_sweep(
             leaderboard_name,
             gpu_type,
-            scheduled_for=None,
             all_users=all_users,
             only_missing=only_missing,
         )

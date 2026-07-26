@@ -1,13 +1,9 @@
 import asyncio
-import datetime
 from types import SimpleNamespace
 
 import pytest
 
-from libkernelbot.application_validation import (
-    ApplicationValidationService,
-    _due_date,
-)
+from libkernelbot.application_validation import ApplicationValidationService
 from libkernelbot.task import LeaderboardTask
 
 
@@ -52,9 +48,6 @@ class FakeDB:
 
     def __exit__(self, *_args):
         return None
-
-    def get_leaderboards(self):
-        return [self.leaderboard]
 
     def get_leaderboard(self, name):
         assert name == "cholesky"
@@ -128,15 +121,6 @@ class FakeLauncher:
         }
 
 
-def test_due_date_uses_problem_timezone():
-    assert _due_date(
-        datetime.datetime(2026, 7, 27, 4, 59, tzinfo=datetime.timezone.utc),
-    ) is None
-    assert _due_date(
-        datetime.datetime(2026, 7, 27, 5, 0, tzinfo=datetime.timezone.utc),
-    ) == datetime.date(2026, 7, 26)
-
-
 @pytest.mark.asyncio
 async def test_sweep_validates_top_ten_with_bounded_concurrency():
     database = FakeDB()
@@ -147,7 +131,6 @@ async def test_sweep_validates_top_ten_with_bounded_concurrency():
     summary = await service.run_sweep(
         "cholesky",
         "B200",
-        scheduled_for=datetime.date(2026, 7, 26),
     )
 
     assert summary["status"] == "completed"
@@ -170,7 +153,6 @@ async def test_manual_sweep_can_validate_every_ranked_user():
     summary = await service.run_sweep(
         "cholesky",
         "B200",
-        scheduled_for=None,
         all_users=True,
     )
 
@@ -193,7 +175,6 @@ async def test_manual_sweep_can_validate_only_missing_users():
     summary = await service.run_sweep(
         "cholesky",
         "B200",
-        scheduled_for=None,
         all_users=True,
         only_missing=True,
     )
@@ -212,19 +193,3 @@ async def test_manual_sweep_can_validate_only_missing_users():
     ]
     assert database.requested_limits == [None]
     assert launcher.max_active == 2
-
-
-@pytest.mark.asyncio
-async def test_nightly_sweep_is_claimed_once():
-    database = FakeDB()
-    launcher = FakeLauncher()
-    backend = SimpleNamespace(db=database, launcher_map={"B200": launcher})
-    service = ApplicationValidationService(backend)
-    now = datetime.datetime(2026, 7, 27, 5, 1, tzinfo=datetime.timezone.utc)
-
-    first = await service.run_due_once(now)
-    second = await service.run_due_once(now)
-
-    assert first[0]["status"] == "completed"
-    assert second[0]["status"] == "already_claimed"
-    assert len(database.saved) == 10

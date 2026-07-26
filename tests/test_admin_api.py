@@ -126,7 +126,6 @@ class TestAdminApplicationValidation:
         mock_validation_service.run_sweep.assert_awaited_once_with(
             "cholesky",
             "B200",
-            scheduled_for=None,
             all_users=False,
             only_missing=False,
         )
