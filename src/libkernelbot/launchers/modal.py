@@ -35,6 +35,16 @@ class ModalLauncher(Launcher):
 
         return result
 
+    async def run_validation(self, config: dict, gpu_type: GPU) -> dict:
+        func_name = f"run_validation_script_{gpu_type.value.lower()}"
+        logger.info(
+            "Starting Modal application validation using %s for contract %s",
+            func_name,
+            config.get("version"),
+        )
+        function = modal.Function.from_name("discord-bot-runner", func_name)
+        return await function.remote.aio(config=config)
+
     def _function_name(self, config: dict, gpu_type: GPU) -> str:
         func_type = "pytorch" if config["lang"] == "py" else "cuda"
         return f"run_{func_type}_script_{gpu_type.value.lower()}"

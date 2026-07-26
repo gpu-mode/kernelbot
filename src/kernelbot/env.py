@@ -42,6 +42,10 @@ env.PROBLEM_DEV_DIR = os.getenv("PROBLEM_DEV_DIR", "examples")
 # PostgreSQL-specific constants
 env.DATABASE_URL = os.getenv("DATABASE_URL")
 env.DISABLE_SSL = os.getenv("DISABLE_SSL")
+env.APPLICATION_VALIDATION_ENABLED = os.getenv(
+    "APPLICATION_VALIDATION_ENABLED",
+    "true",
+).lower() in {"1", "true", "yes"}
 
 
 def init_environment(skip_discord: bool = False):

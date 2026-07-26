@@ -880,6 +880,139 @@ class LeaderboardDB:
             logger.exception("Error setting leaderboard visibility", exc_info=e)
             raise KernelBotError("Error setting leaderboard visibility") from e
 
+    def claim_validation_sweep(
+        self,
+        *,
+        leaderboard_id: int,
+        gpu_type: str,
+        contract_version: str,
+        scheduled_for: Optional[datetime.date],
+    ) -> Optional[int]:
+        """Atomically claim a nightly validation sweep.
+
+        ``scheduled_for=None`` is reserved for explicit admin-triggered sweeps and
+        intentionally permits more than one run.
+        """
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.validation_sweep (
+                    leaderboard_id, gpu_type, contract_version, scheduled_for,
+                    status
+                )
+                VALUES (%s, %s, %s, %s, 'running')
+                ON CONFLICT (leaderboard_id, gpu_type, contract_version, scheduled_for)
+                    DO NOTHING
+                RETURNING id
+                """,
+                (leaderboard_id, gpu_type, contract_version, scheduled_for),
+            )
+            row = self.cursor.fetchone()
+            self.connection.commit()
+            return row[0] if row is not None else None
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error claiming application validation sweep", exc_info=e)
+            raise KernelBotError("Could not claim application validation sweep") from e
+
+    def complete_validation_sweep(
+        self,
+        sweep_id: int,
+        *,
+        status: str,
+        error: Optional[str] = None,
+    ) -> None:
+        if status not in {"completed", "failed"}:
+            raise ValueError("validation sweep status must be completed or failed")
+        try:
+            self.cursor.execute(
+                """
+                UPDATE leaderboard.validation_sweep
+                SET status = %s, error = %s, completed_at = NOW()
+                WHERE id = %s
+                """,
+                (status, error, sweep_id),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error completing application validation sweep", exc_info=e)
+            raise KernelBotError("Could not complete application validation sweep") from e
+
+    def get_submission_code_for_validation(self, submission_id: int) -> str:
+        """Fetch submitted source for an isolated validation runner.
+
+        Callers must not log the returned value.
+        """
+        self.cursor.execute(
+            """
+            SELECT c.code
+            FROM leaderboard.submission s
+            JOIN leaderboard.code_files c ON c.id = s.code_id
+            WHERE s.id = %s
+            """,
+            (submission_id,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            raise KernelBotError(f"Submission {submission_id} does not exist", code=404)
+        return bytes(row[0]).decode("utf-8")
+
+    def upsert_submission_validation(
+        self,
+        *,
+        submission_id: int,
+        gpu_type: str,
+        contract_version: str,
+        status: str,
+        passed_shapes: int,
+        total_shapes: int,
+        fully_validated: bool,
+        geomean_sync_wall_speedup: Optional[float],
+        result: dict,
+        error: Optional[str] = None,
+    ) -> None:
+        if status not in {"completed", "failed"}:
+            raise ValueError("submission validation status must be completed or failed")
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO leaderboard.submission_validation (
+                    submission_id, gpu_type, contract_version,
+                    status, passed_shapes, total_shapes, fully_validated,
+                    geomean_sync_wall_speedup, result, error
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (submission_id, gpu_type, contract_version)
+                DO UPDATE SET
+                    status = EXCLUDED.status,
+                    passed_shapes = EXCLUDED.passed_shapes,
+                    total_shapes = EXCLUDED.total_shapes,
+                    fully_validated = EXCLUDED.fully_validated,
+                    geomean_sync_wall_speedup = EXCLUDED.geomean_sync_wall_speedup,
+                    result = EXCLUDED.result,
+                    error = EXCLUDED.error,
+                    checked_at = NOW()
+                """,
+                (
+                    submission_id,
+                    gpu_type,
+                    contract_version,
+                    status,
+                    passed_shapes,
+                    total_shapes,
+                    fully_validated,
+                    geomean_sync_wall_speedup,
+                    json.dumps(result),
+                    error,
+                ),
+            )
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            logger.exception("Error saving submission application validation", exc_info=e)
+            raise KernelBotError("Could not save submission application validation") from e
+
     def get_leaderboard_submissions(
         self,
         leaderboard_name: str,
@@ -1025,7 +1158,6 @@ class LeaderboardDB:
                 raise KernelBotError(
                     f"Invalid GPU type '{gpu_name}' for leaderboard '{leaderboard_name}'"
                 )
-
         return result
 
     def generate_stats(self, last_day: bool, leaderboard_name: Optional[str] = None):

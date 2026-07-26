@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import datetime
+import json
 
 import pytest
 from test_report import sample_compile_result, sample_run_result, sample_system_info
@@ -88,6 +89,103 @@ def test_nested_enter(database):
     with database as db_outer:
         with db_outer as db_inner:
             assert db_inner.get_leaderboards() == []
+
+
+def test_application_validation_persistence(database, submit_leaderboard):
+    submitted_at = datetime.datetime.now(tz=datetime.timezone.utc)
+    source = "def custom_kernel(matrix): return matrix"
+
+    with database as db:
+        db.cursor.execute(
+            """
+            UPDATE leaderboard.leaderboard
+            SET task = jsonb_set(
+                task,
+                '{validation}',
+                %s::jsonb
+            )
+            WHERE id = %s
+            """,
+            (
+                json.dumps(
+                    {
+                        "version": "v1",
+                        "source": "print('ok')",
+                    }
+                ),
+                submit_leaderboard,
+            ),
+        )
+        db.connection.commit()
+        submission_id = db.create_submission(
+            "submit-leaderboard",
+            "submission.py",
+            5,
+            source,
+            submitted_at,
+            user_name="validator",
+        )
+        assert db.get_submission_code_for_validation(submission_id) == source
+
+        scheduled_for = datetime.date(2026, 7, 26)
+        sweep_id = db.claim_validation_sweep(
+            leaderboard_id=submit_leaderboard,
+            gpu_type="B200",
+            contract_version="v1",
+            scheduled_for=scheduled_for,
+        )
+        assert sweep_id is not None
+        assert db.claim_validation_sweep(
+            leaderboard_id=submit_leaderboard,
+            gpu_type="B200",
+            contract_version="v1",
+            scheduled_for=scheduled_for,
+        ) is None
+
+        db.upsert_submission_validation(
+            submission_id=submission_id,
+            gpu_type="B200",
+            contract_version="v1",
+            status="completed",
+            passed_shapes=7,
+            total_shapes=8,
+            fully_validated=False,
+            geomean_sync_wall_speedup=1.2,
+            result={"passed_shapes": 7, "total_shapes": 8},
+        )
+        db.cursor.execute(
+            """
+            SELECT passed_shapes, total_shapes, fully_validated,
+                   geomean_sync_wall_speedup
+            FROM leaderboard.submission_validation
+            WHERE submission_id = %s AND gpu_type = 'B200'
+            """,
+            (submission_id,),
+        )
+        assert db.cursor.fetchone() == (7, 8, False, 1.2)
+
+        db.upsert_submission_validation(
+            submission_id=submission_id,
+            gpu_type="B200",
+            contract_version="v1",
+            status="completed",
+            passed_shapes=8,
+            total_shapes=8,
+            fully_validated=True,
+            geomean_sync_wall_speedup=1.3,
+            result={"passed_shapes": 8, "total_shapes": 8},
+        )
+        db.cursor.execute(
+            """
+            SELECT fully_validated, geomean_sync_wall_speedup
+            FROM leaderboard.submission_validation
+            WHERE submission_id = %s AND gpu_type = 'B200'
+            """,
+            (submission_id,),
+        )
+        assert db.cursor.fetchone() == (True, 1.3)
+
+        db.complete_validation_sweep(sweep_id, status="completed")
 
 
 def test_leaderboard_basics(database, task_directory):

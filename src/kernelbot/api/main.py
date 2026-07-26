@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Upl
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from kernelbot.env import env
+from libkernelbot.application_validation import ApplicationValidationService
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
 from libkernelbot.consts import SubmissionMode
@@ -54,6 +55,7 @@ def json_serializer(obj):
 
 backend_instance: KernelBackend = None
 background_submission_manager: BackgroundSubmissionManager = None
+application_validation_service: ApplicationValidationService = None
 
 _last_action = time.time()
 _submit_limiter = asyncio.Semaphore(3)
@@ -87,6 +89,12 @@ def init_background_submission_manager(_manager: BackgroundSubmissionManager):
     global background_submission_manager
     background_submission_manager = _manager
     return background_submission_manager
+
+
+def init_application_validation_service(_service: ApplicationValidationService):
+    global application_validation_service
+    application_validation_service = _service
+    return application_validation_service
 
 
 @app.exception_handler(KernelBotError)
@@ -475,6 +483,35 @@ async def admin_unban_user(
     if not found:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
     return {"status": "ok", "user_id": user_id, "banned": False}
+
+
+@app.post("/admin/application-validations/{leaderboard_name}/{gpu_type}")
+async def admin_run_application_validation(
+    leaderboard_name: str,
+    gpu_type: str,
+    _: Annotated[None, Depends(require_admin)],
+    wait: bool = Query(False),
+) -> dict:
+    if application_validation_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Application validation service is not initialized",
+        )
+    if wait:
+        return await application_validation_service.run_sweep(
+            leaderboard_name,
+            gpu_type,
+            scheduled_for=None,
+        )
+    application_validation_service.enqueue_manual_sweep(
+        leaderboard_name,
+        gpu_type,
+    )
+    return {
+        "status": "accepted",
+        "leaderboard": leaderboard_name,
+        "gpu_type": gpu_type,
+    }
 
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")

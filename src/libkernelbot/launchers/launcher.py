@@ -28,6 +28,9 @@ class Launcher:
     async def run_submission(self, config: dict, gpu_type: GPU, status: RunProgressReporter):
         raise NotImplementedError()
 
+    async def run_validation(self, config: dict, gpu_type: GPU) -> dict:
+        raise NotImplementedError(f"{self.name} does not support application validation")
+
     async def get_queue_status(
         self, gpu_type: GPU, config: dict | None = None
     ) -> RunnerQueueStatus:

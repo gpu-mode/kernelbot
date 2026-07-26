@@ -28,6 +28,16 @@ TestCaseType = Dict[str, Union[int, str]]
 
 
 @dataclasses.dataclass
+class ApplicationValidation:
+    version: str
+    source: str
+
+    def __post_init__(self):
+        if not self.version or not self.source:
+            raise ValueError("validation version and source must be non-empty")
+
+
+@dataclasses.dataclass
 class LeaderboardTask:
     """
     Dataclass containing the definition of a task for the leaderboard
@@ -62,6 +72,7 @@ class LeaderboardTask:
     ranking_by: RankCriterion = RankCriterion.LAST
     seed: Optional[int] = None
     multi_gpu: bool = False
+    validation: Optional[ApplicationValidation] = None
 
     def __post_init__(self):
         if self.lang == Language.Python and not isinstance(self.config, PythonTaskData):
@@ -77,6 +88,8 @@ class LeaderboardTask:
         data_["lang"] = lang
         data_["ranking_by"] = criterion
         data_["multi_gpu"] = data.get("multi_gpu", False)
+        if data.get("validation") is not None:
+            data_["validation"] = ApplicationValidation(**data["validation"])
         if lang == Language.Python:
             data_["config"] = PythonTaskData(**data["config"])
         else:
@@ -142,6 +155,10 @@ def make_task_definition(yaml_file: str | Path) -> LeaderboardDefinition:  # noq
             file_dict[name] = (root / source).read_text()
 
     raw["files"] = file_dict
+
+    validation = raw.get("validation")
+    if validation is not None:
+        validation["source"] = (root / validation.pop("script")).read_text()
 
     # load template files
     templates = {}
@@ -219,3 +236,23 @@ def build_task_config(
             "include_dirs": task.config.include_dirs,
             **common,
         }
+
+
+def build_validation_config(
+    task: LeaderboardTask,
+    submission_content: str,
+) -> dict:
+    validation = task.validation
+    if validation is None:
+        raise KernelBotError("leaderboard does not define application validation")
+    sources = {
+        name: submission_content if content == "@SUBMISSION@" else content
+        for name, content in task.files.items()
+    }
+    sources["validation.py"] = validation.source
+    return {
+        "version": validation.version,
+        "main": "validation.py",
+        "sources": sources,
+        "timeout": 900,
+    }

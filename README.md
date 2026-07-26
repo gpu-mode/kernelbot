@@ -34,6 +34,8 @@ yoyo apply src/migrations -d postgresql://user:password@localhost/clusterdev
 See [docs/database.md](docs/database.md) for migration patterns and creating new migrations.
 
 For production incident triage, see [docs/production-debugging.md](docs/production-debugging.md).
+For nightly end-to-end kernel checks, see
+[docs/application-validation.md](docs/application-validation.md).
 
 ### Environment Variables
 
@@ -52,6 +54,7 @@ PROBLEM_DEV_DIR=examples
 DISABLE_SSL=1           # Set for local development
 GITHUB_TOKEN_BACKUP=    # Fallback token for rate limiting
 ADMIN_TOKEN=            # Token for admin API endpoints
+APPLICATION_VALIDATION_ENABLED=true
 
 # Discord bot (only needed if testing Discord integration)
 # See docs/discord.md for setup instructions

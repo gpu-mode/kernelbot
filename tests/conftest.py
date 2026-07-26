@@ -48,7 +48,8 @@ def docker_compose(project_root: Path):
 
 def _nuke_contents(db):
     db.cursor.execute(
-        "TRUNCATE leaderboard.code_files, leaderboard.submission, leaderboard.runs, "
+        "TRUNCATE leaderboard.submission_validation, leaderboard.validation_sweep, "
+        "leaderboard.code_files, leaderboard.submission, leaderboard.runs, "
         "leaderboard.leaderboard, leaderboard.user_info, leaderboard.templates, "
         "leaderboard.gpu_type, leaderboard.leaderboard_invite_scope, "
         "leaderboard.leaderboard_invite, leaderboard.rate_limit RESTART IDENTITY CASCADE"

@@ -37,6 +37,9 @@ dev = [
     "pytest-asyncio"
 ]
 
+[project.scripts]
+kernelbot-admin = "kernelbot.admin_cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
