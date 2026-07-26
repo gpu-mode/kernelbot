@@ -44,6 +44,7 @@ class FakeDB:
         self.claims = set()
         self.saved = []
         self.sweeps = []
+        self.requested_limits = []
 
     def __enter__(self):
         return self
@@ -73,6 +74,7 @@ class FakeDB:
         return len(self.claims)
 
     def get_leaderboard_submissions(self, _name, _gpu, limit):
+        self.requested_limits.append(limit)
         return self.submissions[:limit]
 
     def get_submission_code_for_validation(self, submission_id):
@@ -143,6 +145,29 @@ async def test_sweep_validates_top_ten_with_bounded_concurrency():
     assert database.sweeps == [(1, "completed", None)]
     assert database.saved[0]["fully_validated"] is True
     assert database.saved[0]["result"]["results"][0]["unexpected_private_field"] == "drop me"
+    assert database.requested_limits == [10]
+
+
+@pytest.mark.asyncio
+async def test_manual_sweep_can_validate_every_ranked_user():
+    database = FakeDB()
+    launcher = FakeLauncher()
+    backend = SimpleNamespace(db=database, launcher_map={"B200": launcher})
+    service = ApplicationValidationService(backend)
+
+    summary = await service.run_sweep(
+        "cholesky",
+        "B200",
+        scheduled_for=None,
+        all_users=True,
+    )
+
+    assert summary["status"] == "completed"
+    assert summary["all_users"] is True
+    assert len(summary["results"]) == 12
+    assert len(database.saved) == 12
+    assert database.requested_limits == [None]
+    assert launcher.max_active == 2
 
 
 @pytest.mark.asyncio

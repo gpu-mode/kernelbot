@@ -20,10 +20,13 @@ def _validate_top10(args: argparse.Namespace) -> int:
         quote(args.leaderboard, safe=""),
         quote(args.gpu, safe=""),
     )
+    params = {"wait": str(args.wait).lower()}
+    if args.all_users:
+        params["all_users"] = "true"
     response = requests.post(
         f"{api_url.rstrip('/')}{path}",
         headers={"Authorization": f"Bearer {token}"},
-        params={"wait": str(args.wait).lower()},
+        params=params,
         timeout=None if args.wait else 30,
     )
     response.raise_for_status()
@@ -48,6 +51,11 @@ def _parser() -> argparse.ArgumentParser:
         "--wait",
         action="store_true",
         help="Wait for all validation jobs and print their results",
+    )
+    validate.add_argument(
+        "--all-users",
+        action="store_true",
+        help="Validate every ranked user's best submission instead of only the top 10",
     )
     validate.set_defaults(run=_validate_top10)
     return parser

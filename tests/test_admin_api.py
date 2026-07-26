@@ -127,6 +127,7 @@ class TestAdminApplicationValidation:
             "cholesky",
             "B200",
             scheduled_for=None,
+            all_users=False,
         )
 
     def test_manual_validation_is_async_by_default(
@@ -144,10 +145,35 @@ class TestAdminApplicationValidation:
             "status": "accepted",
             "leaderboard": "cholesky",
             "gpu_type": "B200",
+            "all_users": False,
         }
         mock_validation_service.enqueue_manual_sweep.assert_called_once_with(
             "cholesky",
             "B200",
+            all_users=False,
+        )
+
+    def test_manual_validation_can_enqueue_all_users(
+        self,
+        test_client,
+        mock_validation_service,
+    ):
+        response = test_client.post(
+            "/admin/application-validations/cholesky/B200?all_users=true",
+            headers={"Authorization": "Bearer test_token"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "accepted",
+            "leaderboard": "cholesky",
+            "gpu_type": "B200",
+            "all_users": True,
+        }
+        mock_validation_service.enqueue_manual_sweep.assert_called_once_with(
+            "cholesky",
+            "B200",
+            all_users=True,
         )
 
 class TestRunnerQueue:

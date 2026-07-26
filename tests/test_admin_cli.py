@@ -65,6 +65,38 @@ def test_validate_top10_can_wait_and_url_encodes_names():
     )
 
 
+def test_validate_top10_can_override_scope_to_all_users():
+    response = Mock()
+    response.json.return_value = {"status": "accepted", "all_users": True}
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "DISCORD_CLUSTER_MANAGER_API_BASE_URL": "https://kernelbot.test",
+                "ADMIN_TOKEN": "secret",
+            },
+        ),
+        patch("kernelbot.admin_cli.requests.post", return_value=response) as post,
+        patch(
+            "sys.argv",
+            [
+                "kernelbot-admin",
+                "validate-top10",
+                "cholesky",
+                "B200",
+                "--all-users",
+            ],
+        ),
+    ):
+        assert admin_cli.main() == 0
+
+    assert post.call_args.kwargs["params"] == {
+        "wait": "false",
+        "all_users": "true",
+    }
+
+
 def test_validate_top10_requires_admin_token():
     with (
         patch.dict(

@@ -101,9 +101,16 @@ class ApplicationValidationService:
         self,
         leaderboard_name: str,
         gpu_type: str,
+        *,
+        all_users: bool = False,
     ) -> None:
         task = asyncio.create_task(
-            self.run_sweep(leaderboard_name, gpu_type, scheduled_for=None),
+            self.run_sweep(
+                leaderboard_name,
+                gpu_type,
+                scheduled_for=None,
+                all_users=all_users,
+            ),
             name=f"manual-application-validation-{leaderboard_name}-{gpu_type}",
         )
         self._manual_tasks.add(task)
@@ -225,6 +232,7 @@ class ApplicationValidationService:
         gpu_type: str,
         *,
         scheduled_for: datetime.date | None,
+        all_users: bool = False,
     ) -> dict[str, Any]:
         with self.backend.db as db:
             leaderboard = db.get_leaderboard(leaderboard_name)
@@ -255,7 +263,7 @@ class ApplicationValidationService:
             submissions = db.get_leaderboard_submissions(
                 leaderboard_name,
                 gpu_type,
-                limit=TOP_K,
+                limit=None if all_users else TOP_K,
             )
 
         logger.info(
@@ -288,6 +296,7 @@ class ApplicationValidationService:
                 "gpu_type": gpu_type,
                 "scheduled_for": scheduled_for,
                 "contract_version": validation.version,
+                "all_users": all_users,
                 "results": results,
             }
         except Exception as exc:
