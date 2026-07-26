@@ -45,6 +45,7 @@ class FakeDB:
         self.saved = []
         self.sweeps = []
         self.requested_limits = []
+        self.validated_ids = set()
 
     def __enter__(self):
         return self
@@ -79,6 +80,17 @@ class FakeDB:
 
     def get_submission_code_for_validation(self, submission_id):
         return f"# submission {submission_id}"
+
+    def get_submission_validation_ids(
+        self,
+        submission_ids,
+        *,
+        gpu_type,
+        contract_version,
+    ):
+        assert gpu_type == "B200"
+        assert contract_version == "v1"
+        return set(submission_ids) & self.validated_ids
 
     def upsert_submission_validation(self, **values):
         self.saved.append(values)
@@ -166,6 +178,38 @@ async def test_manual_sweep_can_validate_every_ranked_user():
     assert summary["all_users"] is True
     assert len(summary["results"]) == 12
     assert len(database.saved) == 12
+    assert database.requested_limits == [None]
+    assert launcher.max_active == 2
+
+
+@pytest.mark.asyncio
+async def test_manual_sweep_can_validate_only_missing_users():
+    database = FakeDB()
+    database.validated_ids = {1, 2, 4, 8}
+    launcher = FakeLauncher()
+    backend = SimpleNamespace(db=database, launcher_map={"B200": launcher})
+    service = ApplicationValidationService(backend)
+
+    summary = await service.run_sweep(
+        "cholesky",
+        "B200",
+        scheduled_for=None,
+        all_users=True,
+        only_missing=True,
+    )
+
+    assert summary["status"] == "completed"
+    assert summary["only_missing"] is True
+    assert [result["submission_id"] for result in summary["results"]] == [
+        3,
+        5,
+        6,
+        7,
+        9,
+        10,
+        11,
+        12,
+    ]
     assert database.requested_limits == [None]
     assert launcher.max_active == 2
 

@@ -128,6 +128,7 @@ class TestAdminApplicationValidation:
             "B200",
             scheduled_for=None,
             all_users=False,
+            only_missing=False,
         )
 
     def test_manual_validation_is_async_by_default(
@@ -146,11 +147,13 @@ class TestAdminApplicationValidation:
             "leaderboard": "cholesky",
             "gpu_type": "B200",
             "all_users": False,
+            "only_missing": False,
         }
         mock_validation_service.enqueue_manual_sweep.assert_called_once_with(
             "cholesky",
             "B200",
             all_users=False,
+            only_missing=False,
         )
 
     def test_manual_validation_can_enqueue_all_users(
@@ -159,7 +162,8 @@ class TestAdminApplicationValidation:
         mock_validation_service,
     ):
         response = test_client.post(
-            "/admin/application-validations/cholesky/B200?all_users=true",
+            "/admin/application-validations/cholesky/B200"
+            "?all_users=true&only_missing=true",
             headers={"Authorization": "Bearer test_token"},
         )
 
@@ -169,11 +173,13 @@ class TestAdminApplicationValidation:
             "leaderboard": "cholesky",
             "gpu_type": "B200",
             "all_users": True,
+            "only_missing": True,
         }
         mock_validation_service.enqueue_manual_sweep.assert_called_once_with(
             "cholesky",
             "B200",
             all_users=True,
+            only_missing=True,
         )
 
 class TestRunnerQueue:

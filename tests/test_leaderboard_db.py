@@ -126,6 +126,11 @@ def test_application_validation_persistence(database, submit_leaderboard):
             user_name="validator",
         )
         assert db.get_submission_code_for_validation(submission_id) == source
+        assert db.get_submission_validation_ids(
+            [submission_id],
+            gpu_type="B200",
+            contract_version="v1",
+        ) == set()
 
         scheduled_for = datetime.date(2026, 7, 26)
         sweep_id = db.claim_validation_sweep(
@@ -153,6 +158,16 @@ def test_application_validation_persistence(database, submit_leaderboard):
             geomean_sync_wall_speedup=1.2,
             result={"passed_shapes": 7, "total_shapes": 8},
         )
+        assert db.get_submission_validation_ids(
+            [submission_id],
+            gpu_type="B200",
+            contract_version="v1",
+        ) == {submission_id}
+        assert db.get_submission_validation_ids(
+            [submission_id],
+            gpu_type="B200",
+            contract_version="v2",
+        ) == set()
         db.cursor.execute(
             """
             SELECT passed_shapes, total_shapes, fully_validated,

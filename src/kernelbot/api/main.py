@@ -492,6 +492,7 @@ async def admin_run_application_validation(
     _: Annotated[None, Depends(require_admin)],
     wait: bool = Query(False),
     all_users: bool = Query(False),
+    only_missing: bool = Query(False),
 ) -> dict:
     if application_validation_service is None:
         raise HTTPException(
@@ -504,17 +505,20 @@ async def admin_run_application_validation(
             gpu_type,
             scheduled_for=None,
             all_users=all_users,
+            only_missing=only_missing,
         )
     application_validation_service.enqueue_manual_sweep(
         leaderboard_name,
         gpu_type,
         all_users=all_users,
+        only_missing=only_missing,
     )
     return {
         "status": "accepted",
         "leaderboard": leaderboard_name,
         "gpu_type": gpu_type,
         "all_users": all_users,
+        "only_missing": only_missing,
     }
 
 

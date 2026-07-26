@@ -958,6 +958,28 @@ class LeaderboardDB:
             raise KernelBotError(f"Submission {submission_id} does not exist", code=404)
         return bytes(row[0]).decode("utf-8")
 
+    def get_submission_validation_ids(
+        self,
+        submission_ids: list[int],
+        *,
+        gpu_type: str,
+        contract_version: str,
+    ) -> set[int]:
+        """Return submissions that already have a result for this exact contract."""
+        if not submission_ids:
+            return set()
+        self.cursor.execute(
+            """
+            SELECT submission_id
+            FROM leaderboard.submission_validation
+            WHERE submission_id = ANY(%s)
+              AND gpu_type = %s
+              AND contract_version = %s
+            """,
+            (submission_ids, gpu_type, contract_version),
+        )
+        return {row[0] for row in self.cursor.fetchall()}
+
     def upsert_submission_validation(
         self,
         *,

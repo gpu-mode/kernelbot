@@ -23,6 +23,8 @@ def _validate_top10(args: argparse.Namespace) -> int:
     params = {"wait": str(args.wait).lower()}
     if args.all_users:
         params["all_users"] = "true"
+    if args.only_missing:
+        params["only_missing"] = "true"
     response = requests.post(
         f"{api_url.rstrip('/')}{path}",
         headers={"Authorization": f"Bearer {token}"},
@@ -56,6 +58,11 @@ def _parser() -> argparse.ArgumentParser:
         "--all-users",
         action="store_true",
         help="Validate every ranked user's best submission instead of only the top 10",
+    )
+    validate.add_argument(
+        "--only-missing",
+        action="store_true",
+        help="Skip exact submissions that already have a result for this contract",
     )
     validate.set_defaults(run=_validate_top10)
     return parser
