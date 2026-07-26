@@ -66,11 +66,13 @@ For a one-time backfill of every ranked user's current best submission, add
 `--all-users`:
 
 ```bash
-kernelbot-admin validate-top10 cholesky B200 --all-users
+kernelbot-admin validate-top10 cholesky B200 --all-users --only-missing
 ```
 
 This override applies only to the manual sweep. Scheduled sweeps remain capped
-at the top 10 users.
+at the top 10 users. `--only-missing` skips exact submissions that already have
+a result for the active validation contract, making it suitable for continuing
+a backfill after leaderboard changes.
 
 Roll out KernelBot's migration and runner first, then the reference-kernels
 contract, then the Kernelboard badge.

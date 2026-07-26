@@ -86,6 +86,7 @@ def test_validate_top10_can_override_scope_to_all_users():
                 "cholesky",
                 "B200",
                 "--all-users",
+                "--only-missing",
             ],
         ),
     ):
@@ -94,6 +95,7 @@ def test_validate_top10_can_override_scope_to_all_users():
     assert post.call_args.kwargs["params"] == {
         "wait": "false",
         "all_users": "true",
+        "only_missing": "true",
     }
 
 
