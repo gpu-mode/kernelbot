@@ -35,7 +35,6 @@ env.GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 env.GITHUB_REPO = os.getenv("GITHUB_REPO")
 env.GITHUB_WORKFLOW_BRANCH = os.getenv("GITHUB_WORKFLOW_BRANCH", get_github_branch_name())
 env.PROBLEMS_REPO = os.getenv("PROBLEMS_REPO")
-env.MODAL_ENVIRONMENT = os.getenv("MODAL_ENVIRONMENT")
 
 # Directory that will be used for local problem development.
 env.PROBLEM_DEV_DIR = os.getenv("PROBLEM_DEV_DIR", "examples")
@@ -47,9 +46,6 @@ env.APPLICATION_VALIDATION_ENABLED = os.getenv(
     "APPLICATION_VALIDATION_ENABLED",
     "true",
 ).lower() in {"1", "true", "yes"}
-env.APPLICATION_VALIDATION_POLL_SECONDS = int(
-    os.getenv("APPLICATION_VALIDATION_POLL_SECONDS", "60")
-)
 
 
 def init_environment(skip_discord: bool = False):

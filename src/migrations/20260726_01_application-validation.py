@@ -18,7 +18,6 @@ steps = [
             scheduled_for DATE,
             status TEXT NOT NULL
                 CHECK (status IN ('running', 'completed', 'failed')),
-            top_k INTEGER NOT NULL CHECK (top_k > 0),
             started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             completed_at TIMESTAMPTZ,
             error TEXT,
@@ -30,7 +29,6 @@ steps = [
             submission_id INTEGER NOT NULL
                 REFERENCES leaderboard.submission(id) ON DELETE CASCADE,
             gpu_type TEXT NOT NULL,
-            contract_name TEXT NOT NULL,
             contract_version TEXT NOT NULL,
             status TEXT NOT NULL
                 CHECK (status IN ('completed', 'failed')),

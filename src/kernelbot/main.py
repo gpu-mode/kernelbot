@@ -32,12 +32,7 @@ logger = setup_logging(__name__)
 def create_backend(debug_mode: bool = False) -> KernelBackend:
     """Create and configure a KernelBackend with launchers."""
     backend = KernelBackend(env=env, debug_mode=debug_mode)
-    backend.register_launcher(
-        ModalLauncher(
-            consts.MODAL_CUDA_INCLUDE_DIRS,
-            environment_name=env.MODAL_ENVIRONMENT,
-        )
-    )
+    backend.register_launcher(ModalLauncher(consts.MODAL_CUDA_INCLUDE_DIRS))
     backend.register_launcher(
         GitHubLauncher(env.GITHUB_REPO, env.GITHUB_TOKEN, env.GITHUB_WORKFLOW_BRANCH)
     )
@@ -65,7 +60,6 @@ async def run_api_server(backend: KernelBackend):
         ApplicationValidationService(
             backend,
             enabled=env.APPLICATION_VALIDATION_ENABLED,
-            poll_seconds=env.APPLICATION_VALIDATION_POLL_SECONDS,
         )
     )
     await validation_service.start()
@@ -282,7 +276,6 @@ async def start_bot_and_api(debug_mode: bool):
         ApplicationValidationService(
             bot_instance.backend,
             enabled=env.APPLICATION_VALIDATION_ENABLED,
-            poll_seconds=env.APPLICATION_VALIDATION_POLL_SECONDS,
         )
     )
     await validation_service.start()

@@ -1,41 +1,20 @@
 # Application validation
 
-KernelBot can re-run the current top submissions inside a small,
-problem-owned application workload. This complements the leaderboard's
-operator correctness checks with an end-to-end signal such as training
-convergence.
-
-## Contract
-
-The validation contract lives beside the problem in `reference-kernels`.
-KernelBot stores the resolved contract in the leaderboard task JSON, so every
-result is tied to an explicit version.
+KernelBot can run a small, problem-owned workload against the current top 10
+submissions. A problem opts in with two fields in `reference-kernels`:
 
 ```yaml
 validation:
-  name: natural-gradient-training
   version: cholesky-natural-gradient-v1
-  main: validation.py
-  files:
-    - {name: submission.py, source: "@SUBMISSION@"}
-    - {name: validation.py, source: validation.py}
-  timeout: 900
-  top_k: 10
-  max_concurrency: 2
-  schedule:
-    hour: 22
-    minute: 0
-    timezone: America/Los_Angeles
-  settings:
-    require_no_torch_fallback: true
-    min_speedup: 1.0
-  shapes:
-    - {batch: 4096, n: 32, steps: 12}
+  script: validation.py
 ```
 
-The problem entrypoint receives `name`, `version`, `settings`, and `shapes` as
-JSON in `KERNELBOT_VALIDATION_CONFIG`. It must print one JSON object as its last
-stdout line. Aggregate fields are:
+The version invalidates old results when the workload changes. KernelBot loads
+the script beside the problem, adds it to the problem's normal source files,
+and runs it on B200 through the existing Modal app.
+
+The script receives the version in `KERNELBOT_VALIDATION_CONFIG` and prints one
+JSON result:
 
 ```json
 {
@@ -47,55 +26,32 @@ stdout line. Aggregate fields are:
 }
 ```
 
-`fully_validated` is accepted only when the result shape count matches the
-versioned contract and every shape passes. Changing the workload or a gate
-requires a new contract version.
+## Schedule
 
-## Nightly flow
+Every day at 22:00 `America/Los_Angeles`, one KernelBot replica claims each
+`(leaderboard, GPU, contract version, local date)` sweep. It snapshots the
+current best submission from each of the top 10 users and runs at most two
+Modal jobs concurrently. The database claim prevents duplicate sweeps.
 
-At the contract's local scheduled time, each KernelBot replica tries to claim
-one `(leaderboard, GPU, contract version, local date)` sweep. The database
-unique constraint lets exactly one replica proceed.
-
-The owner:
-
-1. snapshots the current best submission for each of the top `top_k` users;
-2. runs KernelGuard on every selected source;
-3. launches at most `max_concurrency` isolated Modal jobs;
-4. stores a versioned summary for each exact submission ID; and
-5. marks the sweep complete.
-
-Raw submitted source, stdout, and stderr are never stored in validation rows or
-returned by the admin endpoint. Only whitelisted aggregate and per-shape
-metrics are persisted.
-
-The scheduler is enabled by default when a task has a validation contract.
-Set `APPLICATION_VALIDATION_ENABLED=false` for an emergency stop. Polling
-defaults to 60 seconds and can be changed with
-`APPLICATION_VALIDATION_POLL_SECONDS`.
-
-Application validation fails closed when `KERNELGUARD_ENABLED` is not enabled
-or KernelGuard is unavailable.
+Set `APPLICATION_VALIDATION_ENABLED=false` to disable the scheduler. A failed
+job is recorded as `VALIDATION ERROR`; a completed job is stored as `X/Y
+VALIDATED`.
 
 ## Local debug
 
-Deploy the Modal functions into a non-production environment:
+Modal already reads `MODAL_ENVIRONMENT`, so KernelBot does not need separate
+environment plumbing:
 
 ```bash
 modal environment create cholesky-validation-debug
 modal deploy --env cholesky-validation-debug src/runners/modal_runner_archs.py
-```
 
-Run a local API instance against a migrated development database:
-
-```bash
 MODAL_ENVIRONMENT=cholesky-validation-debug \
 APPLICATION_VALIDATION_ENABLED=false \
-KERNELGUARD_ENABLED=1 \
 python src/kernelbot/main.py --api-only --debug
 ```
 
-Trigger one synchronous sweep:
+Run one sweep synchronously:
 
 ```bash
 curl -X POST \
@@ -103,8 +59,5 @@ curl -X POST \
   "http://localhost:8000/admin/application-validations/cholesky/B200?wait=true"
 ```
 
-Omit `wait=true` to enqueue the manual sweep and return immediately.
-
-The rollout order is KernelBot migration and runner support, then the
-`reference-kernels` contract, then the Kernelboard badge. Kernelboard only
-shows results whose contract version matches the leaderboard's current task.
+Roll out KernelBot's migration and runner first, then the reference-kernels
+contract, then the Kernelboard badge.

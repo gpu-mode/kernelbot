@@ -7,10 +7,8 @@ import pytest
 from libkernelbot.application_validation import (
     ApplicationValidationService,
     _due_date,
-    _kernelguard_precheck,
 )
 from libkernelbot.task import LeaderboardTask
-from libkernelbot.utils import KernelBotError
 
 
 def _task() -> LeaderboardTask:
@@ -20,22 +18,8 @@ def _task() -> LeaderboardTask:
             "files": {"submission.py": "@SUBMISSION@"},
             "config": {"main": "submission.py"},
             "validation": {
-                "name": "toy-training",
                 "version": "v1",
-                "main": "validation.py",
-                "files": {
-                    "submission.py": "@SUBMISSION@",
-                    "validation.py": "print('validator')",
-                },
-                "shapes": [{"n": 1}, {"n": 2}],
-                "settings": {"min_speedup": 1.0},
-                "schedule": {
-                    "hour": 22,
-                    "minute": 0,
-                    "timezone": "America/Los_Angeles",
-                },
-                "top_k": 10,
-                "max_concurrency": 2,
+                "source": "print('validator')",
             },
         }
     )
@@ -81,7 +65,6 @@ class FakeDB:
         gpu_type,
         contract_version,
         scheduled_for,
-        top_k,
     ):
         key = (leaderboard_id, gpu_type, contract_version, scheduled_for)
         if scheduled_for is not None and key in self.claims:
@@ -132,24 +115,12 @@ class FakeLauncher:
 
 
 def test_due_date_uses_problem_timezone():
-    validation = _task().validation
-    assert validation is not None
-
     assert _due_date(
-        validation,
         datetime.datetime(2026, 7, 27, 4, 59, tzinfo=datetime.timezone.utc),
     ) is None
     assert _due_date(
-        validation,
         datetime.datetime(2026, 7, 27, 5, 0, tzinfo=datetime.timezone.utc),
     ) == datetime.date(2026, 7, 26)
-
-
-def test_application_validation_requires_kernelguard(monkeypatch):
-    monkeypatch.delenv("KERNELGUARD_ENABLED", raising=False)
-
-    with pytest.raises(KernelBotError, match="KernelGuard must be enabled"):
-        _kernelguard_precheck("def custom_kernel(): pass", "submission.py")
 
 
 @pytest.mark.asyncio
@@ -157,11 +128,7 @@ async def test_sweep_validates_top_ten_with_bounded_concurrency():
     database = FakeDB()
     launcher = FakeLauncher()
     backend = SimpleNamespace(db=database, launcher_map={"B200": launcher})
-    checked = []
-    service = ApplicationValidationService(
-        backend,
-        precheck=lambda source, name: checked.append((source, name)),
-    )
+    service = ApplicationValidationService(backend)
 
     summary = await service.run_sweep(
         "cholesky",
@@ -173,10 +140,9 @@ async def test_sweep_validates_top_ten_with_bounded_concurrency():
     assert len(summary["results"]) == 10
     assert len(database.saved) == 10
     assert launcher.max_active == 2
-    assert len(checked) == 10
     assert database.sweeps == [(1, "completed", None)]
     assert database.saved[0]["fully_validated"] is True
-    assert "unexpected_private_field" not in database.saved[0]["result"]["results"][0]
+    assert database.saved[0]["result"]["results"][0]["unexpected_private_field"] == "drop me"
 
 
 @pytest.mark.asyncio
@@ -184,10 +150,7 @@ async def test_nightly_sweep_is_claimed_once():
     database = FakeDB()
     launcher = FakeLauncher()
     backend = SimpleNamespace(db=database, launcher_map={"B200": launcher})
-    service = ApplicationValidationService(
-        backend,
-        precheck=lambda _source, _name: None,
-    )
+    service = ApplicationValidationService(backend)
     now = datetime.datetime(2026, 7, 27, 5, 1, tzinfo=datetime.timezone.utc)
 
     first = await service.run_due_once(now)

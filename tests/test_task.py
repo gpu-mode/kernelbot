@@ -12,7 +12,6 @@ from libkernelbot.task import (
     LeaderboardTask,
     PythonTaskData,
     RankCriterion,
-    ValidationSchedule,
     build_task_config,
     build_validation_config,
     make_task_definition,
@@ -257,20 +256,8 @@ def test_multi_gpu_task(task_directory):
 
 def test_application_validation_roundtrip_and_config(leaderboard_task):
     leaderboard_task.validation = ApplicationValidation(
-        name="optimizer",
         version="optimizer-v1",
-        main="validate.py",
-        files={
-            "validate.py": "print('validate')",
-            "submission.py": "@SUBMISSION@",
-        },
-        shapes=[{"batch": 2, "n": 32, "steps": 4}],
-        settings={"min_speedup": 1.0, "require_no_torch_fallback": True},
-        schedule=ValidationSchedule(
-            hour=22,
-            minute=0,
-            timezone="America/Los_Angeles",
-        ),
+        source="print('validate')",
     )
 
     reconstructed = LeaderboardTask.from_str(leaderboard_task.to_str())
@@ -279,17 +266,12 @@ def test_application_validation_roundtrip_and_config(leaderboard_task):
         reconstructed,
         "def custom_kernel(x): return x",
     ) == {
-        "name": "optimizer",
         "version": "optimizer-v1",
-        "main": "validate.py",
+        "main": "validation.py",
         "sources": {
-            "validate.py": "print('validate')",
-            "submission.py": "def custom_kernel(x): return x",
-        },
-        "shapes": [{"batch": 2, "n": 32, "steps": 4}],
-        "settings": {
-            "min_speedup": 1.0,
-            "require_no_torch_fallback": True,
+            "validation.py": "print('validate')",
+            "test.py": "code",
+            "main.py": "def custom_kernel(x): return x",
         },
         "timeout": 900,
     }
@@ -300,28 +282,13 @@ def test_make_task_definition_loads_validation_files(task_directory):
     task_yaml = (task_directory / "task.yml").read_text()
     task_yaml += """
 validation:
-  name: optimizer
   version: optimizer-v1
-  main: validation.py
-  files:
-    - {name: submission.py, source: "@SUBMISSION@"}
-    - {name: validation.py, source: validation.py}
-  shapes:
-    - {batch: 2, n: 32, steps: 4}
-  settings:
-    min_speedup: 1.0
-  schedule:
-    hour: 22
-    timezone: America/Los_Angeles
+  script: validation.py
 """
     (task_directory / "task.yml").write_text(task_yaml)
 
     definition = make_task_definition(task_directory / "task.yml")
     validation = definition.task.validation
     assert validation is not None
-    assert validation.files == {
-        "submission.py": "@SUBMISSION@",
-        "validation.py": "print('validation')",
-    }
-    assert validation.schedule.hour == 22
-    assert validation.schedule.timezone == "America/Los_Angeles"
+    assert validation.version == "optimizer-v1"
+    assert validation.source == "print('validation')"

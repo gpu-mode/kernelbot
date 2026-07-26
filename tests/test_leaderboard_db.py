@@ -109,16 +109,8 @@ def test_application_validation_persistence(database, submit_leaderboard):
             (
                 json.dumps(
                     {
-                        "name": "toy-training",
                         "version": "v1",
-                        "main": "validation.py",
-                        "files": {
-                            "submission.py": "@SUBMISSION@",
-                            "validation.py": "print('ok')",
-                        },
-                        "shapes": [{"n": 1}],
-                        "settings": {},
-                        "schedule": {"hour": 22},
+                        "source": "print('ok')",
                     }
                 ),
                 submit_leaderboard,
@@ -141,7 +133,6 @@ def test_application_validation_persistence(database, submit_leaderboard):
             gpu_type="B200",
             contract_version="v1",
             scheduled_for=scheduled_for,
-            top_k=10,
         )
         assert sweep_id is not None
         assert db.claim_validation_sweep(
@@ -149,13 +140,11 @@ def test_application_validation_persistence(database, submit_leaderboard):
             gpu_type="B200",
             contract_version="v1",
             scheduled_for=scheduled_for,
-            top_k=10,
         ) is None
 
         db.upsert_submission_validation(
             submission_id=submission_id,
             gpu_type="B200",
-            contract_name="toy-training",
             contract_version="v1",
             status="completed",
             passed_shapes=7,
@@ -164,19 +153,20 @@ def test_application_validation_persistence(database, submit_leaderboard):
             geomean_sync_wall_speedup=1.2,
             result={"passed_shapes": 7, "total_shapes": 8},
         )
-        statuses = db.get_submission_validation_statuses(
-            [submission_id],
-            "B200",
+        db.cursor.execute(
+            """
+            SELECT passed_shapes, total_shapes, fully_validated,
+                   geomean_sync_wall_speedup
+            FROM leaderboard.submission_validation
+            WHERE submission_id = %s AND gpu_type = 'B200'
+            """,
+            (submission_id,),
         )
-        assert statuses[submission_id]["validation_shapes_passed"] == 7
-        assert statuses[submission_id]["validation_shapes_total"] == 8
-        assert statuses[submission_id]["validation_fully_validated"] is False
-        assert statuses[submission_id]["validation_geomean_speedup"] == 1.2
+        assert db.cursor.fetchone() == (7, 8, False, 1.2)
 
         db.upsert_submission_validation(
             submission_id=submission_id,
             gpu_type="B200",
-            contract_name="toy-training",
             contract_version="v1",
             status="completed",
             passed_shapes=8,
@@ -185,12 +175,15 @@ def test_application_validation_persistence(database, submit_leaderboard):
             geomean_sync_wall_speedup=1.3,
             result={"passed_shapes": 8, "total_shapes": 8},
         )
-        statuses = db.get_submission_validation_statuses(
-            [submission_id],
-            "B200",
+        db.cursor.execute(
+            """
+            SELECT fully_validated, geomean_sync_wall_speedup
+            FROM leaderboard.submission_validation
+            WHERE submission_id = %s AND gpu_type = 'B200'
+            """,
+            (submission_id,),
         )
-        assert statuses[submission_id]["validation_fully_validated"] is True
-        assert statuses[submission_id]["validation_geomean_speedup"] == 1.3
+        assert db.cursor.fetchone() == (True, 1.3)
 
         db.complete_validation_sweep(sweep_id, status="completed")
 
