@@ -1133,6 +1133,18 @@ async def get_user_submission(
                 response_run = {key: run[key] for key in run_fields}
                 if not run["secret"] and run["mode"] in ("test", "benchmark"):
                     response_run["result"] = run["result"]
+                    # Runtime tracebacks, compiler errors, and process failures are
+                    # stored separately from the structured evaluator result. Expose
+                    # them only for the authenticated owner's public runs; secret-run
+                    # diagnostics can contain private validation details.
+                    meta = run.get("meta") or {}
+                    response_run["diagnostics"] = {
+                        key: meta[key]
+                        for key in ("stdout", "stderr", "success", "exit_code", "duration")
+                        if key in meta
+                    }
+                    if run.get("compilation") is not None:
+                        response_run["diagnostics"]["compilation"] = run["compilation"]
                 runs.append(response_run)
             runner_queue = await get_submission_runner_queue_status(submission)
             return {

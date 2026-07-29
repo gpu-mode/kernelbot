@@ -289,6 +289,14 @@ class TestUserSubmissions:
                         "score": None,
                         "passed": False,
                         "result": test_result,
+                        "meta": {
+                            "stdout": "",
+                            "stderr": "Traceback: public test failure",
+                            "success": False,
+                            "exit_code": 1,
+                            "duration": 1.25,
+                        },
+                        "compilation": None,
                     },
                     {
                         "start_time": "2026-07-06T12:00:00Z",
@@ -299,6 +307,18 @@ class TestUserSubmissions:
                         "score": None,
                         "passed": True,
                         "result": benchmark_result,
+                        "meta": {
+                            "stdout": "benchmark output",
+                            "stderr": "",
+                            "success": True,
+                            "exit_code": 0,
+                            "duration": 2.5,
+                        },
+                        "compilation": {
+                            "success": True,
+                            "stdout": "",
+                            "stderr": "",
+                        },
                     },
                     {
                         "start_time": "2026-07-06T12:00:00Z",
@@ -309,6 +329,13 @@ class TestUserSubmissions:
                         "score": None,
                         "passed": True,
                         "result": {"secret-result": "must not be exposed"},
+                        "meta": {
+                            "stderr": "SECRET_TRACEBACK_SENTINEL",
+                            "exit_code": 1,
+                        },
+                        "compilation": {
+                            "stderr": "SECRET_COMPILER_SENTINEL",
+                        },
                     },
                     {
                         "start_time": "2026-07-06T12:00:00Z",
@@ -353,14 +380,26 @@ class TestUserSubmissions:
         assert response.status_code == 200
         runs = response.json()["runs"]
         assert runs[0]["result"] == test_result
+        assert runs[0]["diagnostics"] == {
+            "stdout": "",
+            "stderr": "Traceback: public test failure",
+            "success": False,
+            "exit_code": 1,
+            "duration": 1.25,
+        }
         assert runs[1]["result"] == benchmark_result
+        assert runs[1]["diagnostics"]["stdout"] == "benchmark output"
+        assert runs[1]["diagnostics"]["compilation"]["success"] is True
         assert "result" not in runs[2]
+        assert "diagnostics" not in runs[2]
         assert runs[2]["secret"] is True
         assert runs[2]["passed"] is True
         assert "result" not in runs[3]
         assert "result" not in runs[4]
         assert "must not be exposed" not in response.text
         assert "PROFILE_SENTINEL" not in response.text
+        assert "SECRET_TRACEBACK_SENTINEL" not in response.text
+        assert "SECRET_COMPILER_SENTINEL" not in response.text
 
 
 class TestAdminStats:
