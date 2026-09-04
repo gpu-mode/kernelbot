@@ -4,10 +4,11 @@ import hashlib
 import json
 import random
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from export_result import emit_result
-from launch import decode_result, prepare_payload
+from launch import collect, decode_result, prepare_payload
 
 
 def test_large_evidence_roundtrip_and_checksum(capsys):
@@ -38,3 +39,16 @@ def test_payload_preserves_evaluator_and_submission(tmp_path):
         assert config["sources"]["eval.py"] == (repo / "examples/eval.py").read_text()
         assert [case["size"] for case in config["benchmarks"]] == [1024, 2048, 4096]
         assert config["mode"] == "benchmark" and not config["multi_gpu"]
+
+
+def test_checkpoint_stream_then_final_report(tmp_path, capsys):
+    """Multiple framed exports must not concatenate into a corrupt final result."""
+    for index in range(2):
+        emit_result({"checkpoint": "batch", "batch": {"index": index, "passed": True}})
+    final = {"passed": True, "summary": {"fresh": 20, "persistent": 10}}
+    emit_result(final)
+    sandbox = SimpleNamespace(stdout=capsys.readouterr().out.splitlines(True), stderr=[], wait=lambda: None)
+    assert collect(sandbox, tmp_path) == final
+    assert json.loads((tmp_path / "batch-0.json").read_text())["batch"]["index"] == 0
+    assert json.loads((tmp_path / "batch-1.json").read_text())["batch"]["index"] == 1
+    assert json.loads((tmp_path / "results.json").read_text()) == final

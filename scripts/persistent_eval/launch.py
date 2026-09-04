@@ -66,6 +66,15 @@ def decode_result(chunks, expected_sha256):
     return json.loads(raw)
 
 
+def save_decoded(decoded, output):
+    """Persist each completed batch independently of the final report."""
+    checkpoint = decoded.get("checkpoint") == "batch"
+    destination = output / f"batch-{decoded['batch']['index']}.json" if checkpoint else output / "results.json"
+    destination.write_text(json.dumps(decoded, indent=2))
+    print("SAVED", str(destination), flush=True)
+    return checkpoint
+
+
 def collect(sandbox, output):
     """Save logs and reconstruct a complete result despite Modal's line limit."""
     errors = []
@@ -91,20 +100,26 @@ def collect(sandbox, output):
             if line.startswith("EXPERIMENT_CHUNK="):
                 chunks.append(line.split("=", 1)[1].strip())
             elif line.startswith("EXPERIMENT_END="):
-                result = decode_result(chunks, line.split("=", 1)[1].strip())
-                (output / "results.json").write_text(json.dumps(result, indent=2))
-                print("SAVED", str(output / "results.json"), flush=True)
+                decoded = decode_result(chunks, line.split("=", 1)[1].strip())
+                chunks.clear()
+                if not save_decoded(decoded, output):
+                    result = decoded
             else:
                 print(line, end="", flush=True)
+    finish_stream(sandbox, reader, errors)
+    if result is None:
+        raise RuntimeError("Sandbox exited without complete results; see saved logs")
+    return result
+
+
+def finish_stream(sandbox, reader, errors):
+    """Verify both output streams completed before accepting the result."""
     sandbox.wait()
     reader.join(timeout=10)
     if errors:
         raise RuntimeError("Failed to preserve stderr") from errors[0]
     if reader.is_alive():
         raise RuntimeError("stderr stream did not finish")
-    if result is None:
-        raise RuntimeError("Sandbox exited without complete results; see saved logs")
-    return result
 
 
 def main():

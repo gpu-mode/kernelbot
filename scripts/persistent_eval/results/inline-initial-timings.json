@@ -1,0 +1,196 @@
+{
+  "detail_available": false,
+  "timing_matrix_completed": true,
+  "reload_check_completed": false,
+  "note": "Local Modal connection failed. Recovered provider logs retain all batch/job totals, but full phase/kernel records were not exported. A separate complete repeat supplies detailed validation.",
+  "summary": {
+    "fresh": 173.755196909,
+    "persistent": 125.39272825049997
+  },
+  "wall_time_reduction_pct": 27.833681822955015,
+  "batches": [
+    {
+      "index": 0,
+      "mode": "fresh",
+      "wall_s": 174.68469984499998,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 45.389421504000005,
+          "passed": true
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 42.62965532900001,
+          "passed": true
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 43.23664459599999,
+          "passed": true
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 43.40593621899998,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "mode": "persistent",
+      "wall_s": 126.86751236599997,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 36.18477429000001,
+          "passed": true
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 30.022353893000002,
+          "passed": true
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.765507914999972,
+          "passed": true
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.783142566000038,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "mode": "persistent",
+      "wall_s": 123.91794413499997,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 35.96695079,
+          "passed": true
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.173396095999976,
+          "passed": true
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 28.79137326900002,
+          "passed": true
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.17625037900001,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "mode": "fresh",
+      "wall_s": 172.825693973,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 43.52770579700001,
+          "passed": true
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 43.25928978500002,
+          "passed": true
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 42.60960218399998,
+          "passed": true
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 43.40977090000001,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "incomplete_reload_jobs": [
+    {
+      "index": 0,
+      "workload": "inline",
+      "mode": "persistent",
+      "wall_s": 34.296041403000004,
+      "passed": true
+    }
+  ],
+  "manifest": {
+    "kernelbot_head": "727212cdcf1b9b4d587c12f6d1484b3fd54549d0",
+    "payload_sha256": {
+      "experiment.py": "5ec5ce2f1de758316aee28db182707843d24ba0a8f143becc3d578925a32f7e5",
+      "export_result.py": "0832549b69ca38641e020c2b6d7949cf6281e48d4df126c27b0ad0930da13ba3",
+      "inline.json": "06cfdd41217715960265e525afa4322b4ef21f7112e51374ab0e3ebd3c5c6eb6",
+      "persistent.py": "658713543c8c96dac3e7baf64fb767ce0f39ad811bc86ae4db41d0bbfc0e1e02",
+      "source/libkernelbot/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source/libkernelbot/consts.py": "3226ad414d94862a536336c867690015a93776d068e2b33ec8d3deb613f3a0b2",
+      "source/libkernelbot/run_eval.py": "873a5f1e0f1365b0e87189c2ce0836a229ac6391b8c6a75ff021c67f2ee431a9",
+      "triton.json": "4054d6994f19dd92166b1c52b5f53c58392364dbdc14c62e274798efa14db008",
+      "worker.py": "28d044c03dce42bc4d07c23f563a373754c8eb696c944403dcfb34575e57771a"
+    },
+    "arguments": {
+      "workload": "inline",
+      "count": 4,
+      "rounds": 2
+    },
+    "image": "nvidia/cuda:12.8.1-devel-ubuntu22.04",
+    "python": "3.11",
+    "packages": [
+      "torch==2.7.1",
+      "numpy==2.2.6",
+      "ninja==1.11.1.4"
+    ],
+    "gpu": "T4",
+    "cpu": 8,
+    "memory_mib": 32768
+  },
+  "recovered_log_sha256": "68cfec430511a78858f385f62ba81f28783d9be1b87a36cb19a5f3d932e29a88"
+}

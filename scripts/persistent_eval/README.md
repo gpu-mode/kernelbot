@@ -26,6 +26,8 @@ changes addition to subtraction; the middle request must fail correctness.
 The launcher saves complete results, phase output, source hashes, compiled-library
 names/hashes, machine metadata, and logs before stopping the sandbox. Result
 export is compressed, chunked, and checksummed to avoid provider log-line limits.
+Each completed batch is checkpointed separately so its full details can be
+recovered from retained provider logs if the local connection drops.
 GPU cost estimates exclude CPU/RAM and are approximate, using $0.000164/T4-second.
 
 ## What changes
@@ -65,7 +67,11 @@ This is a benchmark prototype for the bundled trusted examples, not isolation
 for arbitrary uploaded code. It covers single-GPU benchmark mode only. The
 persistent transport does not implement production per-request timeout handling,
 CUDA-fault recovery, process-state isolation, or unloading native extensions.
-Modules and allocator cleanup do not reset all process state. A production design
+Modules and allocator cleanup do not reset all process state. Python output is
+captured per request, while compiler subprocess output remains in the sandbox
+log; the existing stdout-based `CompileResult` classification can therefore
+differ between modes. Phase timings and generated `.so` files are recorded
+separately to verify that compilation happened. A production design
 needs bounded worker recycling and scoring consistency checks. The sandbox has
 an overall 30-minute timeout and is terminated by the launcher on exit.
 
@@ -87,6 +93,13 @@ time, which needs investigation before using persistence for ranked scores.
 uv run --no-project --with pytest --with modal==1.5.5 --with pyyaml \
   pytest scripts/persistent_eval/test_experiment.py -q
 uv run --no-project --with ruff ruff check . --exclude examples/ --line-length 120
+```
+
+To audit a completed run and emit compact shareable JSON:
+
+```sh
+python scripts/persistent_eval/summarize.py /tmp/kernelbot-inline-results/results.json \
+  > /tmp/kernelbot-inline-summary.json
 ```
 
 The GPU run supplies the actual correctness/reload and performance evidence.

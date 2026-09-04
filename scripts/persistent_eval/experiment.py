@@ -141,6 +141,7 @@ def main():
         order = ["fresh", "persistent"] if round_index % 2 == 0 else ["persistent", "fresh"]
         for mode in order:
             batches.append(run_batch(root, len(batches), mode, args.workload, args.count))
+            emit_result({"checkpoint": "batch", "batch": batches[-1]})
             if not batches[-1]["passed"]:
                 break
         if not batches[-1]["passed"]:
