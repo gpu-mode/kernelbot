@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 import statistics
 from pathlib import Path
 
@@ -13,7 +14,12 @@ def compact_job(job, workload):
     assert int(result["benchmark-count"]) == 3
     if job["passed"]:
         assert job["returncode"] == 0 and result["check"] == "pass"
-        assert all(result[f"benchmark.{i}.status"] == "pass" for i in range(3))
+        # Successful shapes log statistics; only failing shapes have a status key.
+        assert all(f"benchmark.{i}.status" not in result for i in range(3))
+        assert all(
+            math.isfinite(float(result[f"benchmark.{i}.mean"])) and float(result[f"benchmark.{i}.mean"]) > 0
+            for i in range(3)
+        )
         assert len(job["phases"]) == 2
         assert all(phase["exit_code"] == 0 for phase in job["phases"])
     if workload == "inline":

@@ -54,7 +54,8 @@ and calls the existing `run_benchmarking` body with an in-process `Pool.apply`
 adapter. This removes both interpreter startup and the evaluator's spawned GPU
 worker. The worker synchronizes CUDA and clears unused allocator cache after
 successful requests. GPU measurements are sequential in both modes; submitting
-an entire batch at once is not required.
+an entire batch at once is not required. The persistent worker owns the sandbox's
+assigned GPU; this experiment does not need a GPU admission lock.
 
 Batch time includes worker startup/teardown, compilation, validation, and all
 submission requests, but excludes Modal image/container startup and the once-per-
@@ -80,8 +81,9 @@ the earlier experiment; it is not KernelBot's production image. Results on this
 small vector-add workload should not be extrapolated to compilation-heavy or
 long-running competition tasks without measuring them.
 
-Inline CUDA results are being collected; the measured report will be added to
-this draft. Earlier separate Triton measurements were 51.3 seconds fresh versus
+[Inline CUDA results](RESULTS.md): **19–28% less evaluation wall time**, with
+compilation still dominating. Reported kernel medians shifted 12–15% in the
+complete repeat, so score equivalence remains unresolved. Earlier separate Triton measurements were 51.3 seconds fresh versus
 12.5 seconds persistent per four-submission batch (two rounds). Those results
 motivated this experiment; they are not an inline CUDA claim. That experiment
 also saw an approximately 8.5% shift in the smallest shape's reported kernel

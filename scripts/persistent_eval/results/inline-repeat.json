@@ -1,0 +1,622 @@
+{
+  "passed": true,
+  "system": {
+    "gpu": "Tesla T4",
+    "device_count": 1,
+    "cpu": "GenuineIntel",
+    "runtime": "CUDA",
+    "platform": "Linux-4.19.0-gvisor-x86_64-with-glibc2.35",
+    "torch": "2.7.1+cu126"
+  },
+  "arguments": {
+    "workload": "inline",
+    "count": 4,
+    "rounds": 1
+  },
+  "medians": {
+    "fresh": {
+      "batch_wall_s": 151.086733423,
+      "job_wall_s": 37.8477659165,
+      "phase_wall_s": {
+        "compile-import": 31.737814234999995,
+        "benchmark": 5.890799048500007
+      },
+      "kernel_mean_us": {
+        "size: 1024; seed: 54352": 36.022720308974385,
+        "size: 2048; seed: 93246": 108.3745938339816,
+        "size: 4096; seed: 6256": 407.9626699288686
+      }
+    },
+    "persistent": {
+      "batch_wall_s": 122.18059408700003,
+      "job_wall_s": 30.315491877999975,
+      "phase_wall_s": {
+        "compile-import": 29.849093452499986,
+        "benchmark": 0.4067544014999953
+      },
+      "kernel_mean_us": {
+        "size: 1024; seed: 54352": 40.280799847096205,
+        "size: 2048; seed: 93246": 123.65123234233077,
+        "size: 4096; seed: 6256": 468.4746749699116
+      }
+    }
+  },
+  "wall_time_reduction_pct": 19.132149250371956,
+  "batches": [
+    {
+      "index": 0,
+      "mode": "fresh",
+      "wall_s": 151.086733423,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 37.717555915000005,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda.so",
+              "bytes": 1371104,
+              "sha256": "3d00123e9ac3434ae37ebc665fd7010431cd6e01467d19eb35289b6bd57a4520"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 31.784614422999997,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 5.846300309,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "36704.32057231665",
+            "benchmark.0.std": "1092.9279454774917",
+            "benchmark.0.err": "109.29279454774917",
+            "benchmark.0.best": "35135.99932193756",
+            "benchmark.0.worst": "42784.00167822838",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "3",
+            "benchmark.1.mean": "126965.33401807149",
+            "benchmark.1.std": "18.471047698708272",
+            "benchmark.1.err": "10.664264361063639",
+            "benchmark.1.best": "126944.00548934937",
+            "benchmark.1.worst": "126975.99828243256",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "486666.66944821674",
+            "benchmark.2.std": "774.1920274015364",
+            "benchmark.2.err": "446.97997542473917",
+            "benchmark.2.best": "485792.01102256775",
+            "benchmark.2.worst": "487264.0073299408",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 36.851178094,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda.so",
+              "bytes": 1371104,
+              "sha256": "8bdb931cca19eb984771a700b03a77e724ed6ac59fab0e0c5415bc4a9a12e165"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 30.934483453,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 5.830919796999993,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "35341.120045632124",
+            "benchmark.0.std": "3527.4678772128505",
+            "benchmark.0.err": "352.74678772128505",
+            "benchmark.0.best": "30719.999223947525",
+            "benchmark.0.worst": "38911.99827194214",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "27",
+            "benchmark.1.mean": "108018.96232145804",
+            "benchmark.1.std": "552.1387463821106",
+            "benchmark.1.err": "106.25915128457802",
+            "benchmark.1.best": "106976.00245475769",
+            "benchmark.1.worst": "108543.9994931221",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "407594.67085202533",
+            "benchmark.2.std": "102.87334472452157",
+            "benchmark.2.err": "59.3939532691397",
+            "benchmark.2.best": "407519.99616622925",
+            "benchmark.2.worst": "407712.01252937317",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 37.977975918,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda.so",
+              "bytes": 1371104,
+              "sha256": "7622c6fb31a80edff4fd1756177a8ac0d464ce022036fba9a6e31b3e12e5bb48"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 31.691014046999996,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 6.196681572000003,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "33994.23988536",
+            "benchmark.0.std": "3488.7067277221295",
+            "benchmark.0.err": "348.87067277221297",
+            "benchmark.0.best": "30719.999223947525",
+            "benchmark.0.worst": "39935.99861860275",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "24",
+            "benchmark.1.mean": "108711.99922015269",
+            "benchmark.1.std": "511.5864351976797",
+            "benchmark.1.err": "104.42714379697729",
+            "benchmark.1.best": "108159.99656915665",
+            "benchmark.1.worst": "110207.99726247787",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "408330.66900571185",
+            "benchmark.2.std": "563.7189195717535",
+            "benchmark.2.err": "325.4632699620369",
+            "benchmark.2.best": "407680.0048351288",
+            "benchmark.2.worst": "408672.0049381256",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "fresh",
+          "wall_s": 38.51741364899999,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda.so",
+              "bytes": 1371104,
+              "sha256": "d1bfce49d9fc1d7f4f5b076ced7917c76b29d0b1808a328aba0dfd1ece00fcd5"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 32.48583579000001,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 5.935297788000014,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "40641.59948378801",
+            "benchmark.0.std": "1395.5323521220882",
+            "benchmark.0.err": "139.55323521220882",
+            "benchmark.0.best": "39391.99820160866",
+            "benchmark.0.worst": "53631.99859857559",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "37",
+            "benchmark.1.mean": "108037.1884478105",
+            "benchmark.1.std": "648.2360525955978",
+            "benchmark.1.err": "106.56935058153861",
+            "benchmark.1.best": "106880.00172376633",
+            "benchmark.1.worst": "110367.99848079681",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "407477.32917467755",
+            "benchmark.2.std": "102.87334472452157",
+            "benchmark.2.err": "59.3939532691397",
+            "benchmark.2.best": "407359.9874973297",
+            "benchmark.2.worst": "407552.00386047363",
+            "check": "pass"
+          }
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "mode": "persistent",
+      "wall_s": 122.18059408700003,
+      "passed": true,
+      "jobs": [
+        {
+          "index": 0,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 31.75274639,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda.so",
+              "bytes": 1371104,
+              "sha256": "990d1e099828fa7dd18a7ef42d839c59e638a312f4ec210ff9586fb5038d10a8"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 30.905686301999992,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 0.7587213730000144,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "4",
+            "benchmark.0.mean": "38879.9998909235",
+            "benchmark.0.std": "69.12670269459139",
+            "benchmark.0.err": "34.56335134729569",
+            "benchmark.0.best": "38784.001022577286",
+            "benchmark.0.worst": "38943.99851560593",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "20",
+            "benchmark.1.mean": "136451.19965076447",
+            "benchmark.1.std": "589.3107837663108",
+            "benchmark.1.err": "131.77389723751503",
+            "benchmark.1.best": "135391.9953107834",
+            "benchmark.1.worst": "137375.99551677704",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "523861.3486289978",
+            "benchmark.2.std": "826.0229714363858",
+            "benchmark.2.err": "476.9045849156119",
+            "benchmark.2.best": "522912.02545166016",
+            "benchmark.2.worst": "524416.0294532776",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 1,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.038929069999995,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda_v1.so",
+              "bytes": 1371112,
+              "sha256": "70688b07348f9bdff40fa7fdb9a4646378e579d4de73cc306800a83e347a1cc2"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 28.522874734,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 0.425054369999998,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "36071.35981321335",
+            "benchmark.0.std": "4543.822084910424",
+            "benchmark.0.err": "454.3822084910424",
+            "benchmark.0.best": "31520.001590251923",
+            "benchmark.0.worst": "43007.999658584595",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "49",
+            "benchmark.1.mean": "110851.26503389709",
+            "benchmark.1.std": "763.9683026068492",
+            "benchmark.1.err": "109.1383289438356",
+            "benchmark.1.best": "109375.99837779999",
+            "benchmark.1.worst": "112640.00087976456",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "4",
+            "benchmark.2.mean": "413088.00131082535",
+            "benchmark.2.std": "792.9197520986974",
+            "benchmark.2.err": "396.4598760493487",
+            "benchmark.2.best": "411936.0148906708",
+            "benchmark.2.worst": "413695.9910392761",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 2,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 30.949702426999977,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda_v2.so",
+              "bytes": 1371112,
+              "sha256": "8869b7f80b1a1ae78d36a4b279a1af9882d6ec45e01188e0de805da246e34154"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 30.496586076,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 0.3597627510000052,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "42088.95988762379",
+            "benchmark.0.std": "1158.9204020498435",
+            "benchmark.0.err": "115.89204020498434",
+            "benchmark.0.best": "32191.99925661087",
+            "benchmark.0.worst": "43007.999658584595",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "3",
+            "benchmark.1.mean": "108650.66697200139",
+            "benchmark.1.std": "147.8027943473722",
+            "benchmark.1.err": "85.33398310343425",
+            "benchmark.1.best": "108479.99900579453",
+            "benchmark.1.worst": "108736.00095510483",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "3",
+            "benchmark.2.mean": "407925.3375530243",
+            "benchmark.2.std": "18.47965088813478",
+            "benchmark.2.err": "10.669231414794924",
+            "benchmark.2.best": "407903.9990901947",
+            "benchmark.2.worst": "407936.0067844391",
+            "check": "pass"
+          }
+        },
+        {
+          "index": 3,
+          "workload": "inline",
+          "mode": "persistent",
+          "wall_s": 29.681281328999972,
+          "passed": true,
+          "compiled_extensions": [
+            {
+              "name": "torch-cache/add_cuda/add_cuda_v3.so",
+              "bytes": 1371112,
+              "sha256": "ec1c9109ebf531ad21d9410ded81c7269df7b322d3aa4ae94c3035f0c6e9248b"
+            }
+          ],
+          "phases": [
+            {
+              "phase": "compile-import",
+              "wall_s": 29.201600828999972,
+              "exit_code": 0
+            },
+            {
+              "phase": "benchmark",
+              "wall_s": 0.3884544329999926,
+              "exit_code": 0
+            }
+          ],
+          "benchmark": {
+            "benchmark-count": "3",
+            "benchmark.0.spec": "size: 1024; seed: 54352",
+            "benchmark.0.runs": "100",
+            "benchmark.0.mean": "41681.59980326891",
+            "benchmark.0.std": "552.8994604089672",
+            "benchmark.0.err": "55.28994604089672",
+            "benchmark.0.best": "40927.99872159958",
+            "benchmark.0.worst": "43007.999658584595",
+            "benchmark.1.spec": "size: 2048; seed: 93246",
+            "benchmark.1.runs": "4",
+            "benchmark.1.mean": "147528.0001759529",
+            "benchmark.1.std": "229.82920232469908",
+            "benchmark.1.err": "114.91460116234954",
+            "benchmark.1.best": "147392.00472831726",
+            "benchmark.1.worst": "147872.00093269348",
+            "benchmark.2.spec": "size: 4096; seed: 6256",
+            "benchmark.2.runs": "4",
+            "benchmark.2.mean": "570695.9962844849",
+            "benchmark.2.std": "917.231329145202",
+            "benchmark.2.err": "458.615664572601",
+            "benchmark.2.best": "569343.9841270447",
+            "benchmark.2.worst": "571359.9920272827",
+            "check": "pass"
+          }
+        }
+      ]
+    }
+  ],
+  "reload": {
+    "observed": [
+      true,
+      false,
+      true
+    ],
+    "jobs": [
+      {
+        "index": 0,
+        "workload": "inline",
+        "mode": "persistent",
+        "wall_s": 33.52144904900001,
+        "passed": true,
+        "compiled_extensions": [
+          {
+            "name": "torch-cache/add_cuda/add_cuda.so",
+            "bytes": 1371104,
+            "sha256": "7da8350dcf94fc6e7963e982984c6111a49978c884d8053ae85fee41964e2242"
+          }
+        ],
+        "phases": [
+          {
+            "phase": "compile-import",
+            "wall_s": 32.60032794399996,
+            "exit_code": 0
+          },
+          {
+            "phase": "benchmark",
+            "wall_s": 0.825036434000026,
+            "exit_code": 0
+          }
+        ],
+        "benchmark": {
+          "benchmark-count": "3",
+          "benchmark.0.spec": "size: 1024; seed: 54352",
+          "benchmark.0.runs": "14",
+          "benchmark.0.mean": "38852.57111064025",
+          "benchmark.0.std": "137.41183467847603",
+          "benchmark.0.err": "36.72485758963425",
+          "benchmark.0.best": "38623.99980425835",
+          "benchmark.0.worst": "39103.999733924866",
+          "benchmark.1.spec": "size: 2048; seed: 93246",
+          "benchmark.1.runs": "34",
+          "benchmark.1.mean": "136321.8821146909",
+          "benchmark.1.std": "777.4748487729736",
+          "benchmark.1.err": "133.335836548451",
+          "benchmark.1.best": "135135.99336147308",
+          "benchmark.1.worst": "138751.99854373932",
+          "benchmark.2.spec": "size: 4096; seed: 6256",
+          "benchmark.2.runs": "3",
+          "benchmark.2.mean": "524224.0031560262",
+          "benchmark.2.std": "84.65060660382474",
+          "benchmark.2.err": "48.87305050978333",
+          "benchmark.2.best": "524128.0198097229",
+          "benchmark.2.worst": "524287.99867630005",
+          "check": "pass"
+        }
+      },
+      {
+        "index": 1,
+        "workload": "incorrect",
+        "mode": "persistent",
+        "wall_s": 29.96964817600002,
+        "passed": false,
+        "compiled_extensions": [
+          {
+            "name": "torch-cache/add_cuda/add_cuda_v1.so",
+            "bytes": 1371112,
+            "sha256": "1893cb07903c015a4d5662610d619689299dcd60258693884500df927d304eec"
+          }
+        ],
+        "phases": [
+          {
+            "phase": "compile-import",
+            "wall_s": 29.727761948000023,
+            "exit_code": 0
+          },
+          {
+            "phase": "benchmark",
+            "wall_s": 0.13815245300003198,
+            "exit_code": 112
+          }
+        ],
+        "benchmark": {
+          "benchmark-count": "3",
+          "benchmark.0.spec": "size: 1024; seed: 54352",
+          "benchmark.0.status": "fail",
+          "benchmark.0.error": "mismatch found! custom implementation doesn't match reference: Number of mismatched elements: 1048369",
+          "benchmark.1.spec": "size: 2048; seed: 93246",
+          "benchmark.1.status": "fail",
+          "benchmark.1.error": "mismatch found! custom implementation doesn't match reference: Number of mismatched elements: 4193350",
+          "benchmark.2.spec": "size: 4096; seed: 6256",
+          "benchmark.2.status": "fail",
+          "benchmark.2.error": "mismatch found! custom implementation doesn't match reference: Number of mismatched elements: 16773409",
+          "check": "fail"
+        }
+      },
+      {
+        "index": 2,
+        "workload": "inline",
+        "mode": "persistent",
+        "wall_s": 29.147953131999998,
+        "passed": true,
+        "compiled_extensions": [
+          {
+            "name": "torch-cache/add_cuda/add_cuda_v2.so",
+            "bytes": 1371112,
+            "sha256": "b590b53a9eedc64579365cc97dbc904d3ef6ab1455a26821d24a84f097251761"
+          }
+        ],
+        "phases": [
+          {
+            "phase": "compile-import",
+            "wall_s": 28.662332048000053,
+            "exit_code": 0
+          },
+          {
+            "phase": "benchmark",
+            "wall_s": 0.3931625609999969,
+            "exit_code": 0
+          }
+        ],
+        "benchmark": {
+          "benchmark-count": "3",
+          "benchmark.0.spec": "size: 1024; seed: 54352",
+          "benchmark.0.runs": "100",
+          "benchmark.0.mean": "35824.320428073406",
+          "benchmark.0.std": "1848.9114611217553",
+          "benchmark.0.err": "184.89114611217553",
+          "benchmark.0.best": "34784.00036692619",
+          "benchmark.0.worst": "42656.00070357323",
+          "benchmark.1.spec": "size: 2048; seed: 93246",
+          "benchmark.1.runs": "30",
+          "benchmark.1.mean": "121565.86547692616",
+          "benchmark.1.std": "649.4707776925375",
+          "benchmark.1.err": "118.57659846087527",
+          "benchmark.1.best": "120768.0031657219",
+          "benchmark.1.worst": "122815.99640846252",
+          "benchmark.2.spec": "size: 4096; seed: 6256",
+          "benchmark.2.runs": "3",
+          "benchmark.2.mean": "465418.65666707355",
+          "benchmark.2.std": "510.32935870079126",
+          "benchmark.2.err": "294.6387926212709",
+          "benchmark.2.best": "464991.9867515564",
+          "benchmark.2.worst": "465983.9868545532",
+          "check": "pass"
+        }
+      }
+    ]
+  },
+  "raw_results_sha256": "54e44c186b65359163278bf769109753597ff6eb73630b1f1ec23f97965c4069"
+}

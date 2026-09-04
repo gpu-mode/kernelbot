@@ -1,0 +1,47 @@
+{
+  "kernelbot_head": "adfe557c0ca1e38b8a391c66de733391ef2aaeed",
+  "payload_sha256": {
+    "experiment.py": "ca5c047b9f3499b5b036c1a92c0ad6f07909efe6ad5aafbc17a79fd84f573f3b",
+    "export_result.py": "0832549b69ca38641e020c2b6d7949cf6281e48d4df126c27b0ad0930da13ba3",
+    "inline.json": "06cfdd41217715960265e525afa4322b4ef21f7112e51374ab0e3ebd3c5c6eb6",
+    "persistent.py": "658713543c8c96dac3e7baf64fb767ce0f39ad811bc86ae4db41d0bbfc0e1e02",
+    "source/libkernelbot/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source/libkernelbot/consts.py": "3226ad414d94862a536336c867690015a93776d068e2b33ec8d3deb613f3a0b2",
+    "source/libkernelbot/run_eval.py": "873a5f1e0f1365b0e87189c2ce0836a229ac6391b8c6a75ff021c67f2ee431a9",
+    "triton.json": "4054d6994f19dd92166b1c52b5f53c58392364dbdc14c62e274798efa14db008",
+    "worker.py": "28d044c03dce42bc4d07c23f563a373754c8eb696c944403dcfb34575e57771a"
+  },
+  "arguments": {
+    "workload": "inline",
+    "count": 4,
+    "rounds": 1
+  },
+  "image": "nvidia/cuda:12.8.1-devel-ubuntu22.04",
+  "python": "3.11",
+  "packages": [
+    "torch==2.7.1",
+    "numpy==2.2.6",
+    "ninja==1.11.1.4"
+  ],
+  "gpu": "T4",
+  "cpu": 8,
+  "memory_mib": 32768,
+  "payload_matches_commit": "4de31428",
+  "note": "The launcher started before the payload commit was made; payload hashes were checked against the committed files after completion.",
+  "sandbox": {
+    "id": "sb-xkqyVw79gSxClLEL8rCfVJ",
+    "command": [
+      "python",
+      "/experiment/experiment.py",
+      "--workload",
+      "inline",
+      "--count",
+      "4",
+      "--rounds",
+      "1"
+    ],
+    "elapsed_s": 406.38916991600126,
+    "stopped": true,
+    "gpu_cost_estimate_usd": 0.06664782386622421
+  }
+}
