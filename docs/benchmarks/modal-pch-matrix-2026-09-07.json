@@ -1,0 +1,678 @@
+{
+  "date": "2026-09-07",
+  "implementation_commit": "6c502bd1ce0d080b193e887bad37776bd99f738a",
+  "harness_sha256": "cac105d7621941eacd6fa0885f0acff0bddec067cfb29a1197331dde2f16c659",
+  "cuda": "13.3.0",
+  "torch": "2.12.0+cu130",
+  "gpu": "T4",
+  "requested_cpu": 4,
+  "memory_mib": 16384,
+  "volume": "kernelbot-pch-test-20260907",
+  "warmed_profile": "cuda-default",
+  "normal_ninja_parallelism": true,
+  "baseline_compiler": "/usr/bin/g++",
+  "diagnostic_header_tracing_excluded_from_timing": true,
+  "timing_notes": "Both modes use the same external timing shim. Total load/load_inline is timed for CUDA cases; plain_cpp reports the median of ten object compilations, excluding its link. Per-case summaries are medians of two different source/header variants in separate containers. No zero-slowdown guarantee is asserted.",
+  "run_links": {
+    "inline_simple": "https://modal.com/apps/coreauto/main/ap-ZBKWqPp5sSkMJCFjKmWwPI",
+    "remaining": "https://modal.com/apps/coreauto/main/ap-5aIt3temjLqpwFSfQhW6LI"
+  },
+  "correctness_checks": 100,
+  "fresh_containers": 20,
+  "pch_keys": [
+    "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+  ],
+  "estimated_gpu_compute_usd": 0.09262219526251199,
+  "cost_notes": "T4 GPU time for these 20 calls at $0.000164/s, including untimed diagnostics; excludes startup, setup/failing pilot runs, CPU warmup and memory.",
+  "summary": {
+    "inline_simple": {
+      "baseline_seconds": 18.8471031105,
+      "cache_seconds": 9.997744876999999,
+      "ratio": 1.8851354322771445,
+      "baseline_host_seconds": 18.042343731499997,
+      "cache_host_seconds": 8.803183696000001
+    },
+    "inline_complex": {
+      "baseline_seconds": 19.938248450499998,
+      "cache_seconds": 14.2401688755,
+      "ratio": 1.400141292200787,
+      "baseline_host_seconds": 19.111699750499998,
+      "cache_host_seconds": 7.875871039
+    },
+    "load_files": {
+      "baseline_seconds": 18.3017816695,
+      "cache_seconds": 8.774257883,
+      "ratio": 2.085849528648963,
+      "baseline_host_seconds": 17.528128097,
+      "cache_host_seconds": 7.7537195005
+    },
+    "plain_cpp": {
+      "baseline_seconds": 0.2017184177500002,
+      "cache_seconds": 0.28704759275,
+      "ratio": 0.7027350963562476,
+      "baseline_host_seconds": 0.1250452337500002,
+      "cache_host_seconds": 0.20968030274999983
+    },
+    "flag_miss": {
+      "baseline_seconds": 18.0761359535,
+      "cache_seconds": 20.301430385,
+      "ratio": 0.8903873082192184,
+      "baseline_host_seconds": 17.252728550999997,
+      "cache_host_seconds": 19.076173736499996
+    }
+  },
+  "rows": [
+    {
+      "case": "inline_simple",
+      "variant": 0,
+      "enabled": false,
+      "extension_name": "pch_matrix_inline_simple_0_0",
+      "seconds": 18.800584544,
+      "timing_samples": [
+        18.800584544
+      ],
+      "host_compile_seconds": 17.997382098,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT654VFX478EV36GSNAGCR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 41.135301596999994
+    },
+    {
+      "case": "inline_simple",
+      "variant": 0,
+      "enabled": true,
+      "extension_name": "pch_matrix_inline_simple_0_1",
+      "seconds": 9.449116172,
+      "timing_samples": [
+        9.449116172
+      ],
+      "host_compile_seconds": 8.415279449,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT65B8E9149HBHXBTA0NAR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 21.075640688
+    },
+    {
+      "case": "inline_simple",
+      "variant": 1,
+      "enabled": true,
+      "extension_name": "pch_matrix_inline_simple_1_1",
+      "seconds": 10.546373582,
+      "timing_samples": [
+        10.546373582
+      ],
+      "host_compile_seconds": 9.191087943000001,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT654V66S3D05ZP1KSGBXR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 22.933361906
+    },
+    {
+      "case": "inline_simple",
+      "variant": 1,
+      "enabled": false,
+      "extension_name": "pch_matrix_inline_simple_1_0",
+      "seconds": 18.893621677,
+      "timing_samples": [
+        18.893621677
+      ],
+      "host_compile_seconds": 18.087305365,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT65B8TXRZGSM820Z3Q16R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 40.762046516
+    },
+    {
+      "case": "inline_complex",
+      "variant": 0,
+      "enabled": false,
+      "extension_name": "pch_matrix_inline_complex_0_0",
+      "seconds": 18.759751232,
+      "timing_samples": [
+        18.759751232
+      ],
+      "host_compile_seconds": 18.012592808999997,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "bb3eedfa1df83397af6a8f7edb81db46b0db7cda4a388c79a270329aa8ae85ee",
+      "container_id": "ta-01M1YT0HRZP289WPV9VMSSPF8R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 40.230402710999996
+    },
+    {
+      "case": "inline_complex",
+      "variant": 0,
+      "enabled": true,
+      "extension_name": "pch_matrix_inline_complex_0_1",
+      "seconds": 14.449278815,
+      "timing_samples": [
+        14.449278815
+      ],
+      "host_compile_seconds": 7.923061731999999,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "bb3eedfa1df83397af6a8f7edb81db46b0db7cda4a388c79a270329aa8ae85ee",
+      "container_id": "ta-01M1YT0J0EQEC8X2QHC6S0EAPR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 26.335685509
+    },
+    {
+      "case": "inline_complex",
+      "variant": 1,
+      "enabled": true,
+      "extension_name": "pch_matrix_inline_complex_1_1",
+      "seconds": 14.031058936,
+      "timing_samples": [
+        14.031058936
+      ],
+      "host_compile_seconds": 7.8286803460000005,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "8be4b20baeb5c3ea8fbb6ec714175f9d77dd02662be31f23bddffc7807074d66",
+      "container_id": "ta-01M1YT0HRZYPV863GAZA3K6T1R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 26.304385472
+    },
+    {
+      "case": "inline_complex",
+      "variant": 1,
+      "enabled": false,
+      "extension_name": "pch_matrix_inline_complex_1_0",
+      "seconds": 21.116745669,
+      "timing_samples": [
+        21.116745669
+      ],
+      "host_compile_seconds": 20.210806692,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "8be4b20baeb5c3ea8fbb6ec714175f9d77dd02662be31f23bddffc7807074d66",
+      "container_id": "ta-01M1YT0HM8DWCT713GAJ6ZQRVR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 45.54159261
+    },
+    {
+      "case": "load_files",
+      "variant": 0,
+      "enabled": false,
+      "extension_name": "pch_matrix_shared",
+      "seconds": 18.484804069,
+      "timing_samples": [
+        18.484804069
+      ],
+      "host_compile_seconds": 17.716654833999996,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT1MEHZQJTJ91K03EYFKJR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 39.96083478
+    },
+    {
+      "case": "load_files",
+      "variant": 0,
+      "enabled": true,
+      "extension_name": "pch_matrix_shared",
+      "seconds": 8.844153404,
+      "timing_samples": [
+        8.844153404
+      ],
+      "host_compile_seconds": 7.813371175,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT1MM8C9EBBGEZCWXZAW5R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 20.400708645
+    },
+    {
+      "case": "load_files",
+      "variant": 1,
+      "enabled": true,
+      "extension_name": "pch_matrix_shared",
+      "seconds": 8.704362362000001,
+      "timing_samples": [
+        8.704362362000001
+      ],
+      "host_compile_seconds": 7.6940678259999995,
+      "pch_consumed": true,
+      "hit_keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT20M1E9G09T9PZBWNQ65R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 20.25399071
+    },
+    {
+      "case": "load_files",
+      "variant": 1,
+      "enabled": false,
+      "extension_name": "pch_matrix_shared",
+      "seconds": 18.118759269999998,
+      "timing_samples": [
+        18.118759269999998
+      ],
+      "host_compile_seconds": 17.33960136,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT276G72J91NSPNG9VWAWR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 39.779365328000004
+    },
+    {
+      "case": "plain_cpp",
+      "variant": 0,
+      "enabled": false,
+      "extension_name": "pch_matrix_plain_cpp_0_0",
+      "seconds": 0.19980638800000028,
+      "timing_samples": [
+        0.21276275,
+        0.19661020400000018,
+        0.20195385499999974,
+        0.20159454799999965,
+        0.20105536800000046,
+        0.1982173860000005,
+        0.1969059470000003,
+        0.1985574080000001,
+        0.19711016499999978,
+        0.2051067179999997
+      ],
+      "host_compile_seconds": 0.12402935050000008,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 1,
+      "outputs": [
+        3
+      ],
+      "source_sha256": "f5fbb559817c22a648c4be4067de69dd806e6e9f2c9be71aa84f2371ecf8d781",
+      "container_id": "ta-01M1YT2FP2X908DV2VFHCJPT6R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 0,
+      "remote_seconds": 2.3064990610000002
+    },
+    {
+      "case": "plain_cpp",
+      "variant": 0,
+      "enabled": true,
+      "extension_name": "pch_matrix_plain_cpp_0_1",
+      "seconds": 0.2823680209999999,
+      "timing_samples": [
+        0.35445732099999994,
+        0.3628376659999999,
+        0.30029828899999966,
+        0.28355820099999995,
+        0.28399713199999965,
+        0.27632356199999997,
+        0.2811778409999999,
+        0.2746912210000003,
+        0.2782820089999998,
+        0.2755435680000007
+      ],
+      "host_compile_seconds": 0.20570012650000002,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 1,
+      "outputs": [
+        3
+      ],
+      "source_sha256": "f5fbb559817c22a648c4be4067de69dd806e6e9f2c9be71aa84f2371ecf8d781",
+      "container_id": "ta-01M1YT2QSWZR9SN6VGQJC16VSR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 0,
+      "remote_seconds": 3.291071738
+    },
+    {
+      "case": "plain_cpp",
+      "variant": 1,
+      "enabled": true,
+      "extension_name": "pch_matrix_plain_cpp_1_1",
+      "seconds": 0.29172716450000014,
+      "timing_samples": [
+        0.49523322599999986,
+        0.36589996000000014,
+        0.28990115899999935,
+        0.291525472,
+        0.28335249200000057,
+        0.29192885700000026,
+        0.2972645429999998,
+        0.2952913079999995,
+        0.2844164109999996,
+        0.2789291899999995
+      ],
+      "host_compile_seconds": 0.21366047899999963,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 1,
+      "outputs": [
+        4
+      ],
+      "source_sha256": "4f5b6c5b34f3f71e1e94ad89fb640e348e9bd0232d5cdfc75075c5e827674378",
+      "container_id": "ta-01M1YT2TY6A6XZNT3DJDM9AW6R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 0,
+      "remote_seconds": 3.5053143249999996
+    },
+    {
+      "case": "plain_cpp",
+      "variant": 1,
+      "enabled": false,
+      "extension_name": "pch_matrix_plain_cpp_1_0",
+      "seconds": 0.20363044750000014,
+      "timing_samples": [
+        0.2254486870000001,
+        0.20830646500000016,
+        0.20089933599999998,
+        0.207017467,
+        0.2131324689999996,
+        0.20014710299999994,
+        0.20089258399999999,
+        0.2038948989999998,
+        0.19941997500000053,
+        0.2033659960000005
+      ],
+      "host_compile_seconds": 0.12606111700000033,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 1,
+      "outputs": [
+        4
+      ],
+      "source_sha256": "4f5b6c5b34f3f71e1e94ad89fb640e348e9bd0232d5cdfc75075c5e827674378",
+      "container_id": "ta-01M1YT3294D1MHQ774CC40NP6R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 0,
+      "remote_seconds": 2.300308057
+    },
+    {
+      "case": "flag_miss",
+      "variant": 0,
+      "enabled": false,
+      "extension_name": "pch_matrix_flag_miss_0_0",
+      "seconds": 18.314668328000003,
+      "timing_samples": [
+        18.314668328000003
+      ],
+      "host_compile_seconds": 17.468810722999997,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT32ZPHKD6NAA1RQHDFZNR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 39.548441550999996
+    },
+    {
+      "case": "flag_miss",
+      "variant": 0,
+      "enabled": true,
+      "extension_name": "pch_matrix_flag_miss_0_1",
+      "seconds": 20.427356331,
+      "timing_samples": [
+        20.427356331
+      ],
+      "host_compile_seconds": 19.146695692999998,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": true,
+      "correctness_checks": 6,
+      "outputs": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "source_sha256": "4ec65ca0b08feea11ce48b7a0ebd322676aab622d35eba1da63b605643e46435",
+      "container_id": "ta-01M1YT36X83KGN6Y6BSXPHJB5R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 44.605277338
+    },
+    {
+      "case": "flag_miss",
+      "variant": 1,
+      "enabled": true,
+      "extension_name": "pch_matrix_flag_miss_1_1",
+      "seconds": 20.175504439,
+      "timing_samples": [
+        20.175504439
+      ],
+      "host_compile_seconds": 19.005651779999997,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": true,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT3AQERWZZTC7SBEKE1EFR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 43.945379948
+    },
+    {
+      "case": "flag_miss",
+      "variant": 1,
+      "enabled": false,
+      "extension_name": "pch_matrix_flag_miss_1_0",
+      "seconds": 17.837603579,
+      "timing_samples": [
+        17.837603579
+      ],
+      "host_compile_seconds": 17.036646379,
+      "pch_consumed": false,
+      "hit_keys": [],
+      "cache_miss": false,
+      "correctness_checks": 6,
+      "outputs": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "source_sha256": "7e064d69277762a33d2a65a4d6258e5422c7d2b3535694ce9afd6a6304f6993a",
+      "container_id": "ta-01M1YT3MBVRB90BKSZW7DR6FHR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "nvcc_translation_units": 1,
+      "remote_seconds": 40.553874818
+    }
+  ]
+}

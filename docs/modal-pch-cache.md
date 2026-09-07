@@ -113,6 +113,95 @@ To diagnose a submission, `KERNELBOT_PCH_TRACE=1` prints the host compile time a
 GCC's header trace on PCH-enabled compilations. `KERNELBOT_PCH_DISABLE=1` provides
 a baseline without the cache.
 
+## Similar sources, other build APIs, and performance limits
+
+Reuse is based on the Torch header's compilation configuration, not source-text
+similarity. Different kernel bodies, filenames, extension names, or user headers
+included **after** `torch/extension.h` can share the same Torch PCH. Their source
+and user headers are still compiled separately into new objects/shared libraries;
+none of that submission code is persisted in the Volume. Changing a local header
+therefore changes the resulting code, even when the Torch PCH key stays the same.
+
+Changing host compiler flags, ABI macros, include paths, or header-search
+environment selects another key. If that exact profile was not warmed, the
+wrapper compiles normally. A macro or other header before the initial Torch
+include makes the wrapper bypass PCH entirely, preserving preprocessing order.
+Installed header changes require rebuilding the image/fingerprint and rewarming.
+
+The wrapper operates at `CXX`, so it can also accelerate
+`torch.utils.cpp_extension.load()` with file sources beginning with the same Torch
+include and matching flags. Plain C++ without that prefix bypasses PCH. Builds
+that explicitly choose another compiler bypass the wrapper. Python/Triton paths
+that do not invoke `CXX` never invoke this cache.
+
+There is **no guarantee of zero slowdown**. Even a miss/bypass adds a Python
+compiler-wrapper invocation; hits must load a large PCH from the Volume, and
+NVCC-heavy builds may receive little or no end-to-end benefit. Warmup itself costs
+CPU time and storage, although it runs before deployment rather than on a
+submission's GPU. `KERNELBOT_PCH_DISABLE=1` skips PCH lookup, but still starts the
+wrapper; `CXX=/usr/bin/g++` bypasses the wrapper entirely.
+
+The broader regression matrix runs simple CUDA headers, CuTe/MathDx headers,
+file-based `load()`, a plain `<array>` C++ program, and unwarmed compiler flags:
+
+```sh
+PYTHONPATH=src:src/runners KERNELBOT_PCH_VOLUME=kernelbot-pch-test-20260907 \
+  uv run modal run scripts/modal_pch_matrix.py
+```
+
+Each case changes a local header (`kVariant = 1` versus `2`); CUDA cases also
+change the kernel body (256 versus 128 threads), producing different expected
+outputs. The file-based `load()` case even keeps the extension name identical
+across variants. Each variant
+runs with direct GCC and with the cache wrapper in a fresh T4 container. The reference
+compiler is real `/usr/bin/g++`, rather than the cache wrapper in disabled mode.
+Both modes have identical external timing instrumentation. GCC `-H` verification
+runs in a separate compile **after** timing and correctness checks. Plain C++
+uses ten compiles per container to make wrapper overhead visible. No timing
+threshold forces a favorable result; the matrix reports all timings and asserts
+correctness, the intended hit/miss behavior, actual PCH consumption, unique
+container IDs, changed source hashes, and distinct outputs for the variants.
+The complex fixture enables CUDA half operators/conversions via NVCC `-U` flags
+needed by MathDx; these device-only flags do not change the host PCH key.
+
+## Broader matrix results (2026-09-07)
+
+CUDA 13.3 / PyTorch 2.12.0+cu130, T4, normal Ninja parallelism. Each table value
+is the median across two changed source/header variants, each tested in separate
+direct-GCC and cache-enabled containers. Plain C++ first takes the median of ten
+object compilations per container; its linking is excluded.
+
+| Case | Direct GCC | Cache wrapper | Ratio |
+| --- | ---: | ---: | ---: |
+| Minimal CUDA headers, `load_inline` | 18.847s | 9.998s | 1.89× |
+| CuTe/MathDx headers, `load_inline` | 19.938s | 14.240s | 1.40× |
+| File-based `load()`, same extension name | 18.302s | 8.774s | 2.09× |
+| Plain C++ `<array>` object compilation | 0.202s | 0.287s | 0.70× |
+| Unwarmed host flags, `load_inline` | 18.076s | 20.301s | 0.89× |
+
+All **100 correctness checks passed across 20 fresh containers**. The six warmed
+CUDA builds (simple, complex, and file-based, two variants each) consumed the
+same Torch PCH. The CUDA outputs changed from 2 to 3 as expected when the local
+header changed; the file-based test used the same extension name for both.
+Both changed-flag builds logged cache misses, and plain C++ bypassed PCH.
+
+The plain C++ compiler stage, excluding the common timing shim's startup, went
+from about 0.125s to 0.210s: roughly **85ms wrapper overhead**. The cache-miss
+case was also slower in this sample (18.08s to 20.30s); with two source variants
+on different machines, this does not isolate wrapper/filesystem cost from
+machine variability. These results explicitly do not establish zero regressions.
+For a tiny build that must avoid wrapper cost, set `CXX=/usr/bin/g++`.
+
+CuTe/MathDx headers still compile through NVCC; the PCH only saves Torch host-header
+work. The complex case initially failed because PyTorch's NVCC half-type
+suppression macros conflict with MathDx. The final fixture undoes those macros
+only for NVCC, then passes in both baseline and cached modes. The successful
+matrix runs below use that corrected fixture, with no changes to production
+compiler-cache code.
+
+The harness and updated key regression test pass Ruff and the 41 relevant local
+tests. [Raw results, per-container timings, and successful Modal run links](benchmarks/modal-pch-matrix-2026-09-07.json).
+
 ## Current-main measurements (2026-09-07)
 
 Revalidated on main `727212cd`, preserving CUDA 13.3.0, PyTorch 2.12.0+cu130,

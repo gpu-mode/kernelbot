@@ -35,7 +35,13 @@ def command(tmp_path, name="first", extra=()):
 
 def test_different_kernels_share_header_key(tmp_path):
     first = compiler.compile_flags(command(tmp_path, "first"))
-    second = compiler.compile_flags(command(tmp_path, "second"))
+    second_args = command(tmp_path, "second")
+    # Source bodies and user headers following Torch are compiled anew, not cached.
+    (tmp_path / "second.cpp").write_text(
+        '#include <torch/extension.h>\n#include "custom.h"\nint value() { return CUSTOM + 2; }\n'
+    )
+    (tmp_path / "custom.h").write_text("#define CUSTOM 7\n")
+    second = compiler.compile_flags(second_args)
     assert compiler.cache_key(first, "image") == compiler.cache_key(second, "image")
 
 
