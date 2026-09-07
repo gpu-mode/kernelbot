@@ -3,7 +3,7 @@
 The runner sets `CXX` to a GCC wrapper that loads a precompiled
 `torch/extension.h` from a Modal Volume. Ordinary `load_inline()` calls need no
 changes. Leave `use_pch=False`; PyTorch's separate native PCH option is unnecessary.
-File-based `load()` also benefits when its C++ source starts with the same include.
+The submission path assumes `load_inline()`.
 
 Only the Torch host header is cached. CUDA/CUTLASS templates, user headers, kernel
 objects, and shared libraries still compile in each submission container.
@@ -59,8 +59,9 @@ PYTHONPATH=src:src/runners KERNELBOT_PCH_VOLUME=kernelbot-pch-test \
 Every build runs in a fresh T4 container (4 CPU cores, 16 GiB), with normal Ninja
 parallelism. The baseline uses `/usr/bin/g++`; both modes use the same timing
 instrumentation. GCC header tracing verifies actual PCH use in a separate,
-untimed compilation. The tests check changed headers and source, including
-file-based `load()` with the same extension name, against distinct expected outputs.
+untimed compilation. The tests check changed headers and source against distinct
+expected outputs. The script also retains file-based and plain C++ diagnostics;
+these are not representative submission paths.
 
 The CUTLASS case instantiates SM75 tensor-core GEMMs with FP16 inputs, FP32
 accumulation/output, 128×128×32 and 128×64×32 threadblock tiles. It checks
@@ -72,15 +73,13 @@ time, not GEMM execution speed.
 
 Measured on CUDA 13.3 / PyTorch 2.12.0+cu130, T4. Values are medians from separate
 baseline and cached containers; two variants per case, with two repetitions for
-CUTLASS. The plain C++ row measures object compilation only.
+CUTLASS. The table covers `load_inline()` builds.
 
 | Build | Baseline | Cached |
 | --- | ---: | ---: |
 | Minimal CUDA headers | 18.85s | 10.00s |
 | CUTLASS GEMM, default implicit CUDA headers | 48.08s | 45.61s |
 | CUTLASS GEMM, `no_implicit_headers=True` | 19.95s | 12.58s |
-| File-based `load()` | 18.30s | 8.77s |
-| Plain C++ | 0.202s | 0.287s |
 | Unwarmed host flags | 18.08s | 20.30s |
 
 With default implicit CUDA headers, the CUTLASS GEMM improved only **1.05×**,
@@ -92,10 +91,12 @@ the CUDA translation unit produces the larger gain for this GEMM; the fixture
 keeps Tensor handling in C++ and explicitly includes its required headers.
 
 All 160 GEMM checks passed, with maximum absolute error 8.53e-6. The remaining
-cases passed another 76 checks. All eight warmup profiles also completed and
+cases, including the supplemental diagnostics, passed another 76 checks.
+All eight warmup profiles also completed and
 committed on this image.
 
-The plain C++ wrapper added about 85ms; the miss case was also slower in this
-sample. Separate containers introduce timing variability, and larger CUDA
-builds may hide the host-side savings entirely.
+The `load_inline()` case with unwarmed host flags was slower in this sample.
+Separate containers introduce timing variability, so the measured difference
+does not isolate wrapper overhead. Larger CUDA builds may hide the host-side
+savings entirely.
 [Per-container results and Modal runs](benchmarks/modal-pch.json).
