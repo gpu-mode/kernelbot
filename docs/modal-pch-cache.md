@@ -13,7 +13,9 @@ parsing, kernel compilation, or arbitrary user-provided headers.
 
 ## Warm and deploy
 
-From the repository root, using the same Modal profile/environment for both:
+The existing main/dev deployment workflow warms all profiles before deploying
+the GPU functions. A warmup failure prevents that rollout. For a manual rollout,
+run these commands from the repository root in the same Modal profile/environment:
 
 ```sh
 PYTHONPATH=src:src/runners uv run modal run src/runners/modal_runner.py::warm_pch
