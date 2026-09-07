@@ -1,8 +1,11 @@
+import os
 import signal
+import subprocess
 import traceback
 from contextlib import contextmanager
+from pathlib import Path
 
-from modal import App, Image
+from modal import App, Image, Volume
 
 from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 
@@ -113,6 +116,24 @@ cuda_image = (
     )
 )
 
+# The writer is a trusted CPU-only warmup function. Submission containers mount
+# this Volume read-only; no submission objects or shared libraries are persisted.
+PCH_MOUNT = "/kernelbot-pch"
+PCH_VOLUME_NAME = os.environ.get("KERNELBOT_PCH_VOLUME", "kernelbot-torch-pch")
+pch_volume = Volume.from_name(PCH_VOLUME_NAME, create_if_missing=True)
+pch_files = Path(__file__).parent / "pch"
+cuda_image = (
+    cuda_image.add_local_file(
+        pch_files / "compiler.py", "/opt/kernelbot-pch/compiler.py", copy=True
+    )
+    .add_local_file(pch_files / "warm.py", "/opt/kernelbot-pch/warm.py", copy=True)
+    .run_commands(
+        "chmod +x /opt/kernelbot-pch/compiler.py",
+        "python /opt/kernelbot-pch/compiler.py --kernelbot-fingerprint",
+    )
+    .env({"CXX": "/opt/kernelbot-pch/compiler.py", "KERNELBOT_PCH_VOLUME": PCH_VOLUME_NAME})
+)
+
 cuda_image = cuda_image.add_local_python_source(
     "libkernelbot",
     "modal_runner",
@@ -168,3 +189,28 @@ def modal_run_config(  # noqa: C901
             runs={},
             system=SystemInfo(),
         )
+
+
+@app.function(
+    image=cuda_image,
+    cpu=4,
+    memory=16384,
+    timeout=1800,
+    max_containers=1,
+    volumes={PCH_MOUNT: pch_volume},
+)
+def warm_pch(profiles: str = ""):
+    # A comma-separated selector also works with the Modal CLI.
+    """Run before deploying GPU runners: modal run modal_runner.py::warm_pch."""
+    allowed = {
+        f"{device}-{flags}"
+        for device in ("cpu", "cuda")
+        for flags in ("default", "O2", "O3", "O3-fast-math")
+    }
+    selected = profiles.split(",") if profiles else []
+    if not set(selected) <= allowed:
+        raise ValueError(f"Unknown profiles; choose from {sorted(allowed)}")
+    pch_volume.reload()
+    subprocess.run(["python3", "/opt/kernelbot-pch/warm.py", *selected], check=True)
+    pch_volume.commit()
+    return "Torch PCH profiles committed"

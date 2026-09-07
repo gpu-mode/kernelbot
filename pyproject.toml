@@ -15,7 +15,7 @@ dependencies = [
     "audioop-lts; python_version >= '3.13'",
     "python-dotenv",
     "requests",
-    "modal",
+    "modal>=1.5.0",
     "psycopg2-binary",
     "yoyo-migrations",
     "better_profanity",
