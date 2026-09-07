@@ -11,6 +11,39 @@ remain in each container's normal local extension cache.
 This accelerates the **host C++ binding**; it does not cache NVCC's CUDA header
 parsing, kernel compilation, or arbitrary user-provided headers.
 
+## For submission authors: automatic after deployment
+
+Keep using `load_inline` normally; no cache flag is required:
+
+```python
+module = load_inline(
+    name="my_kernel",
+    cpp_sources=cpp_source,
+    cuda_sources=cuda_source,
+    functions=["my_kernel"],
+)
+```
+
+Kernelbot configures `CXX` in the runner image. The normal implicit
+`torch/extension.h` prefix and default host compiler flags match the warmed cache.
+Do **not** add `use_pch=True` to enable this feature: that invokes PyTorch's
+separate native PCH mechanism and can add redundant work. Leave it at its default.
+
+The standard warmup also covers exact `extra_cflags=["-O2"]`, `["-O3"]`, and
+`["-O3", "-ffast-math"]` profiles. Other host flags or include environments may
+miss, but still compile normally. `extra_cuda_cflags` apply to NVCC, so changing
+only those does not change the host C++ cache key. No submission author needs to
+create, mount, reload, or write a Modal Volume; the operator owns warmup/deployment.
+
+For `no_implicit_headers=True`, explicitly put `#include <torch/extension.h>`
+first in the C++ source if you want this cache to apply. The same condition
+allows file-based `load()` to benefit. Pure Python/Triton submissions do not use
+this C++ cache. To bypass all wrapper overhead for a tiny or unusual C++ build,
+set `os.environ["CXX"] = "/usr/bin/g++"` before calling the extension loader.
+
+This feature remains a proposed runner change until PR #527 is deployed; the
+reported tests ran in separate Modal test apps.
+
 ## Warm and deploy
 
 The existing main/dev deployment workflow warms all profiles before deploying
