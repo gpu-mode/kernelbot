@@ -113,7 +113,34 @@ To diagnose a submission, `KERNELBOT_PCH_TRACE=1` prints the host compile time a
 GCC's header trace on PCH-enabled compilations. `KERNELBOT_PCH_DISABLE=1` provides
 a baseline without the cache.
 
-## Measured results (2026-09-07)
+## Current-main measurements (2026-09-07)
+
+Revalidated on main `727212cd`, preserving CUDA 13.3.0, PyTorch 2.12.0+cu130,
+and MathDx. Both fixtures use the same image and freshly warmed `cuda-default`
+profile, normal Ninja parallelism, and eight distinct T4 containers.
+
+| Submission | C++ compilation, cold → PCH | Total `load_inline`, cold → PCH |
+| --- | --- | --- |
+| Minimal CUDA headers | 19.36s → 8.91s (2.17×) | 20.45s → 9.91s (2.06×) |
+| Original implicit headers | 18.44s → 8.79s (2.10×) | 38.10s → 43.25s (0.88×) |
+
+All 40 correctness checks passed. Every cache-enabled build consumed the same
+PCH, and every container rejected filesystem and Modal API writes. The
+Torch-heavy CUDA fixture did **not** improve end-to-end in this run: warm totals
+were 49.99s and 36.50s, despite faster host compilation. These two-sample medians
+show the host-stage benefit and the minimal-header fixture's total-time benefit;
+they do not establish an end-to-end speedup for NVCC-heavy submissions.
+
+41 relevant local tests and Ruff passed on this base. GitHub unit, lint, Modal
+integration, and GitHub integration checks also passed on `38b98928`.
+Only `cuda-default` was rewarmed on the current image; the eight-profile warmup
+below applies to the earlier image. The deployment workflow warms all profiles
+for the actual image before deploying it. Production has not been deployed by
+this experiment.
+
+[Current-main raw measurements and run links](benchmarks/modal-pch-current-main-2026-09-07.json).
+
+## Earlier-image measurements (2026-09-07)
 
 T4, CUDA 12.9.1, PyTorch 2.11.0+cu129, normal Ninja parallelism. Each row below
 is the median of two different kernel variants, each tested in separate cold

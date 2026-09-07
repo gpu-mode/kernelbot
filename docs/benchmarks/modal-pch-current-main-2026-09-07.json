@@ -1,0 +1,302 @@
+{
+  "date": "2026-09-07",
+  "base_commit": "727212cdcf1b9b4d587c12f6d1484b3fd54549d0",
+  "implementation_commit": "38b98928",
+  "cuda_image_version": "13.3.0",
+  "torch": "2.12.0+cu130",
+  "cpu": 4,
+  "memory_mib": 16384,
+  "normal_ninja_parallelism": true,
+  "volume": "kernelbot-pch-test-20260907",
+  "warmed_profiles": [
+    "cuda-default"
+  ],
+  "run_links": {
+    "minimal": "https://modal.com/apps/coreauto/main/ap-iNSFXRa4TIP80OqKP6Evxs",
+    "implicit": "https://modal.com/apps/coreauto/main/ap-A5cGWJRnQYzTttK1ZeEbTV"
+  },
+  "summary": {
+    "minimal": {
+      "cpp_seconds": {
+        "cold": 19.36,
+        "warm": 8.906500000000001,
+        "speedup": 2.173693370010666
+      },
+      "load_inline_seconds": {
+        "cold": 20.447000000000003,
+        "warm": 9.91,
+        "speedup": 2.063269424823411
+      }
+    },
+    "implicit": {
+      "cpp_seconds": {
+        "cold": 18.441,
+        "warm": 8.7895,
+        "speedup": 2.098071562659992
+      },
+      "load_inline_seconds": {
+        "cold": 38.096000000000004,
+        "warm": 43.245999999999995,
+        "speedup": 0.8809138417425891
+      }
+    }
+  },
+  "rows": [
+    {
+      "api_write_denied": true,
+      "enabled": false,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS0N16K76Q8V4C3VF51N3R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 19.445,
+      "cpp_seconds": [
+        18.61
+      ],
+      "pch_consumed": false,
+      "keys": [],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 31.217458912999998,
+      "headers": "minimal",
+      "variant": 0
+    },
+    {
+      "api_write_denied": true,
+      "enabled": true,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS1TYTV9BKMDNRHENGDD9R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 9.23,
+      "cpp_seconds": [
+        8.278
+      ],
+      "pch_consumed": true,
+      "keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 21.60613694,
+      "headers": "minimal",
+      "variant": 0
+    },
+    {
+      "api_write_denied": true,
+      "enabled": false,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS2KZ7R00G1ANY0ZQMS1TR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 21.449,
+      "cpp_seconds": [
+        20.11
+      ],
+      "pch_consumed": false,
+      "keys": [],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 33.334485347,
+      "headers": "minimal",
+      "variant": 1
+    },
+    {
+      "api_write_denied": true,
+      "enabled": true,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS3T71BGNZHNW70VDM0ZTR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 10.59,
+      "cpp_seconds": [
+        9.535
+      ],
+      "pch_consumed": true,
+      "keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 26.458702556,
+      "headers": "minimal",
+      "variant": 1
+    },
+    {
+      "api_write_denied": true,
+      "enabled": false,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS2KSKB7VPRNKQXTVN7S2R",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 38.816,
+      "cpp_seconds": [
+        19.127
+      ],
+      "pch_consumed": false,
+      "keys": [],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 51.25590044,
+      "headers": "implicit",
+      "variant": 0
+    },
+    {
+      "api_write_denied": true,
+      "enabled": true,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS4C0R2T6HGV7RYZYNKZVR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 49.988,
+      "cpp_seconds": [
+        10.423
+      ],
+      "pch_consumed": true,
+      "keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 67.888768213,
+      "headers": "implicit",
+      "variant": 0
+    },
+    {
+      "api_write_denied": true,
+      "enabled": false,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS6W4ESSF84B2K39QJEMZR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 37.376,
+      "cpp_seconds": [
+        17.755
+      ],
+      "pch_consumed": false,
+      "keys": [],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 48.367798831,
+      "headers": "implicit",
+      "variant": 1
+    },
+    {
+      "api_write_denied": true,
+      "enabled": true,
+      "gpu": "Tesla T4",
+      "torch": "2.12.0+cu130",
+      "container_id": "ta-01M1YS8GAY01Q5Y1XPHQ0E9DRR",
+      "image_id": "im-VGOID7nd5iWWNRTr1Lw2O7",
+      "load_inline_seconds": 36.504,
+      "cpp_seconds": [
+        7.156
+      ],
+      "pch_consumed": true,
+      "keys": [
+        "cd04740b9ab36ac9a2a8d533e50fc30250ab89f341186829da169aefb0865f38"
+      ],
+      "tests": {
+        "test-count": "5",
+        "test.0.spec": "size: 127; seed: 4242",
+        "test.0.status": "pass",
+        "test.1.spec": "size: 128; seed: 5236",
+        "test.1.status": "pass",
+        "test.2.spec": "size: 129; seed: 1001",
+        "test.2.status": "pass",
+        "test.3.spec": "size: 256; seed: 5531",
+        "test.3.status": "pass",
+        "test.4.spec": "size: 512; seed: 9173",
+        "test.4.status": "pass",
+        "check": "pass"
+      },
+      "remote_seconds": 47.203748833999995,
+      "headers": "implicit",
+      "variant": 1
+    }
+  ]
+}
