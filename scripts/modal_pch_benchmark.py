@@ -13,7 +13,12 @@ from modal_runner import PCH_MOUNT, cuda_image, pch_volume, warm_pch
 
 app = modal.App("kernelbot-pch-matrix")
 app.include(warm_pch.app)
-CASES = ("inline_simple", "inline_complex", "load_files", "plain_cpp", "flag_miss", "cutlass_gemm")
+CASES = (
+    "inline_simple", "load_files", "plain_cpp", "flag_miss",
+    "cutlass_gemm", "cutlass_gemm_implicit",
+)
+
+CACHED_CASES = set(CASES) - {"plain_cpp", "flag_miss"}
 
 # Instrument both modes identically; do not enable GCC's verbose header tracing
 # in timed builds. Baseline delegates directly to g++, cache mode to the wrapper.
@@ -54,7 +59,6 @@ CUDA = r'''
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include "variant.h"
-// EXTRA_HEADERS
 __global__ void add_kernel(const __half* a, const __half* b, __half* out, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) out[i] = __hadd(__hadd(a[i], b[i]), __float2half(float(kVariant)));
@@ -165,19 +169,9 @@ def trial(case: str, variant: int, enabled: bool, repeat: int = 0):
         (root / "variant.h").write_text(header)
         cpp = CPP
         cuda = CUDA.replace("THREADS", str(256 if variant == 0 else 128))
-        if case == "cutlass_gemm":
+        if case.startswith("cutlass_gemm"):
             cpp = GEMM_CPP
             cuda = GEMM_CUDA.replace("TILE_N", str(128 if variant == 0 else 64))
-        if case == "inline_complex":
-            cpp = cpp.replace(
-                '#include "variant.h"',
-                '#include "variant.h"\n#include <torch/torch.h>\n#include <ATen/Parallel.h>',
-            )
-            cuda = cuda.replace(
-                "// EXTRA_HEADERS",
-                "#include <cute/tensor.hpp>\n#include <cublasdx.hpp>\n"
-                "static_assert(cute::Int<128>::value == 128);",
-            )
         name = "pch_matrix_shared" if case == "load_files" else f"pch_matrix_{case}_{variant}_{int(enabled)}"
         if case == "plain_cpp":
             cpp = '#include <array>\n#include <cstdio>\n#include "variant.h"\nint main() {\n'
@@ -219,28 +213,26 @@ root = Path(os.environ["PCH_TEST_ROOT"])
 case = os.environ["PCH_TEST_CASE"]
 variant = int(os.environ["PCH_TEST_VARIANT"])
 options = dict(name=os.environ["PCH_TEST_NAME"], build_directory=str(root), verbose=True)
-if case in {"inline_complex", "cutlass_gemm"}:
-    # MathDx needs half operators/conversions disabled by PyTorch's NVCC defaults.
-    # Only device flags change; the host C++ PCH remains compatible.
+if case.startswith("cutlass_gemm"):
+    # Restore CUDA half operators for CUTLASS; host flags stay unchanged.
     options["extra_cuda_cflags"] = [
         "-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__",
         "-U__CUDA_NO_HALF2_OPERATORS__", "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
         "--expt-relaxed-constexpr",
+        "-O3", "-I/opt/cutlass/include", "-I/opt/cutlass/tools/util/include",
     ]
-if case == "cutlass_gemm":
-    options["extra_cuda_cflags"] += ["-O3", "-I/opt/cutlass/include", "-I/opt/cutlass/tools/util/include"]
 started = time.perf_counter()
 if case == "load_files":
     module = load(sources=[str(root / "binding.cpp"), str(root / "kernel.cu")], **options)
 else:
     module = load_inline(cpp_sources=(root / "cpp.txt").read_text(), cuda_sources=(root / "cuda.txt").read_text(),
-        functions=["add_cuda", "version"], no_implicit_headers=True,
+        functions=["add_cuda", "version"], no_implicit_headers=case != "cutlass_gemm_implicit",
         extra_cflags=[f"-DPCH_CASE={variant+1}"] if case == "flag_miss" else [], **options)
 seconds = time.perf_counter() - started
 assert module.version() == variant + 1
 outputs = []
 errors = []
-if case == "cutlass_gemm":
+if case.startswith("cutlass_gemm"):
     torch.manual_seed(17)
     with torch.cuda.stream(torch.cuda.Stream()):
         for m, n, k in ((128, 128, 64), (129, 136, 64), (256, 256, 128), (512, 512, 256)):
@@ -277,12 +269,12 @@ else:
             measurement = json.loads((root / "result.json").read_text())
             wall = measurement["seconds"]
             device_outputs = measurement["outputs"]
-            correctness_checks = 10 if case == "cutlass_gemm" else 6
+            correctness_checks = 10 if case.startswith("cutlass_gemm") else 6
             times = [wall]
         observed = [json.loads(line) for line in Path(str(commands) + ".cxx").read_text().splitlines()]
         hit_keys = re.findall(r"\[kernelbot-pch\] hit (\w+)", log)
         misses = "[kernelbot-pch] miss" in log
-        expected_hit = enabled and case in {"inline_simple", "inline_complex", "load_files", "cutlass_gemm"}
+        expected_hit = enabled and case in CACHED_CASES
         assert bool(hit_keys) == expected_hit, log[-14000:]
         assert misses == (enabled and case == "flag_miss"), log[-14000:]
         # Independently verify actual GCC consumption after all timing/correctness checks.
@@ -308,7 +300,7 @@ else:
             "container_id": os.environ["MODAL_TASK_ID"], "image_id": os.environ["MODAL_IMAGE_ID"],
             "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
             "nvcc_seconds": cuda_times,
-            "max_absolute_error": max(measurement["errors"], default=0) if case == "cutlass_gemm" else 0,
+            "max_absolute_error": max(measurement["errors"], default=0) if case.startswith("cutlass_gemm") else 0,
             "remote_seconds": time.perf_counter() - started,
         }
 
@@ -333,8 +325,7 @@ def main(output: str = "/tmp/kernelbot-pch-matrix.json", cases: str = "", repeat
         print(json.dumps(row), flush=True)
     assert len({row["container_id"] for row in rows}) == len(rows)
     hit_keys = {key for row in rows for key in row["hit_keys"]}
-    cached_cases = {"inline_simple", "inline_complex", "load_files", "cutlass_gemm"}
-    assert len(hit_keys) == (1 if set(selected) & cached_cases else 0)
+    assert len(hit_keys) == (1 if set(selected) & CACHED_CASES else 0)
     for case in selected:
         group = [row for row in rows if row["case"] == case]
         assert len({row["source_sha256"] for row in group}) == 2

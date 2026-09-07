@@ -53,7 +53,7 @@ PYTHONPATH=src:src/runners KERNELBOT_PCH_VOLUME=kernelbot-pch-test \
   uv run modal run scripts/modal_pch_benchmark.py
 # Actual tensor-core GEMM, two tile variants, two repetitions per mode:
 PYTHONPATH=src:src/runners KERNELBOT_PCH_VOLUME=kernelbot-pch-test \
-  uv run modal run scripts/modal_pch_benchmark.py --cases cutlass_gemm --repeats 2
+  uv run modal run scripts/modal_pch_benchmark.py --cases cutlass_gemm,cutlass_gemm_implicit --repeats 2
 ```
 
 Every build runs in a fresh T4 container (4 CPU cores, 16 GiB), with normal Ninja
@@ -77,18 +77,25 @@ CUTLASS. The plain C++ row measures object compilation only.
 | Build | Baseline | Cached |
 | --- | ---: | ---: |
 | Minimal CUDA headers | 18.85s | 10.00s |
-| CuTe/MathDx includes (vector add) | 19.94s | 14.24s |
-| CUTLASS tensor-core GEMM | 19.95s | 12.58s |
+| CUTLASS GEMM, default implicit CUDA headers | 48.08s | 45.61s |
+| CUTLASS GEMM, `no_implicit_headers=True` | 19.95s | 12.58s |
 | File-based `load()` | 18.30s | 8.77s |
 | Plain C++ | 0.202s | 0.287s |
 | Unwarmed host flags | 18.08s | 20.30s |
 
-The CUTLASS GEMM build was **1.59× faster** (37% less time). Host compilation went
-from 19.10s to 7.88s; NVCC took 12.54s and 11.53s respectively and became the
-bottleneck. The cache does not accelerate NVCC; those separate-container times
-include machine variability. All 80 GEMM checks passed, with maximum absolute
-error 8.53e-6. The broader cases passed another 100 checks.
+With default implicit CUDA headers, the CUTLASS GEMM improved only **1.05×**,
+with overlapping baseline/cached timing ranges. With `no_implicit_headers=True`,
+it improved **1.59×** (37% less time). In that case, host compilation fell from
+19.10s to 7.88s, while NVCC took 12.54s and 11.53s and became the bottleneck.
+The PCH does not cache CUDA headers or templates. Keeping Torch headers out of
+the CUDA translation unit produces the larger gain for this GEMM; the fixture
+keeps Tensor handling in C++ and explicitly includes its required headers.
+
+All 160 GEMM checks passed, with maximum absolute error 8.53e-6. The remaining
+cases passed another 76 checks. All eight warmup profiles also completed and
+committed on this image.
 
 The plain C++ wrapper added about 85ms; the miss case was also slower in this
-sample. Larger CUDA template builds may hide the host-side savings entirely.
+sample. Separate containers introduce timing variability, and larger CUDA
+builds may hide the host-side savings entirely.
 [Per-container results and Modal runs](benchmarks/modal-pch.json).
