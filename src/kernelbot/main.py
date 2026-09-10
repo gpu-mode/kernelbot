@@ -57,12 +57,8 @@ async def run_api_server(backend: KernelBackend):
     manager = init_background_submission_manager(BackgroundSubmissionManager(backend))
     await manager.start()
     validation_service = init_application_validation_service(
-        ApplicationValidationService(
-            backend,
-            enabled=env.APPLICATION_VALIDATION_ENABLED,
-        )
+        ApplicationValidationService(backend)
     )
-    await validation_service.start()
 
     server = create_uvicorn_server()
     try:
@@ -273,12 +269,8 @@ async def start_bot_and_api(debug_mode: bool):
     manager = init_background_submission_manager(BackgroundSubmissionManager(bot_instance.backend))
     await manager.start()
     validation_service = init_application_validation_service(
-        ApplicationValidationService(
-            bot_instance.backend,
-            enabled=env.APPLICATION_VALIDATION_ENABLED,
-        )
+        ApplicationValidationService(bot_instance.backend)
     )
-    await validation_service.start()
 
     server = create_uvicorn_server()
     try:

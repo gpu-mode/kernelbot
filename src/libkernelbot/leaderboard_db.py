@@ -888,10 +888,10 @@ class LeaderboardDB:
         contract_version: str,
         scheduled_for: Optional[datetime.date],
     ) -> Optional[int]:
-        """Atomically claim a nightly validation sweep.
+        """Record the start of an application-validation batch.
 
-        ``scheduled_for=None`` is reserved for explicit admin-triggered sweeps and
-        intentionally permits more than one run.
+        Admin-triggered batches use ``scheduled_for=None``, which intentionally
+        permits more than one run.
         """
         try:
             self.cursor.execute(
