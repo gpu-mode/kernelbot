@@ -26,6 +26,7 @@ class InlineArtifactTests(unittest.TestCase):
             cpp_sources,
             cuda_sources=None,
             extra_cuda_cflags=None,
+            extra_ldflags=None,
             is_python_module=True,
             verbose=False,
             build_directory=None,
@@ -54,11 +55,15 @@ class InlineArtifactTests(unittest.TestCase):
             {
                 "KERNELBOT_INLINE_MODE": "capture",
                 "KERNELBOT_INLINE_ARTIFACTS": str(self.root / "artifacts"),
+                "KERNELBOT_INLINE_WORKDIR": str(self.root),
                 "TORCH_CUDA_ARCH_LIST": "7.5",
             },
         )
         environment.start()
         self.addCleanup(environment.stop)
+        dependencies = patch("libkernelbot.inline_artifacts._dependencies", return_value=[])
+        dependencies.start()
+        self.addCleanup(dependencies.stop)
         install()
         self.extension.load_inline("example", "source", cuda_sources="cuda")
 
@@ -117,6 +122,29 @@ class InlineArtifactTests(unittest.TestCase):
         self.replay()
         with self.assertRaisesRegex(RuntimeError, "GPU compilation is disabled"):
             self.extension._run_ninja_build()
+
+    def test_native_mode_falls_back_to_original_compiler(self):
+        self.extension.load_inline = self.original
+        os.environ["KERNELBOT_INLINE_MODE"] = "auto"
+        install()
+        self.extension.load_inline("example", "changed source", cuda_sources="cuda")
+        self.assertEqual(self.builds, 2)
+
+    def test_environment_changes_after_import_do_not_reuse_binary(self):
+        self.replay()
+        os.environ["TORCH_CUDA_ARCH_LIST"] = "9.0a"
+        with self.assertRaisesRegex(RuntimeError, "No CPU-built artifact"):
+            self.extension.load_inline("example", "source", cuda_sources="cuda")
+
+    def test_custom_linker_inputs_are_left_to_the_gpu(self):
+        with self.assertRaisesRegex(ValueError, "custom linker inputs"):
+            self.extension.load_inline("linked", "source", extra_ldflags=["-lcustom"])
+        self.assertEqual(self.builds, 1)
+        self.extension.load_inline = self.original
+        os.environ["KERNELBOT_INLINE_MODE"] = "auto"
+        install()
+        self.extension.load_inline("linked", "source", extra_ldflags=["-lcustom"])
+        self.assertEqual(self.builds, 2)
 
     def test_transfer_contains_only_binary_and_manifest(self):
         artifacts = pack_artifacts(self.root / "artifacts")

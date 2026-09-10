@@ -83,6 +83,16 @@ class EvalResult:
 
 
 @dataclasses.dataclass
+class CPUCompileInfo:
+    status: str
+    duration: float = 0.0
+    artifacts: int = 0
+    reused: int = 0
+    fallbacks: int = 0
+    reason: str = ""
+
+
+@dataclasses.dataclass
 class FullResult:
     # fmt: off
     success: bool                  # did the runner (github/modal) execute successfully
@@ -91,6 +101,7 @@ class FullResult:
     # results of running. There can be multiple runs in one submission, using separate
     # 'test' and 'benchmark' keys, for example
     runs: dict[str, EvalResult] = dataclasses.field(default_factory=dict)
+    cpu_compile: CPUCompileInfo | None = None
     # fmt: on
 
 

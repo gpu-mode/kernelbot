@@ -233,6 +233,13 @@ async def test_modal_launcher_python_script(
     assert result.error == ""
     assert isinstance(result.runs, dict)
 
+    if task[1] == "submission_cuda_inline.py":
+        assert result.cpu_compile.status == "reused", result.cpu_compile
+        assert result.cpu_compile.reused >= 2
+        assert result.cpu_compile.fallbacks == 0
+    else:
+        assert result.cpu_compile is None
+
     # System info - test actual expected values
     assert gpu_type.name in result.system.gpu
     assert "Linux" in result.system.platform

@@ -5,6 +5,7 @@ from modal_runner import MODAL_RUN_TIMEOUT_SECONDS, PCH_MOUNT, app, cuda_image, 
 from libkernelbot.validation_runtime import run_validation_config
 
 gpus = ["T4", "L4", "L4:4", "A100-80GB", "H100!", "B200"]
+pytorch_functions = {}
 for gpu in gpus:
     gpu_slug = gpu.lower().split("-")[0].strip("!").replace(":", "x")
     app.function(
@@ -16,7 +17,7 @@ for gpu in gpus:
         volumes={PCH_MOUNT: pch_volume.with_mount_options(read_only=True)},
         timeout=MODAL_RUN_TIMEOUT_SECONDS,
     )(modal_run_config)
-    app.function(
+    pytorch_functions[gpu_slug] = app.function(
         gpu=gpu,
         image=cuda_image,
         name=f"run_pytorch_script_{gpu_slug}",
