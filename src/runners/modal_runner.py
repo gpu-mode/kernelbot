@@ -7,11 +7,13 @@ from pathlib import Path
 
 from modal import App, Image, Volume
 
+from libkernelbot.consts import Timeout
+from libkernelbot.python_precompile import compile_python, run_with_cpu_artifacts
 from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 
 # Create a stub for the Modal app
 # IMPORTANT: This has to stay in separate file or modal breaks
-app = App("discord-bot-runner")
+app = App(os.environ.get("KERNELBOT_MODAL_APP", "discord-bot-runner"))
 cuda_version = "13.3.0"
 flavor = "devel"
 operating_sys = "ubuntu24.04"
@@ -173,7 +175,7 @@ def modal_run_config(  # noqa: C901
     """Modal version of run_pytorch_script, handling timeouts"""
     try:
         with timeout(timeout_seconds):
-            return run_config(config)
+            return run_with_cpu_artifacts(config, run_config)
     except TimeoutException as e:
         return FullResult(
             success=False,
@@ -189,6 +191,19 @@ def modal_run_config(  # noqa: C901
             runs={},
             system=SystemInfo(),
         )
+
+
+@app.function(
+    image=cuda_image,
+    cpu=4,
+    memory=8192,
+    timeout=Timeout.COMPILE + 30,
+    single_use_containers=True,
+    restrict_modal_access=True,
+    volumes={PCH_MOUNT: pch_volume.with_mount_options(read_only=True)},
+)
+def compile_python_submission(config: dict) -> dict:
+    return compile_python(config)
 
 
 @app.function(

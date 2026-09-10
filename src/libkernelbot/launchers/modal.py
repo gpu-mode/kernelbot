@@ -1,8 +1,11 @@
 import asyncio
+import os
+import time
 
 import modal
 
-from libkernelbot.consts import GPU, ModalGPU
+from libkernelbot.consts import GPU, ModalGPU, Timeout
+from libkernelbot.python_precompile import should_precompile
 from libkernelbot.report import RunProgressReporter
 from libkernelbot.run_eval import FullResult
 from libkernelbot.utils import setup_logging
@@ -13,9 +16,13 @@ logger = setup_logging(__name__)
 
 
 class ModalLauncher(Launcher):
-    def __init__(self, add_include_dirs: list):
+    def __init__(self, add_include_dirs: list, *, app_name: str | None = None):
         super().__init__("Modal", gpus=ModalGPU)
         self.additional_include_dirs = add_include_dirs
+        self.app_name = app_name or os.environ.get("KERNELBOT_MODAL_APP", "discord-bot-runner")
+
+    def _get_function(self, name: str):
+        return modal.Function.from_name(self.app_name, name)
 
     async def run_submission(
         self, config: dict, gpu_type: GPU, status: RunProgressReporter
@@ -28,8 +35,29 @@ class ModalLauncher(Launcher):
 
         await status.push("⏳ Waiting for Modal run to finish...")
 
-        function = modal.Function.from_name("discord-bot-runner", func_name)
+        if os.environ.get("KERNELBOT_CPU_COMPILE", "1") != "0" and should_precompile(config):
+            started = time.perf_counter()
+            try:
+                compiler = self._get_function("compile_python_submission")
+                packet = await asyncio.wait_for(
+                    compiler.remote.aio(config=config),
+                    timeout=Timeout.COMPILE + 60,
+                )
+            except Exception as exc:
+                # Old deployments and unavailable CPU workers retain the existing GPU path.
+                packet = {
+                    "artifacts": b"",
+                    "info": {
+                        "status": "fallback",
+                        "duration": time.perf_counter() - started,
+                        "reason": str(exc)[-1000:],
+                    },
+                }
+            config = {**config, "cpu_compile": packet}
+        function = self._get_function(func_name)
         result = await function.remote.aio(config=config)
+        if getattr(result, "cpu_compile", None) is not None:
+            logger.info("Modal CPU compilation outcome: %s", result.cpu_compile)
 
         await status.update("✅ Waiting for modal run to finish... Done")
 
@@ -42,7 +70,7 @@ class ModalLauncher(Launcher):
             func_name,
             config.get("version"),
         )
-        function = modal.Function.from_name("discord-bot-runner", func_name)
+        function = self._get_function(func_name)
         return await function.remote.aio(config=config)
 
     def _function_name(self, config: dict, gpu_type: GPU) -> str:
@@ -58,9 +86,7 @@ class ModalLauncher(Launcher):
         try:
             stats = await loop.run_in_executor(
                 None,
-                lambda: modal.Function.from_name(
-                    "discord-bot-runner", func_name
-                ).get_current_stats(),
+                lambda: self._get_function(func_name).get_current_stats(),
             )
         except Exception as e:
             logger.warning("Could not get Modal queue stats for %s", func_name, exc_info=e)
