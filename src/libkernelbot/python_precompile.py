@@ -122,6 +122,7 @@ def compile_python(config: dict) -> dict:
             info.status = "compiled" if info.artifacts else "skipped"
     except Exception as exc:
         info.status, info.reason = "fallback", str(exc)[-1000:]
+        packet["artifacts"] = b""
     info.duration = time.perf_counter() - started
     return {**packet, "info": dataclasses.asdict(info)}
 
