@@ -8,7 +8,6 @@ import os
 import platform
 import subprocess
 import sysconfig
-import time
 from pathlib import Path
 
 
@@ -16,7 +15,7 @@ def _digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def _save_module(directory: Path, module, request: dict, runtime: dict, work: Path) -> None:
+def _save_module(directory: Path, module, work: Path) -> None:
     directory.mkdir(exist_ok=True)
     binary = Path(module.__file__).read_bytes()
     (directory / "extension.so").write_bytes(binary)
@@ -25,8 +24,7 @@ def _save_module(directory: Path, module, request: dict, runtime: dict, work: Pa
             {
                 "module_name": module.__name__,
                 "sha256": _digest(binary),
-                "runtime": runtime,
-                "request": request,
+                "key": directory.name,
                 "dependencies": _dependencies(Path(module.__file__).parent, work),
             },
             sort_keys=True,
@@ -34,12 +32,9 @@ def _save_module(directory: Path, module, request: dict, runtime: dict, work: Pa
     )
 
 
-def _load_module(directory: Path, request: dict, runtime: dict, work: Path):
-    manifest_path = directory / "manifest.json"
-    if not manifest_path.is_file():
-        raise RuntimeError(f"No CPU-built artifact for {request['name']!r}")
-    manifest = json.loads(manifest_path.read_text())
-    if manifest["runtime"] != runtime or manifest["request"] != request:
+def _load_module(directory: Path, work: Path):
+    manifest = json.loads((directory / "manifest.json").read_text())
+    if manifest["key"] != directory.name:
         raise RuntimeError("CPU-built extension manifest does not match this request")
     _check_dependencies(manifest.get("dependencies"), work)
     binary_path = directory / "extension.so"
@@ -51,11 +46,7 @@ def _load_module(directory: Path, request: dict, runtime: dict, work: Path):
     return module
 
 
-def _refuse_build(*args, **kwargs):
-    raise RuntimeError("GPU compilation is disabled in artifact replay mode")
-
-
-def _dependencies(build: Path, work: Path) -> list[dict]:
+def _dependencies(build: Path, work: Path) -> dict[str, str]:
     result = subprocess.run(
         ["ninja", "-C", str(build), "-t", "deps"],
         check=True,
@@ -67,30 +58,22 @@ def _dependencies(build: Path, work: Path) -> list[dict]:
     if not paths:
         raise RuntimeError("Compiler dependency information is unavailable")
     work = work.resolve()
-    dependencies = []
+    dependencies = {}
     for name in sorted(paths):
         path = (build / name).resolve()
         if path.parent == build.resolve() and path.name in {"main.cpp", "cuda.cu", "sycl.sycl"}:
             continue  # Generated from the source strings already in the request key.
-        relative = path.is_relative_to(work)
-        dependencies.append(
-            {
-                "path": str(path.relative_to(work)) if relative else str(path),
-                "relative": relative,
-                "sha256": _digest(path.read_bytes()),
-            }
-        )
+        name = str(path.relative_to(work)) if path.is_relative_to(work) else str(path)
+        dependencies[name] = _digest(path.read_bytes())
     return dependencies
 
 
-def _check_dependencies(dependencies: list[dict] | None, work: Path) -> None:
+def _check_dependencies(dependencies: dict[str, str] | None, work: Path) -> None:
     if dependencies is None:
         raise RuntimeError("Artifact has no compiler dependency information")
-    for dependency in dependencies:
-        path = Path(dependency["path"])
-        if dependency["relative"]:
-            path = work / path
-        if _digest(path.read_bytes()) != dependency["sha256"]:
+    for name, digest in dependencies.items():
+        path = work / name
+        if _digest(path.read_bytes()) != digest:
             raise RuntimeError(f"Build dependency changed: {path}")
 
 
@@ -100,10 +83,8 @@ def install() -> None:
     from torch.utils import cpp_extension
 
     mode = os.environ["KERNELBOT_INLINE_MODE"]
-    if mode not in {"capture", "replay", "auto"}:
-        raise ValueError(f"Unknown inline artifact mode: {mode}")
-    root = Path(os.environ["KERNELBOT_INLINE_ARTIFACTS"])
     work = Path(os.environ["KERNELBOT_INLINE_WORKDIR"])
+    root = work / "artifacts"
     root.mkdir(parents=True, exist_ok=True)
     original = cpp_extension.load_inline
     signature = inspect.signature(original)
@@ -116,14 +97,17 @@ def install() -> None:
     }
     loaded = {}
 
+    def record(mode, **details):
+        with (root / "events.jsonl").open("a") as log:
+            log.write(json.dumps({"mode": mode, **details}) + "\n")
+
     def load_inline(*args, **kwargs):
         try:
             return dispatch(*args, **kwargs)
         except Exception as exc:
             if mode != "auto":
                 raise
-            with (root / "events.jsonl").open("a") as log:
-                log.write(json.dumps({"mode": "fallback", "reason": str(exc)[:500]}) + "\n")
+            record("fallback", reason=str(exc)[:500])
             return original(*args, **kwargs)
 
     def dispatch(*args, **kwargs):
@@ -137,8 +121,6 @@ def install() -> None:
         request = {
             k: v for k, v in bound.arguments.items() if k not in {"build_directory", "verbose"}
         }
-        # PyTorch may mutate source lists while injecting headers/bindings.
-        request = json.loads(json.dumps(request))
         current_runtime = {
             **runtime,
             "cuda_home": getattr(cpp_extension, "CUDA_HOME", None),
@@ -159,38 +141,22 @@ def install() -> None:
                 )
             },
         }
+        # Hash before PyTorch mutates source lists to inject headers/bindings.
         key = _digest(
             json.dumps({"request": request, "runtime": current_runtime}, sort_keys=True).encode()
         )
         directory = root / key
-        started = time.perf_counter()
         if mode == "capture":
             module = original(*args, **kwargs)
-            elapsed = time.perf_counter() - started
-            _save_module(directory, module, request, current_runtime, work)
+            _save_module(directory, module, work)
         else:
             if key not in loaded:
-                loaded[key] = _load_module(directory, request, current_runtime, work)
+                loaded[key] = _load_module(directory, work)
             module = loaded[key]
-            elapsed = time.perf_counter() - started
-        # One append per event also works for the evaluator's spawned processes.
-        with (root / "events.jsonl").open("a") as log:
-            log.write(
-                json.dumps(
-                    {
-                        "mode": "replay" if mode == "auto" else mode,
-                        "key": key,
-                        "seconds": elapsed,
-                        "pid": os.getpid(),
-                    }
-                )
-                + "\n"
-            )
+            record("replay")
         return module
 
     cpp_extension.load_inline = load_inline
-    if mode == "replay":
-        cpp_extension._run_ninja_build = _refuse_build
 
 
 def prepare_environment(work: Path, mode: str, arch: str) -> dict[str, str]:
@@ -210,7 +176,6 @@ def prepare_environment(work: Path, mode: str, arch: str) -> dict[str, str]:
         **os.environ,
         "KERNELBOT_INLINE_MODE": mode,
         "KERNELBOT_INLINE_WORKDIR": str(work),
-        "KERNELBOT_INLINE_ARTIFACTS": str(work / "artifacts"),
         "TORCH_EXTENSIONS_DIR": str(work / "build"),
         "TORCH_CUDA_ARCH_LIST": arch,
         "MAX_JOBS": "2",
@@ -226,26 +191,3 @@ def prepare_environment(work: Path, mode: str, arch: str) -> dict[str, str]:
             )
         ),
     }
-
-
-def pack_artifacts(root: Path) -> dict[str, bytes]:
-    """Transfer only the libraries and manifests, never the Ninja build cache."""
-    return {
-        str(path.relative_to(root)): path.read_bytes()
-        for pattern in ("*/manifest.json", "*/extension.so")
-        for path in root.glob(pattern)
-    }
-
-
-def unpack_artifacts(root: Path, files: dict[str, bytes]) -> None:
-    for name, data in files.items():
-        path = root / name
-        if not path.resolve().is_relative_to(root.resolve()):
-            raise ValueError(f"Invalid artifact path: {name}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-
-
-def read_events(root: Path) -> list[dict]:
-    path = root / "events.jsonl"
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []

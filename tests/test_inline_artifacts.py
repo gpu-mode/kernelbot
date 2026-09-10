@@ -1,158 +1,79 @@
-"""CPU-only contract tests; the Modal prototype exercises real compilation/loading."""
+"""CPU-only adapter tests; Modal integration tests exercise real library loading."""
 
 import json
-import os
 import sys
-import tempfile
-import types
-import unittest
-from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from libkernelbot.inline_artifacts import install, pack_artifacts, unpack_artifacts
+import pytest
+
+from libkernelbot.inline_artifacts import install
 
 
-class InlineArtifactTests(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        self.binary = self.root / "compiled.so"
-        self.binary.write_bytes(b"fake compiled extension")
-        self.builds = 0
+@pytest.fixture
+def extension(tmp_path, monkeypatch):
+    binary = tmp_path / "compiled.so"
+    binary.write_bytes(b"fake compiled extension")
+    builds = Mock(return_value=SimpleNamespace(__name__="example", __file__=str(binary)))
 
-        def load_inline(
-            name,
-            cpp_sources,
-            cuda_sources=None,
-            extra_cuda_cflags=None,
-            extra_ldflags=None,
-            is_python_module=True,
-            verbose=False,
-            build_directory=None,
-        ):
-            self.builds += 1
-            return types.SimpleNamespace(__name__=name, __file__=str(self.binary))
+    def original(name, cpp_sources, cuda_sources=None, extra_cuda_cflags=None, extra_ldflags=None):
+        return builds(name, cpp_sources, cuda_sources, extra_cuda_cflags, extra_ldflags)
 
-        self.original = load_inline
-        self.extension = types.SimpleNamespace(load_inline=load_inline)
-        torch = types.SimpleNamespace(
-            __version__="test",
-            version=types.SimpleNamespace(cuda="13.3"),
-            _C=types.SimpleNamespace(_GLIBCXX_USE_CXX11_ABI=True),
-        )
-        modules = patch.dict(
-            sys.modules,
-            {
-                "torch": torch,
-                "torch.utils": types.SimpleNamespace(cpp_extension=self.extension),
-            },
-        )
-        modules.start()
-        self.addCleanup(modules.stop)
-        environment = patch.dict(
-            os.environ,
-            {
-                "KERNELBOT_INLINE_MODE": "capture",
-                "KERNELBOT_INLINE_ARTIFACTS": str(self.root / "artifacts"),
-                "KERNELBOT_INLINE_WORKDIR": str(self.root),
-                "TORCH_CUDA_ARCH_LIST": "7.5",
-            },
-        )
-        environment.start()
-        self.addCleanup(environment.stop)
-        dependencies = patch("libkernelbot.inline_artifacts._dependencies", return_value=[])
-        dependencies.start()
-        self.addCleanup(dependencies.stop)
+    extension = SimpleNamespace(load_inline=original, builds=builds)
+    torch = SimpleNamespace(
+        __version__="test",
+        version=SimpleNamespace(cuda="13.3"),
+        _C=SimpleNamespace(_GLIBCXX_USE_CXX11_ABI=True),
+    )
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setitem(sys.modules, "torch.utils", SimpleNamespace(cpp_extension=extension))
+    monkeypatch.setenv("KERNELBOT_INLINE_WORKDIR", str(tmp_path))
+    monkeypatch.setenv("TORCH_CUDA_ARCH_LIST", "7.5")
+    monkeypatch.setenv("KERNELBOT_INLINE_MODE", "capture")
+    with patch("libkernelbot.inline_artifacts._dependencies", return_value={}):
         install()
-        self.extension.load_inline("example", "source", cuda_sources="cuda")
+        extension.load_inline("example", "source", cuda_sources="cuda")
+    extension.load_inline = original
+    monkeypatch.setenv("KERNELBOT_INLINE_MODE", "auto")
+    install()
+    return extension
 
-    def replay(self):
-        self.extension.load_inline = self.original
-        os.environ["KERNELBOT_INLINE_MODE"] = "replay"
-        install()
 
-    def test_changed_source_and_flags_do_not_reuse_binary(self):
-        self.replay()
-        for args in ({"cpp_sources": "changed"}, {"extra_cuda_cflags": ["-O3"]}):
-            request = {"name": "example", "cpp_sources": "source", "cuda_sources": "cuda", **args}
-            with self.assertRaisesRegex(RuntimeError, "No CPU-built artifact"):
-                self.extension.load_inline(**request)
-        self.assertEqual(self.builds, 1)
+def test_loads_saved_module_once_without_compiling(extension, tmp_path):
+    module, spec = SimpleNamespace(), Mock()
+    with (
+        patch("importlib.util.spec_from_file_location", return_value=spec) as make_spec,
+        patch("importlib.util.module_from_spec", return_value=module),
+    ):
+        for _ in range(2):
+            assert extension.load_inline("example", "source", cuda_sources="cuda") is module
+    assert make_spec.call_args.args[0] == "example"
+    assert make_spec.call_args.args[1].read_bytes() == (tmp_path / "compiled.so").read_bytes()
+    spec.loader.exec_module.assert_called_once_with(module)
+    assert extension.builds.call_count == 1
 
-    def test_changed_architecture_does_not_reuse_binary(self):
-        os.environ["TORCH_CUDA_ARCH_LIST"] = "9.0a"
-        self.replay()
-        with self.assertRaisesRegex(RuntimeError, "No CPU-built artifact"):
-            self.extension.load_inline("example", "source", cuda_sources="cuda")
 
-    def test_replay_loads_saved_module_once_without_compiling(self):
-        self.replay()
-        module = types.SimpleNamespace()
-        spec = Mock()
-        with (
-            patch("importlib.util.spec_from_file_location", return_value=spec) as make_spec,
-            patch("importlib.util.module_from_spec", return_value=module),
-        ):
-            for _ in range(2):
-                self.assertIs(
-                    self.extension.load_inline("example", "source", cuda_sources="cuda"), module
-                )
-        self.assertEqual(make_spec.call_args.args[0], "example")
-        self.assertEqual(make_spec.call_args.args[1].read_bytes(), self.binary.read_bytes())
-        spec.loader.exec_module.assert_called_once_with(module)
-        self.assertEqual(self.builds, 1)
-
-    def test_wrong_manifest_is_rejected_before_loading(self):
-        manifest_path = next((self.root / "artifacts").glob("*/manifest.json"))
+@pytest.mark.parametrize("change", ["source", "flags", "arch", "manifest", "binary", "linker"])
+def test_incompatible_artifacts_fall_back_before_loading(extension, tmp_path, monkeypatch, change):
+    arguments = {"name": "example", "cpp_sources": "source", "cuda_sources": "cuda"}
+    manifest_path = next((tmp_path / "artifacts").glob("*/manifest.json"))
+    if change == "source":
+        arguments["cpp_sources"] = "changed"
+    elif change == "flags":
+        arguments["extra_cuda_cflags"] = ["-O3"]
+    elif change == "arch":
+        monkeypatch.setenv("TORCH_CUDA_ARCH_LIST", "9.0a")
+    elif change == "manifest":
         manifest = json.loads(manifest_path.read_text())
-        manifest["runtime"]["cuda"] = "different"
+        manifest["key"] = "different"
         manifest_path.write_text(json.dumps(manifest))
-        self.replay()
-        with self.assertRaisesRegex(RuntimeError, "manifest does not match"):
-            self.extension.load_inline("example", "source", cuda_sources="cuda")
-
-    def test_corrupted_artifact_is_rejected_before_loading(self):
-        next((self.root / "artifacts").glob("*/extension.so")).write_bytes(b"corrupted")
-        self.replay()
-        with self.assertRaisesRegex(RuntimeError, "SHA-256"):
-            self.extension.load_inline("example", "source", cuda_sources="cuda")
-
-    def test_ninja_is_disabled_during_replay(self):
-        self.replay()
-        with self.assertRaisesRegex(RuntimeError, "GPU compilation is disabled"):
-            self.extension._run_ninja_build()
-
-    def test_native_mode_falls_back_to_original_compiler(self):
-        self.extension.load_inline = self.original
-        os.environ["KERNELBOT_INLINE_MODE"] = "auto"
-        install()
-        self.extension.load_inline("example", "changed source", cuda_sources="cuda")
-        self.assertEqual(self.builds, 2)
-
-    def test_environment_changes_after_import_do_not_reuse_binary(self):
-        self.replay()
-        os.environ["TORCH_CUDA_ARCH_LIST"] = "9.0a"
-        with self.assertRaisesRegex(RuntimeError, "No CPU-built artifact"):
-            self.extension.load_inline("example", "source", cuda_sources="cuda")
-
-    def test_custom_linker_inputs_are_left_to_the_gpu(self):
-        with self.assertRaisesRegex(ValueError, "custom linker inputs"):
-            self.extension.load_inline("linked", "source", extra_ldflags=["-lcustom"])
-        self.assertEqual(self.builds, 1)
-        self.extension.load_inline = self.original
-        os.environ["KERNELBOT_INLINE_MODE"] = "auto"
-        install()
-        self.extension.load_inline("linked", "source", extra_ldflags=["-lcustom"])
-        self.assertEqual(self.builds, 2)
-
-    def test_transfer_contains_only_binary_and_manifest(self):
-        artifacts = pack_artifacts(self.root / "artifacts")
-        self.assertEqual(len(artifacts), 2)
-        destination = self.root / "received"
-        unpack_artifacts(destination, artifacts)
-        self.assertEqual(pack_artifacts(destination), artifacts)
-
-    def test_transfer_rejects_path_escape(self):
-        with self.assertRaisesRegex(ValueError, "Invalid artifact path"):
-            unpack_artifacts(self.root / "received", {"../escape.so": b"binary"})
+    elif change == "binary":
+        manifest_path.with_name("extension.so").write_bytes(b"corrupted")
+    else:
+        arguments["extra_ldflags"] = ["-lcustom"]
+    with patch("importlib.util.spec_from_file_location") as load:
+        extension.load_inline(**arguments)
+        load.assert_not_called()
+    assert extension.builds.call_count == 2
+    event = json.loads((tmp_path / "artifacts/events.jsonl").read_text())
+    assert event["mode"] == "fallback" and event["reason"]

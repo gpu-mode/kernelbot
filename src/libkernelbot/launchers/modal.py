@@ -43,21 +43,16 @@ class ModalLauncher(Launcher):
                     compiler.remote.aio(config=config),
                     timeout=Timeout.COMPILE + 60,
                 )
-                if not isinstance(packet, dict) or not isinstance(packet.get("info"), dict):
-                    raise ValueError("Invalid CPU compilation response")
-                if "artifacts" not in packet:
-                    raise ValueError("CPU compilation response has no artifact field")
             except Exception as exc:
                 # Old deployments and unavailable CPU workers retain the existing GPU path.
                 packet = {
-                    "artifacts": {},
+                    "artifacts": b"",
                     "info": {
                         "status": "fallback",
                         "duration": time.perf_counter() - started,
                         "reason": str(exc)[-1000:],
                     },
                 }
-            logger.info("Modal CPU compilation: %s", packet["info"])
             config = {**config, "cpu_compile": packet}
         function = self._get_function(func_name)
         result = await function.remote.aio(config=config)

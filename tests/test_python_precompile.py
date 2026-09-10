@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,11 +14,11 @@ from libkernelbot.launchers.modal import ModalLauncher
 from libkernelbot.python_precompile import (
     compile_python,
     cuda_arch,
-    decode_artifacts,
-    encode_artifacts,
+    pack_artifacts,
     run_with_cpu_artifacts,
     should_precompile,
-    source_hash,
+    unpack_artifacts,
+    write_file,
 )
 from libkernelbot.run_eval import FullResult, SystemInfo
 
@@ -125,18 +124,8 @@ async def test_ordinary_python_or_operator_disable_bypasses_cpu(
     "error", [RuntimeError("CUDA unavailable"), subprocess.TimeoutExpired("python", 1)]
 )
 def test_cpu_import_failures_return_fallback(config, monkeypatch, error):
-    monkeypatch.setitem(
-        sys.modules,
-        "torch",
-        SimpleNamespace(
-            cuda=SimpleNamespace(
-                is_available=lambda: False,
-                device_count=lambda: 0,
-            )
-        ),
-    )
     with (
-        patch("libkernelbot.python_precompile.image_fingerprint", return_value="image"),
+        patch("libkernelbot.python_precompile.build_identity", return_value={"image": "image"}),
         patch("libkernelbot.python_precompile._import_submission", side_effect=error),
     ):
         packet = compile_python(config)
@@ -144,57 +133,72 @@ def test_cpu_import_failures_return_fallback(config, monkeypatch, error):
     assert packet["artifacts"] == b""
 
 
-@pytest.mark.parametrize("changed", ["source_hash", "image_fingerprint", "version"])
+@pytest.mark.parametrize("changed", ["sources", "image", "version"])
 def test_gpu_rejects_stale_build_without_failing_submission(config, result, changed):
     packet = {
-        "version": 1,
-        "source_hash": source_hash(config),
-        "image_fingerprint": "image",
+        "identity": {"image": "image"},
         "artifacts": {"unused.so": b"binary"},
         "info": {"status": "compiled"},
     }
-    packet[changed] = "different"
+    packet["identity"][changed] = "different"
     run = MagicMock(return_value=result)
-    with patch("libkernelbot.python_precompile.image_fingerprint", return_value="image"):
+    with patch("libkernelbot.python_precompile.build_identity", return_value={"image": "image"}):
         actual = run_with_cpu_artifacts({**config, "cpu_compile": packet}, run)
     assert actual is result and actual.cpu_compile.status == "fallback"
     run.assert_called_once()
 
 
 @pytest.mark.parametrize("success", [True, False])
-def test_gpu_context_restores_environment_and_records_reuse(config, result, success):
+def test_gpu_context_restores_environment_and_records_reuse(config, result, success, tmp_path):
+    write_file(tmp_path, "key/extension.so", b"binary")
     result.success = success
     config["cpu_compile"] = {
-        "version": 1,
-        "source_hash": source_hash(config),
-        "image_fingerprint": "image",
-        "artifacts": encode_artifacts({"extension.so": b"binary"}),
+        "identity": {"image": "image"},
+        "artifacts": pack_artifacts(tmp_path),
         "info": {"status": "compiled"},
     }
     previous_cwd, previous_environment = Path.cwd(), dict(os.environ)
 
     def run(_):
         assert os.environ["KERNELBOT_INLINE_MODE"] == "auto"
-        root = Path(os.environ["KERNELBOT_INLINE_ARTIFACTS"])
+        root = Path(os.environ["KERNELBOT_INLINE_WORKDIR"]) / "artifacts"
         (root / "events.jsonl").write_text(json.dumps({"mode": "replay"}) + "\n")
         return result
 
-    with patch("libkernelbot.python_precompile.image_fingerprint", return_value="image"):
+    with patch("libkernelbot.python_precompile.build_identity", return_value={"image": "image"}):
         actual = run_with_cpu_artifacts(config, run)
     assert actual.cpu_compile.status == "reused" and actual.cpu_compile.reused == 1
     assert actual.success == success
     assert Path.cwd() == previous_cwd and dict(os.environ) == previous_environment
 
 
-def test_compressed_transport_roundtrip():
+def test_compressed_transport_roundtrip(tmp_path):
+    cpu, gpu = tmp_path / "cpu", tmp_path / "gpu"
     artifacts = {"key/extension.so": b"binary" * 1000, "key/manifest.json": b"{}"}
-    assert decode_artifacts(encode_artifacts(artifacts)) == artifacts
+    for name, data in {**artifacts, "build/main.o": b"exclude"}.items():
+        write_file(cpu, name, data)
+    unpack_artifacts(gpu, pack_artifacts(cpu))
+    assert {
+        str(p.relative_to(gpu)): p.read_bytes() for p in gpu.rglob("*") if p.is_file()
+    } == artifacts
 
 
-def test_transport_size_limit_uses_fallback_instead_of_large_modal_blobs(monkeypatch):
+def test_transport_size_limit_uses_fallback_instead_of_large_modal_blobs(tmp_path, monkeypatch):
     monkeypatch.setattr("libkernelbot.python_precompile.MAX_TRANSFER_BYTES", 1)
+    write_file(tmp_path, "key/extension.so", b"binary")
     with pytest.raises(ValueError, match="inline transfer limit"):
-        encode_artifacts({"key/extension.so": b"binary"})
+        pack_artifacts(tmp_path)
+
+
+def test_transfer_rejects_path_escape(tmp_path):
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("../escape.so", b"binary")
+    with pytest.raises(ValueError, match="Invalid artifact path"):
+        unpack_artifacts(tmp_path, buffer.getvalue())
 
 
 def test_header_dependencies_relocate_and_detect_changes(tmp_path, monkeypatch):
