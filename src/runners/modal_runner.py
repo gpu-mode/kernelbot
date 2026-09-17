@@ -136,6 +136,13 @@ cuda_image = (
     .env({"CXX": "/opt/kernelbot-pch/compiler.py", "KERNELBOT_PCH_VOLUME": PCH_VOLUME_NAME})
 )
 
+# NCU 2026.2 in CUDA 13.3 returned NaN hardware counters on Modal B200.
+# Keep the tested profiler until a newer version passes the same capture check.
+cuda_image = cuda_image.apt_install("nsight-compute-2025.2.1").run_commands(
+    "ln -sf /opt/nvidia/nsight-compute/2025.2.1/ncu $(command -v ncu)",
+    "ncu --version",
+)
+
 cuda_image = cuda_image.add_local_python_source(
     "libkernelbot",
     "modal_runner",

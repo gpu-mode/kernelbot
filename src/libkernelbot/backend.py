@@ -136,6 +136,10 @@ class KernelBackend:
                     req.task,
                     mode,
                     None,
+                    **(
+                        {"profile_options": req.profile_options}
+                        if req.profile_options is not None else {}
+                    ),
                 )
                 for gpu in selected_gpus
             ]
@@ -174,6 +178,7 @@ class KernelBackend:
         task: LeaderboardTask,
         mode: SubmissionMode,
         seed: Optional[int],
+        profile_options: dict | None = None,
     ) -> Optional[FullResult]:
         """
         Function invoked by `leaderboard_cog` to handle a leaderboard run.
@@ -193,6 +198,7 @@ class KernelBackend:
             task=task,
             mode=mode,
             submission_id=submission_id,
+            **({"profile_options": profile_options} if profile_options is not None else {}),
         )
 
         if result.success:
@@ -232,6 +238,7 @@ class KernelBackend:
         task: Optional[LeaderboardTask],
         mode: SubmissionMode,
         submission_id: int = -1,
+        profile_options: dict | None = None,
     ) -> Optional[FullResult]:
         """
         Generic function to handle code submissions.
@@ -249,6 +256,9 @@ class KernelBackend:
         config = build_task_config(
             task=task, submission_content=code, arch=self._get_arch(gpu_type), mode=mode
         )
+
+        if profile_options is not None:
+            config["profile_options"] = profile_options
 
         logger.info("submitting task to runner %s", launcher.name)
 

@@ -8,17 +8,18 @@ import time
 from dataclasses import asdict
 from typing import Annotated, Any, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from kernelbot.env import env
 from libkernelbot.application_validation import ApplicationValidationService
 from libkernelbot.backend import KernelBackend
 from libkernelbot.background_submission_manager import BackgroundSubmissionManager
-from libkernelbot.consts import SubmissionMode
+from libkernelbot.consts import SubmissionMode, get_gpu_by_name
 from libkernelbot.db_types import IdentityType
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardRankedEntry
 from libkernelbot.problem_sync import sync_problems
+from libkernelbot.profiling import ProfileOptions
 from libkernelbot.submission import (
     ProcessedSubmissionRequest,
     SubmissionRequest,
@@ -520,6 +521,43 @@ async def admin_run_application_validation(
         "all_users": all_users,
         "only_missing": only_missing,
     }
+
+
+@app.post("/profile/{leaderboard_name}/{gpu_type}")
+async def profile_submission(
+    leaderboard_name: str,
+    gpu_type: str,
+    file: UploadFile,
+    user_info: Annotated[dict, Depends(validate_cli_header)],
+    benchmark_index: Annotated[int | None, Form(ge=0)] = None,
+    ncu_kernel_name: Annotated[str | None, Form(min_length=1, max_length=1024)] = None,
+    ncu_kernel_name_base: Annotated[str | None, Form()] = None,
+    ncu_launch_count: Annotated[int | None, Form(ge=1)] = None,
+    db_context=Depends(get_db),
+) -> StreamingResponse:
+    """Profile through the normal authenticated submission pipeline.
+
+    A dedicated route prevents older API deployments from silently ignoring
+    capture options sent by a newer CLI. Compute-provider credentials stay here.
+    """
+    await simple_rate_limit()
+    try:
+        gpu = get_gpu_by_name(gpu_type)
+        if gpu is None or gpu.runner != "Modal" or gpu.name == "L4x4":
+            raise ValueError("Hosted NCU profiling requires a supported single NVIDIA GPU")
+        options = ProfileOptions(
+            benchmark_index, ncu_kernel_name, ncu_kernel_name_base, ncu_launch_count
+        )
+    except (ValueError, KeyError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    request, mode = await to_submit_info(
+        user_info, "profile", file, leaderboard_name, gpu_type, db_context
+    )
+    request.profile_options = options.to_dict()
+    return StreamingResponse(
+        _stream_submission_response(request, mode, backend_instance),
+        media_type="text/event-stream",
+    )
 
 
 @app.post("/{leaderboard_name}/{gpu_type}/{submission_mode}")

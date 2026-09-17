@@ -3,6 +3,7 @@ import copy
 import dataclasses
 import datetime
 import functools
+import hashlib
 import json
 import os
 import shlex
@@ -16,6 +17,7 @@ from types import NoneType
 from typing import Optional, Protocol, Union
 
 from libkernelbot.consts import CUDA_FLAGS, ExitCode, Timeout
+from libkernelbot.profiling import ProfileOptions
 
 
 @dataclasses.dataclass
@@ -102,6 +104,7 @@ class FullResult:
     # 'test' and 'benchmark' keys, for example
     runs: dict[str, EvalResult] = dataclasses.field(default_factory=dict)
     cpu_compile: CPUCompileInfo | None = None
+    profile_metadata: dict | None = None
     # fmt: on
 
 
@@ -465,60 +468,55 @@ def profile_program_ncu(
     timeout: int,
     multi_gpu: bool,
     output_dir: Path,
+    options: dict | None = None,
 ) -> tuple[RunResult, Optional[ProfileResult]]:
-    assert not multi_gpu, "Multi-GPU profiling not supported for ncu."
-
-    # Wrap program in ncu
-    call = [
-        "ncu",
-        "--set",
-        "full",
-        "--nvtx",
-        "--nvtx-include",
-        "custom_kernel/",
-        "--import-source",
-        "1",
-        "-c",
-        "10",
-        "-o",
-        f"{str(output_dir / 'profile.ncu-rep')}",
-        "--",
-    ] + call
-
+    if multi_gpu:
+        raise ValueError("Multi-GPU profiling not supported for ncu")
+    capture = ProfileOptions(**(options or {}))
+    command = [
+        "ncu", "--set", "full", "--target-processes", "all",
+        "--nvtx", "--nvtx-include", "custom_kernel/", "--import-source", "1",
+        "--launch-count", str(capture.ncu_launch_count or 10),
+        "--cache-control", "all", "--clock-control", "none",
+        "--replay-mode", "kernel", "--force-overwrite",
+        "--export", str(output_dir / "profile.ncu-rep"),
+    ]
+    if capture.ncu_kernel_name is not None:
+        command += ["--kernel-name", capture.ncu_kernel_name]
+    if capture.ncu_kernel_name_base is not None:
+        command += ["--kernel-name-base", capture.ncu_kernel_name_base]
     run_result = run_program(
-        call, seed=seed, timeout=timeout, multi_gpu=multi_gpu, extra_env={"POPCORN_NCU": "1"}
+        command + ["--", *call], seed=seed, timeout=timeout, multi_gpu=False,
+        extra_env={"POPCORN_NCU": "1"},
     )
-    profile_result = None
-
-    try:
-        get_tables = [
-            "GPU Throughput",
-            "Pipe Utilization (% of active cycles)",
-            "Warp State (All Cycles)",
-        ]
-        ncu_cmd = [
-            "ncu",
-            "--import",
-            f"{str(output_dir / 'profile.ncu-rep')}",
-            "--print-details",
-            "body",
-        ]
-        report = subprocess.check_output(ncu_cmd, text=True)
-        report = _filter_ncu_report(report, get_tables)
-        run_result.result["benchmark.0.report"] = base64.b64encode(report.encode("utf-8")).decode(
-            "utf-8"
+    report_path = output_dir / "profile.ncu-rep"
+    if not run_result.success or not report_path.is_file():
+        run_result.success = False
+        run_result.stderr += (
+            "\nNCU did not produce a report. Check stdout, the kernel filter, "
+            "and profile-mode NVTX support."
         )
-    except subprocess.CalledProcessError:
-        pass
+        return run_result, None
 
-    if run_result.success:
-        profile_result = ProfileResult(
-            profiler="Nsight-Compute",
-            trace=_directory_to_zip_bytes(output_dir),
-            download_url=None,
+    for name, extra in [("ncu-details.txt", []), ("ncu-details.csv", ["--csv"])]:
+        details = subprocess.run(
+            ["ncu", "--import", str(report_path), "--page", "details", *extra],
+            capture_output=True, text=True, timeout=120,
         )
-
-    return run_result, profile_result
+        if details.returncode:
+            run_result.success = False
+            run_result.stderr += f"\nFailed to export {name}: {details.stderr}"
+        else:
+            (output_dir / name).write_text(details.stdout)
+    text_path = output_dir / "ncu-details.txt"
+    if text_path.exists():
+        summary = _filter_ncu_report(text_path.read_text(), [
+            "GPU Throughput", "Pipe Utilization (% of active cycles)", "Warp State (All Cycles)",
+        ])
+        run_result.result["benchmark.0.report"] = base64.b64encode(summary.encode()).decode()
+    return run_result, ProfileResult(
+        profiler="Nsight-Compute", trace=_directory_to_zip_bytes(output_dir), download_url=None,
+    )
 
 
 def profile_program(
@@ -527,6 +525,7 @@ def profile_program(
     seed: Optional[int],
     timeout: int,
     multi_gpu: bool,
+    options: dict | None = None,
 ) -> tuple[RunResult, Optional[ProfileResult]]:
     # The runner-specific configuration should implement logic
     # to fetch the data in this directory and return it as
@@ -540,7 +539,7 @@ def profile_program(
         if system.runtime == "ROCm":
             return profile_program_roc(call, seed, timeout, multi_gpu, output_dir)
         elif system.runtime == "CUDA":
-            return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir)
+            return profile_program_ncu(call, seed, timeout, multi_gpu, output_dir, options)
         else:
             raise ValueError(f"Unknown runtime {system.runtime}")
 
@@ -558,6 +557,7 @@ def run_single_evaluation(
     ranked_timeout: int = Timeout.RANKED,
     ranking_by: str = "last",
     seed: Optional[int] = None,
+    profile_options: dict | None = None,
 ) -> tuple[RunResult, Optional[ProfileResult]]:
     """
     A single runner run, either in the context of test files, or in the
@@ -581,7 +581,10 @@ def run_single_evaluation(
         call = call + [mode, cases.name]
 
         if mode == "profile":
-            return profile_program(system, call, seed=seed, timeout=timeout, multi_gpu=multi_gpu)
+            return profile_program(
+                system, call, seed=seed, timeout=timeout,
+                multi_gpu=multi_gpu, options=profile_options,
+            )
 
         return run_program(call, seed=seed, timeout=timeout, multi_gpu=multi_gpu), None
 
@@ -797,6 +800,7 @@ def run_evaluation(
     call: _EvalRunner,
     mode: str,
     common_args: dict,
+    benchmark_index: int | None = None,
 ) -> dict[str, EvalResult]:
     """
     Given a "runner" function `call`, interprets the mode
@@ -809,6 +813,8 @@ def run_evaluation(
     if mode == "profile":
         benchmarks = copy.deepcopy(common_args["benchmarks"])
         for i, benchmark in enumerate(benchmarks.splitlines()):
+            if benchmark_index is not None and i != benchmark_index:
+                continue
             common_args["benchmarks"] = benchmark
             results[f"{mode}.{i}"] = call(mode=mode, **common_args)
 
@@ -846,6 +852,9 @@ def build_test_string(tests: list[dict]):
 
 def run_config(config: dict):
     system = make_system_info()
+    profile_options = ProfileOptions(**config.get("profile_options", {}))
+    if config["mode"] == "profile" and system.runtime == "CUDA":
+        profile_options.validate_task(config.get("benchmarks", []), config.get("multi_gpu", False))
     common_args = {
         "system": system,
         "tests": build_test_string(config.get("tests", [])),
@@ -856,6 +865,7 @@ def run_config(config: dict):
         "benchmark_timeout": config.get("benchmark_timeout", Timeout.BENCHMARK),
         "test_timeout": config.get("test_timeout", Timeout.TEST),
         "multi_gpu": config.get("multi_gpu", False),
+        "profile_options": profile_options.to_dict(),
     }
     if config["lang"] == "py":
         runner = functools.partial(
@@ -875,5 +885,22 @@ def run_config(config: dict):
     else:
         raise ValueError(f"Invalid language {config['lang']}")
 
-    results = run_evaluation(runner, config["mode"], common_args)
-    return FullResult(success=True, error="", runs=results, system=system)
+    results = run_evaluation(runner, config["mode"], common_args, profile_options.benchmark_index)
+    metadata = None
+    if config["mode"] == "profile":
+        metadata = {
+            "capture_options": profile_options.to_dict(),
+            "benchmark_specs": {
+                str(i): shape for i, shape in enumerate(config.get("benchmarks", []))
+                if profile_options.benchmark_index is None or i == profile_options.benchmark_index
+            },
+            "config_sha256": hashlib.sha256(json.dumps({
+                key: config.get(key) for key in (
+                    "lang", "main", "sources", "headers", "arch",
+                    "tests", "benchmarks", "profile_options"
+                )
+            }, sort_keys=True).encode()).hexdigest(),
+        }
+    return FullResult(
+        success=True, error="", runs=results, system=system, profile_metadata=metadata,
+    )
