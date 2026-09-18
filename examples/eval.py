@@ -256,6 +256,7 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     durations = []
     # generate input data once
     data = generate_input(**test.args)
+    bench_template = data  # kept as a template for fresh per-iteration copies (anti-replay)
     check_copy = _clone_data(data, 0)
     #  first, one obligatory correctness check
     output = custom_kernel(data)
@@ -268,6 +269,14 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
     # otherwise, we repeat until we either measure at least 10 full seconds,
     # or the relative error of the mean is below 1%.
 
+    # ANTI-REPLAY: even in the non-recheck (ranked/benchmark) path, hand the kernel a FRESH
+    # tensor object every timed iteration. Without this, the same `data` object is reused, so a
+    # submission can cache on the first call (keyed on object identity / .data_ptr() / ._version)
+    # and return the cached output with zero compute for all timed iterations -- the dominant
+    # "result replay" hack family. The clone happens OUTSIDE the timed region (before
+    # start_event.record()), so it does not inflate the measured kernel time. We retain the two
+    # most recent inputs so the caching allocator cannot immediately recycle a freed data_ptr.
+    _recent_inputs = []
     bm_start_time = time.perf_counter_ns()
     for i in range(max_repeats):
         if recheck:
@@ -277,6 +286,11 @@ def _run_single_benchmark(test: TestCase, recheck: bool, max_repeats: int, max_t
 
             data = generate_input(**test.args)
             check_copy = _clone_data(data, 0)
+        else:
+            data = _clone_data(bench_template, 0)
+            _recent_inputs.append(data)
+            if len(_recent_inputs) > 2:
+                _recent_inputs.pop(0)
         torch.cuda.synchronize()
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
