@@ -10,6 +10,7 @@ from better_profanity import profanity
 from libkernelbot.consts import RankCriterion, SubmissionMode, get_mode_category
 from libkernelbot.db_types import RunItem, SubmissionItem
 from libkernelbot.leaderboard_db import LeaderboardDB, LeaderboardItem
+from libkernelbot.profiling import ProfileOptions
 from libkernelbot.run_eval import FullResult
 from libkernelbot.task import LeaderboardTask
 from libkernelbot.utils import KernelBotError, format_time, setup_logging
@@ -31,6 +32,7 @@ class SubmissionRequest:
     gpus: Union[None, str, list]
     leaderboard: Optional[str]
     identity_type: Optional[str] = None
+    profile_options: dict | None = None
 
 
 @dataclasses.dataclass
@@ -108,6 +110,16 @@ def prepare_submission(  # noqa: C901
                 )
     elif len(task_gpus) == 1:
         req.gpus = task_gpus
+
+    if req.profile_options is not None:
+        if mode != SubmissionMode.PROFILE:
+            raise KernelBotError("Profile options require profile mode")
+        try:
+            options = ProfileOptions(**req.profile_options)
+            options.validate_task(leaderboard["task"].benchmarks, leaderboard["task"].multi_gpu)
+            req.profile_options = options.to_dict()
+        except (ValueError, TypeError) as error:
+            raise KernelBotError(str(error)) from error
 
     return ProcessedSubmissionRequest(
         **dataclasses.asdict(req),
