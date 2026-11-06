@@ -102,9 +102,6 @@ _LAUNCH = mojo_vecadd_example.Runner().launch
 
 def custom_kernel(data: input_t) -> output_t:
     A, B = data
-    assert A.is_cuda and B.is_cuda, "Both tensors must be on GPU"
-    assert A.shape == B.shape, "Input tensors must have the same shape"
-    assert A.dtype == torch.float16 and B.dtype == torch.float16, "Input tensors must be float16"
     C = torch.empty_like(A)
     _LAUNCH(A.data_ptr(), B.data_ptr(), C.data_ptr(), A.numel())
     return C
