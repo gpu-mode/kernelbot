@@ -1,4 +1,5 @@
 #!POPCORN leaderboard vectoradd_py-dev
+import importlib
 import sys
 from pathlib import Path
 
@@ -95,7 +96,7 @@ _pkg = Path("/tmp/mojo_vecadd_example")
 _pkg.mkdir(exist_ok=True)
 (_pkg / "mojo_vecadd_example.mojo").write_text(MOJO_SOURCE)
 sys.path.insert(0, str(_pkg))
-import mojo_vecadd_example  # noqa: E402
+mojo_vecadd_example = importlib.import_module("mojo_vecadd_example")
 
 _LAUNCH = mojo_vecadd_example.Runner().launch
 
