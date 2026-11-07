@@ -68,6 +68,7 @@ cuda_image = (
     .uv_pip_install(
         "tinygrad~=0.10",
         "helion",
+        "max",
     )
     # nvidia cuda packages
     .uv_pip_install(
@@ -108,8 +109,9 @@ cuda_image = (
     })
     .run_commands(
         "python -m pip check",
-        'python -c "import cuda.tile, nvmath"',
+        'python -c "import cuda.tile, nvmath, mojo.importer, max"',
         "tileiras --version",
+        "mojo --version",
         (
             "printf '#include <cublasdx.hpp>\\n' | "
             "nvcc -std=c++17 -x cu -c - -o /tmp/cublasdx-smoke.o && "
