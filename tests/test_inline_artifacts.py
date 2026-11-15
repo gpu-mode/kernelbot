@@ -30,6 +30,9 @@ def extension(tmp_path, monkeypatch):
     monkeypatch.setenv("KERNELBOT_INLINE_WORKDIR", str(tmp_path))
     monkeypatch.setenv("TORCH_CUDA_ARCH_LIST", "7.5")
     monkeypatch.setenv("KERNELBOT_INLINE_MODE", "capture")
+    fingerprint = tmp_path / "nvcc-fingerprint"
+    fingerprint.write_text("a" * 64 + "\n")
+    monkeypatch.setattr("libkernelbot.inline_artifacts.NVCC_FINGERPRINT", fingerprint)
     with patch("libkernelbot.inline_artifacts._dependencies", return_value={}):
         install()
         extension.load_inline("example", "source", cuda_sources="cuda")
@@ -53,7 +56,18 @@ def test_loads_saved_module_once_without_compiling(extension, tmp_path):
     assert extension.builds.call_count == 1
 
 
-@pytest.mark.parametrize("change", ["source", "flags", "arch", "manifest", "binary", "linker"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "source",
+        "flags",
+        "arch",
+        "manifest",
+        "binary",
+        "linker",
+        "nvcc_toolchain",
+    ],
+)
 def test_incompatible_artifacts_fall_back_before_loading(extension, tmp_path, monkeypatch, change):
     arguments = {"name": "example", "cpp_sources": "source", "cuda_sources": "cuda"}
     manifest_path = next((tmp_path / "artifacts").glob("*/manifest.json"))
@@ -69,11 +83,41 @@ def test_incompatible_artifacts_fall_back_before_loading(extension, tmp_path, mo
         manifest_path.write_text(json.dumps(manifest))
     elif change == "binary":
         manifest_path.with_name("extension.so").write_bytes(b"corrupted")
-    else:
+    elif change == "linker":
         arguments["extra_ldflags"] = ["-lcustom"]
+    elif change == "nvcc_toolchain":
+        (tmp_path / "nvcc-fingerprint").write_text("b" * 64 + "\n")
     with patch("importlib.util.spec_from_file_location") as load:
         extension.load_inline(**arguments)
         load.assert_not_called()
     assert extension.builds.call_count == 2
     event = json.loads((tmp_path / "artifacts/events.jsonl").read_text())
     assert event["mode"] == "fallback" and event["reason"]
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("PYTORCH_NVCC", "/different/compiler-wrapper"),
+        ("KERNELBOT_NVCC_PCH", "1"),
+        ("KERNELBOT_NVCC_PCH_DISABLE", "1"),
+        ("KERNELBOT_NVCC_PCH_ROOT", "/different/cache"),
+        ("CUDA_PATH", "/different/cuda"),
+        ("CUDA_ROOT", "/different/cuda"),
+        ("GCC_EXEC_PREFIX", "/different/gcc"),
+        ("COMPILER_PATH", "/different/compiler"),
+        ("PATH", "/different/bin"),
+        ("NVCC_CCBIN", "/different/cxx"),
+        ("NVVMIR_LIBRARY_DIR", "/different/nvvm"),
+    ],
+)
+def test_nvcc_environment_change_rebuilds_before_loading(
+    extension, tmp_path, monkeypatch, name, value
+):
+    monkeypatch.setenv(name, value)
+    with patch("importlib.util.spec_from_file_location") as load:
+        extension.load_inline("example", "source", cuda_sources="cuda")
+        load.assert_not_called()
+    assert extension.builds.call_count == 2
+    event = json.loads((tmp_path / "artifacts/events.jsonl").read_text())
+    assert event["mode"] == "fallback"

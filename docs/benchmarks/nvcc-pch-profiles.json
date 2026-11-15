@@ -1,0 +1,1461 @@
+{
+  "scope": "2026-11-13 private-diff snapshot only (expected 366803 unique submissions); public baseline excluded. Static candidate inventory of calls with explicit cuda_sources keyword; submission code was never executed. Counts do not represent actual NVCC argv, guaranteed cache hits, or all KernelBot submissions.",
+  "method": {
+    "flag_order": "preserved exactly",
+    "name_resolution": "single unconditional assignment/import in lexical scope before call; ambiguous, reassigned, mutated, aliased-to-mutated, and escaped variables unresolved",
+    "eligibility": "proven torch.utils.cpp_extension.load_inline origin; no kwargs unpacking; resolved nonempty CUDA source; implicit headers enabled; no custom include paths; flags entirely in listed initial allowlist",
+    "defaults": "missing or literal None extra_cuda_cflags means empty tuple; **kwargs never assumed default",
+    "runner": "known NVIDIA separated from missing or unrecognized runner; explicit AMD/CPU excluded from analysis",
+    "limitations": [
+      "Conservative static analysis is not Python execution or a proof of runtime eligibility.",
+      "Only explicit cuda_sources keyword calls are inventoried; positional CUDA arguments are outside scope.",
+      "Dynamic sources, flags, monkeypatches, environment changes, and runtime branches can change executed behavior.",
+      "Top-N candidate coverage uses per-submission set union; row frequencies must not be summed as unique coverage.",
+      "Custom include paths, arbitrary backend/compiler flags, response files, and unknown flags are outside the initial warm-catalog allowlist. Fixed recognized NVIDIA architecture tokens and literal relocatable-device-code=false are included.",
+      "Source prefilter and analysis failures are reported rather than treated as default flags."
+    ],
+    "initial_allowlist": [
+      "--expt-extended-lambda",
+      "--expt-relaxed-constexpr",
+      "--extended-lambda",
+      "--generate-code=arch=compute_100,code=sm_100",
+      "--generate-code=arch=compute_100a,code=sm_100a",
+      "--generate-code=arch=compute_103,code=sm_103",
+      "--generate-code=arch=compute_103a,code=sm_103a",
+      "--generate-code=arch=compute_120,code=sm_120",
+      "--generate-code=arch=compute_120a,code=sm_120a",
+      "--generate-code=arch=compute_75,code=sm_75",
+      "--generate-code=arch=compute_80,code=sm_80",
+      "--generate-code=arch=compute_86,code=sm_86",
+      "--generate-code=arch=compute_89,code=sm_89",
+      "--generate-code=arch=compute_90,code=sm_90",
+      "--generate-code=arch=compute_90a,code=sm_90a",
+      "--generate-line-info",
+      "--gpu-architecture=sm_100",
+      "--gpu-architecture=sm_100a",
+      "--gpu-architecture=sm_103",
+      "--gpu-architecture=sm_103a",
+      "--gpu-architecture=sm_120",
+      "--gpu-architecture=sm_120a",
+      "--gpu-architecture=sm_75",
+      "--gpu-architecture=sm_80",
+      "--gpu-architecture=sm_86",
+      "--gpu-architecture=sm_89",
+      "--gpu-architecture=sm_90",
+      "--gpu-architecture=sm_90a",
+      "--relocatable-device-code=false",
+      "--std=c++17",
+      "--std=c++20",
+      "--use_fast_math",
+      "-O0",
+      "-O1",
+      "-O2",
+      "-O3",
+      "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+      "-U__CUDA_NO_HALF2_OPERATORS__",
+      "-U__CUDA_NO_HALF_CONVERSIONS__",
+      "-U__CUDA_NO_HALF_OPERATORS__",
+      "-arch=sm_100",
+      "-arch=sm_100a",
+      "-arch=sm_103",
+      "-arch=sm_103a",
+      "-arch=sm_120",
+      "-arch=sm_120a",
+      "-arch=sm_75",
+      "-arch=sm_80",
+      "-arch=sm_86",
+      "-arch=sm_89",
+      "-arch=sm_90",
+      "-arch=sm_90a",
+      "-gencode=arch=compute_100,code=sm_100",
+      "-gencode=arch=compute_100a,code=sm_100a",
+      "-gencode=arch=compute_103,code=sm_103",
+      "-gencode=arch=compute_103a,code=sm_103a",
+      "-gencode=arch=compute_120,code=sm_120",
+      "-gencode=arch=compute_120a,code=sm_120a",
+      "-gencode=arch=compute_75,code=sm_75",
+      "-gencode=arch=compute_80,code=sm_80",
+      "-gencode=arch=compute_86,code=sm_86",
+      "-gencode=arch=compute_89,code=sm_89",
+      "-gencode=arch=compute_90,code=sm_90",
+      "-gencode=arch=compute_90a,code=sm_90a",
+      "-lineinfo",
+      "-rdc=false",
+      "-std=c++17",
+      "-std=c++20"
+    ]
+  },
+  "counts": {
+    "rows": 367118,
+    "unique_submissions": 366803,
+    "duplicate_submission_rows": 315
+  },
+  "cohorts": {
+    "unknown": {
+      "all_submissions": 242065,
+      "source_prefilter_candidates": 118885,
+      "static_cuda_load_inline_submissions": 112520,
+      "static_cuda_load_inline_calls": 133869,
+      "statically_resolved_flag_submissions": 70311,
+      "eligible_candidate_calls": 33082,
+      "eligible_candidate_submissions": 25996,
+      "parse_or_analysis_failure": 5322
+    },
+    "nvidia": {
+      "all_submissions": 124736,
+      "source_prefilter_candidates": 70854,
+      "static_cuda_load_inline_submissions": 70461,
+      "static_cuda_load_inline_calls": 74676,
+      "statically_resolved_flag_submissions": 64735,
+      "eligible_candidate_calls": 20717,
+      "eligible_candidate_submissions": 20411,
+      "parse_or_analysis_failure": 16
+    },
+    "other": {
+      "all_submissions": 2
+    },
+    "combined_analyzed": {
+      "all_submissions": 366801,
+      "source_prefilter_candidates": 189739,
+      "static_cuda_load_inline_submissions": 182981,
+      "static_cuda_load_inline_calls": 208545,
+      "statically_resolved_flag_submissions": 135046,
+      "eligible_candidate_calls": 53799,
+      "eligible_candidate_submissions": 46407,
+      "parse_or_analysis_failure": 5338
+    }
+  },
+  "coverage_warning": "Flag-tuple candidate coverage only. Exact framework prefix, generated architecture flags, include order, compiler generation, and environment must still match at runtime; these figures are not measured PCH hit rates. Known NVIDIA and unknown runner cohorts remain separate.",
+  "selected_default_profile_count": 18,
+  "selected_distinct_ordered_flag_tuples": 6,
+  "selection": "Six most frequent eligible ordered flag tuples in the known-NVIDIA runner cohort. Three neutral tuples are warmed across five runner architectures; the three explicit-architecture tuples each add one profile.",
+  "selected_default_profiles": [
+    {
+      "name": "sm75-default",
+      "architecture": "75",
+      "extra_cuda_cflags": []
+    },
+    {
+      "name": "sm75-O3",
+      "architecture": "75",
+      "extra_cuda_cflags": [
+        "-O3"
+      ]
+    },
+    {
+      "name": "sm75-O3-fast-math",
+      "architecture": "75",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm80-default",
+      "architecture": "80",
+      "extra_cuda_cflags": []
+    },
+    {
+      "name": "sm80-O3",
+      "architecture": "80",
+      "extra_cuda_cflags": [
+        "-O3"
+      ]
+    },
+    {
+      "name": "sm80-O3-fast-math",
+      "architecture": "80",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm89-default",
+      "architecture": "89",
+      "extra_cuda_cflags": []
+    },
+    {
+      "name": "sm89-O3",
+      "architecture": "89",
+      "extra_cuda_cflags": [
+        "-O3"
+      ]
+    },
+    {
+      "name": "sm89-O3-fast-math",
+      "architecture": "89",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm90a-default",
+      "architecture": "90a",
+      "extra_cuda_cflags": []
+    },
+    {
+      "name": "sm90a-O3",
+      "architecture": "90a",
+      "extra_cuda_cflags": [
+        "-O3"
+      ]
+    },
+    {
+      "name": "sm90a-O3-fast-math",
+      "architecture": "90a",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm100-default",
+      "architecture": "100",
+      "extra_cuda_cflags": []
+    },
+    {
+      "name": "sm100-O3",
+      "architecture": "100",
+      "extra_cuda_cflags": [
+        "-O3"
+      ]
+    },
+    {
+      "name": "sm100-O3-fast-math",
+      "architecture": "100",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm100a-O3-fast-math-arch",
+      "architecture": "100a",
+      "extra_cuda_cflags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a"
+      ]
+    },
+    {
+      "name": "sm100-O3-arch-fast-math",
+      "architecture": "100",
+      "extra_cuda_cflags": [
+        "-O3",
+        "-arch=sm_100",
+        "--use_fast_math"
+      ]
+    },
+    {
+      "name": "sm80-O3-cxx17-arch-fast-math",
+      "architecture": "80",
+      "extra_cuda_cflags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_80",
+        "--use_fast_math"
+      ]
+    }
+  ],
+  "master_header_direct_includes": [
+    "torch/types.h",
+    "cuda.h",
+    "cuda_runtime.h"
+  ],
+  "selected_catalog_flags": [
+    {
+      "flags": [
+        "-O3"
+      ],
+      "known_nvidia_unique_submissions": 5419,
+      "unknown_runner_unique_submissions": 10457,
+      "combined_unique_submissions": 15876
+    },
+    {
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "known_nvidia_unique_submissions": 3358,
+      "unknown_runner_unique_submissions": 6695,
+      "combined_unique_submissions": 10053
+    },
+    {
+      "flags": [],
+      "known_nvidia_unique_submissions": 2670,
+      "unknown_runner_unique_submissions": 2556,
+      "combined_unique_submissions": 5226
+    },
+    {
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a"
+      ],
+      "known_nvidia_unique_submissions": 2609,
+      "unknown_runner_unique_submissions": 113,
+      "combined_unique_submissions": 2722
+    },
+    {
+      "flags": [
+        "-O3",
+        "-arch=sm_100",
+        "--use_fast_math"
+      ],
+      "known_nvidia_unique_submissions": 771,
+      "unknown_runner_unique_submissions": 99,
+      "combined_unique_submissions": 870
+    },
+    {
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_80",
+        "--use_fast_math"
+      ],
+      "known_nvidia_unique_submissions": 628,
+      "unknown_runner_unique_submissions": 174,
+      "combined_unique_submissions": 802
+    }
+  ],
+  "selected_catalog_candidate_coverage": {
+    "unknown": {
+      "unique_submissions_with_any_candidate_call_covered": 18283,
+      "unique_submissions_with_all_observed_calls_eligible_and_covered": 16356,
+      "static_cuda_load_inline_submissions": 112520,
+      "eligible_candidate_submissions": 25996,
+      "fraction_of_static_cuda_load_inline_submissions": 0.1624866690366157
+    },
+    "nvidia": {
+      "unique_submissions_with_any_candidate_call_covered": 15421,
+      "unique_submissions_with_all_observed_calls_eligible_and_covered": 15176,
+      "static_cuda_load_inline_submissions": 70461,
+      "eligible_candidate_submissions": 20411,
+      "fraction_of_static_cuda_load_inline_submissions": 0.21885865940023558
+    },
+    "combined_analyzed": {
+      "unique_submissions_with_any_candidate_call_covered": 33704,
+      "unique_submissions_with_all_observed_calls_eligible_and_covered": 31532,
+      "static_cuda_load_inline_submissions": 182981,
+      "eligible_candidate_submissions": 46407,
+      "fraction_of_static_cuda_load_inline_submissions": 0.18419398735387826
+    }
+  },
+  "top_eligible_flags": {
+    "unknown": [
+      {
+        "flags": [
+          "-O3"
+        ],
+        "unique_submissions": 10457
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 6695
+      },
+      {
+        "flags": [],
+        "unique_submissions": 2556
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--expt-relaxed-constexpr"
+        ],
+        "unique_submissions": 770
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-lineinfo",
+          "-U__CUDA_NO_HALF_OPERATORS__",
+          "-U__CUDA_NO_HALF_CONVERSIONS__",
+          "-gencode=arch=compute_100a,code=sm_100a"
+        ],
+        "unique_submissions": 593
+      },
+      {
+        "flags": [
+          "-O2"
+        ],
+        "unique_submissions": 491
+      },
+      {
+        "flags": [
+          "-O2",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 488
+      },
+      {
+        "flags": [
+          "-O3",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--use_fast_math",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false"
+        ],
+        "unique_submissions": 392
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "-lineinfo",
+          "-U__CUDA_NO_HALF_OPERATORS__",
+          "-U__CUDA_NO_HALF_CONVERSIONS__"
+        ],
+        "unique_submissions": 310
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false"
+        ],
+        "unique_submissions": 298
+      },
+      {
+        "flags": [
+          "-O3",
+          "-lineinfo"
+        ],
+        "unique_submissions": 248
+      },
+      {
+        "flags": [
+          "-O3",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--use_fast_math",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false",
+          "-lineinfo"
+        ],
+        "unique_submissions": 247
+      }
+    ],
+    "nvidia": [
+      {
+        "flags": [
+          "-O3"
+        ],
+        "unique_submissions": 5419
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 3358
+      },
+      {
+        "flags": [],
+        "unique_submissions": 2670
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-arch=sm_100a"
+        ],
+        "unique_submissions": 2609
+      },
+      {
+        "flags": [
+          "-O3",
+          "-arch=sm_100",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 771
+      },
+      {
+        "flags": [
+          "-O3",
+          "-std=c++17",
+          "-arch=sm_80",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 628
+      },
+      {
+        "flags": [
+          "-O3",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--use_fast_math",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false",
+          "-lineinfo"
+        ],
+        "unique_submissions": 540
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-arch=sm_100a",
+          "-std=c++17"
+        ],
+        "unique_submissions": 434
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-lineinfo",
+          "-gencode=arch=compute_100,code=sm_100",
+          "-arch=sm_100"
+        ],
+        "unique_submissions": 362
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a"
+        ],
+        "unique_submissions": 285
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false"
+        ],
+        "unique_submissions": 282
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-lineinfo",
+          "-U__CUDA_NO_HALF_OPERATORS__",
+          "-U__CUDA_NO_HALF_CONVERSIONS__",
+          "-gencode=arch=compute_100a,code=sm_100a"
+        ],
+        "unique_submissions": 234
+      }
+    ],
+    "combined_analyzed": [
+      {
+        "flags": [
+          "-O3"
+        ],
+        "unique_submissions": 15876
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 10053
+      },
+      {
+        "flags": [],
+        "unique_submissions": 5226
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-arch=sm_100a"
+        ],
+        "unique_submissions": 2722
+      },
+      {
+        "flags": [
+          "-O3",
+          "-arch=sm_100",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 870
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-lineinfo",
+          "-U__CUDA_NO_HALF_OPERATORS__",
+          "-U__CUDA_NO_HALF_CONVERSIONS__",
+          "-gencode=arch=compute_100a,code=sm_100a"
+        ],
+        "unique_submissions": 827
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--expt-relaxed-constexpr"
+        ],
+        "unique_submissions": 826
+      },
+      {
+        "flags": [
+          "-O3",
+          "-std=c++17",
+          "-arch=sm_80",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 802
+      },
+      {
+        "flags": [
+          "-O3",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--use_fast_math",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false",
+          "-lineinfo"
+        ],
+        "unique_submissions": 787
+      },
+      {
+        "flags": [
+          "-O3",
+          "--use_fast_math",
+          "-gencode=arch=compute_100a,code=sm_100a",
+          "--expt-relaxed-constexpr",
+          "--relocatable-device-code=false"
+        ],
+        "unique_submissions": 580
+      },
+      {
+        "flags": [
+          "-O2"
+        ],
+        "unique_submissions": 561
+      },
+      {
+        "flags": [
+          "-O2",
+          "--use_fast_math"
+        ],
+        "unique_submissions": 522
+      }
+    ]
+  },
+  "ineligibility_reasons_unique_submissions_overlapping": {
+    "unknown": {
+      "custom_include_paths": 900,
+      "flags_outside_initial_allowlist": 24563,
+      "cuda_sources_unresolved": 21583,
+      "unverified_load_inline_origin": 10897,
+      "cuda_sources_empty": 576,
+      "flags_unresolved_or_ambiguous": 41236,
+      "no_implicit_headers_true": 52839,
+      "include_paths_unresolved": 3437,
+      "kwargs_unpacking": 1400
+    },
+    "nvidia": {
+      "custom_include_paths": 146,
+      "flags_outside_initial_allowlist": 7091,
+      "cuda_sources_unresolved": 13229,
+      "unverified_load_inline_origin": 6229,
+      "flags_unresolved_or_ambiguous": 5842,
+      "no_implicit_headers_true": 35586,
+      "include_paths_unresolved": 625,
+      "cuda_sources_empty": 88,
+      "kwargs_unpacking": 6
+    },
+    "combined_analyzed": {
+      "custom_include_paths": 1046,
+      "flags_outside_initial_allowlist": 31654,
+      "cuda_sources_unresolved": 34812,
+      "unverified_load_inline_origin": 17126,
+      "flags_unresolved_or_ambiguous": 47078,
+      "no_implicit_headers_true": 88425,
+      "include_paths_unresolved": 4062,
+      "cuda_sources_empty": 664,
+      "kwargs_unpacking": 1406
+    }
+  },
+  "source_header_count_scope": "Distinct known-NVIDIA static CUDA load_inline submissions with each explicit include in their resolved C++ or CUDA source strings; PyTorch-generated implicit includes are not counted.",
+  "known_nvidia_framework_headers": [
+    {
+      "header": "cuda_runtime.h",
+      "unique_submissions": 50015,
+      "direct_master_include": true,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_fp16.h",
+      "unique_submissions": 38863,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda.h",
+      "unique_submissions": 35932,
+      "direct_master_include": true,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cudaTypedefs.h",
+      "unique_submissions": 29600,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "torch/library.h",
+      "unique_submissions": 29011,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/core/Tensor.h",
+      "unique_submissions": 28375,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "torch/extension.h",
+      "unique_submissions": 24752,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/cuda/CUDAContext.h",
+      "unique_submissions": 6201,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_fp4.h",
+      "unique_submissions": 3846,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_fp8.h",
+      "unique_submissions": 3768,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cublasLt.h",
+      "unique_submissions": 3753,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cublas_v2.h",
+      "unique_submissions": 3597,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/ATen.h",
+      "unique_submissions": 3448,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_bf16.h",
+      "unique_submissions": 2550,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "c10/cuda/CUDAGuard.h",
+      "unique_submissions": 1525,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/cuda/CUDABlas.h",
+      "unique_submissions": 1170,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "torch/csrc/autograd/python_variable.h",
+      "unique_submissions": 933,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda/atomic",
+      "unique_submissions": 648,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/cuda/CUDAUtils.h",
+      "unique_submissions": 491,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "c10/cuda/CUDAException.h",
+      "unique_submissions": 418,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda/ptx",
+      "unique_submissions": 320,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "c10/cuda/CUDACachingAllocator.h",
+      "unique_submissions": 318,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_pipeline.h",
+      "unique_submissions": 312,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "torch/torch.h",
+      "unique_submissions": 277,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cutlass/cutlass.h",
+      "unique_submissions": 263,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cutlass/gemm/kernel/gemm_universal.hpp",
+      "unique_submissions": 244,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cutlass/gemm/collective/collective_builder.hpp",
+      "unique_submissions": 244,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cutlass/epilogue/collective/collective_builder.hpp",
+      "unique_submissions": 244,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cutlass/gemm/device/gemm_universal_adapter.h",
+      "unique_submissions": 244,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cutlass/util/packed_stride.hpp",
+      "unique_submissions": 243,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cute/tensor.hpp",
+      "unique_submissions": 232,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "cuda/pipeline",
+      "unique_submissions": 195,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda/barrier",
+      "unique_submissions": 159,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "torch/types.h",
+      "unique_submissions": 159,
+      "direct_master_include": true,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cutlass/gemm/dispatch_policy.hpp",
+      "unique_submissions": 157,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "ATen/ops/cudnn_convolution.h",
+      "unique_submissions": 140,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cutlass/detail/sm100_blockscaled_layout.hpp",
+      "unique_submissions": 137,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": true
+    },
+    {
+      "header": "c10/cuda/CUDAStream.h",
+      "unique_submissions": 74,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "ATen/cuda/CUDAContextLight.h",
+      "unique_submissions": 71,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    },
+    {
+      "header": "cuda_runtime_api.h",
+      "unique_submissions": 64,
+      "direct_master_include": false,
+      "cutlass_or_cute_excluded": false
+    }
+  ],
+  "runner_eligible_flags": [
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3"
+      ],
+      "unique_submissions": 10457
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 6695
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3"
+      ],
+      "unique_submissions": 2613
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a"
+      ],
+      "unique_submissions": 2608
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [],
+      "unique_submissions": 2556
+    },
+    {
+      "runner_class": "A100",
+      "flags": [
+        "-O3"
+      ],
+      "unique_submissions": 1862
+    },
+    {
+      "runner_class": "B200",
+      "flags": [],
+      "unique_submissions": 1054
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 922
+    },
+    {
+      "runner_class": "A100",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 794
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "-arch=sm_100",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 771
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr"
+      ],
+      "unique_submissions": 770
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 737
+    },
+    {
+      "runner_class": "A100",
+      "flags": [],
+      "unique_submissions": 688
+    },
+    {
+      "runner_class": "A100",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_80",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 628
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-lineinfo",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 593
+    },
+    {
+      "runner_class": "H100",
+      "flags": [],
+      "unique_submissions": 563
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--use_fast_math",
+        "--expt-relaxed-constexpr",
+        "--relocatable-device-code=false",
+        "-lineinfo"
+      ],
+      "unique_submissions": 540
+    },
+    {
+      "runner_class": "L4",
+      "flags": [
+        "-O3"
+      ],
+      "unique_submissions": 507
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O2"
+      ],
+      "unique_submissions": 491
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O2",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 488
+    },
+    {
+      "runner_class": "L4",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 469
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a",
+        "-std=c++17"
+      ],
+      "unique_submissions": 434
+    },
+    {
+      "runner_class": "H100",
+      "flags": [
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 431
+    },
+    {
+      "runner_class": "H100",
+      "flags": [
+        "-O3"
+      ],
+      "unique_submissions": 414
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--use_fast_math",
+        "--expt-relaxed-constexpr",
+        "--relocatable-device-code=false"
+      ],
+      "unique_submissions": 392
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-lineinfo",
+        "-gencode=arch=compute_100,code=sm_100",
+        "-arch=sm_100"
+      ],
+      "unique_submissions": 362
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "-lineinfo",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__"
+      ],
+      "unique_submissions": 310
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr",
+        "--relocatable-device-code=false"
+      ],
+      "unique_submissions": 298
+    },
+    {
+      "runner_class": "T4",
+      "flags": [],
+      "unique_submissions": 286
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 285
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr",
+        "--relocatable-device-code=false"
+      ],
+      "unique_submissions": 265
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-lineinfo"
+      ],
+      "unique_submissions": 248
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--use_fast_math",
+        "--expt-relaxed-constexpr",
+        "--relocatable-device-code=false",
+        "-lineinfo"
+      ],
+      "unique_submissions": 247
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-lineinfo",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 234
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-lineinfo"
+      ],
+      "unique_submissions": 227
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr"
+      ],
+      "unique_submissions": 223
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O2",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 217
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "-lineinfo"
+      ],
+      "unique_submissions": 198
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-std=c++17"
+      ],
+      "unique_submissions": 192
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 186
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-arch=sm_100a",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 185
+    },
+    {
+      "runner_class": "B200",
+      "flags": [
+        "-O3",
+        "-arch=sm_100"
+      ],
+      "unique_submissions": 179
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-arch=sm_80",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 174
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-std=c++17",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 141
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "--use_fast_math",
+        "-lineinfo",
+        "-arch=sm_100a"
+      ],
+      "unique_submissions": 141
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a",
+        "-std=c++17",
+        "-lineinfo",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__"
+      ],
+      "unique_submissions": 138
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr",
+        "--std=c++20"
+      ],
+      "unique_submissions": 133
+    },
+    {
+      "runner_class": "A100",
+      "flags": [
+        "-O3",
+        "-arch=sm_80"
+      ],
+      "unique_submissions": 131
+    },
+    {
+      "runner_class": "A100",
+      "flags": [
+        "-arch=sm_80"
+      ],
+      "unique_submissions": 113
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100a"
+      ],
+      "unique_submissions": 113
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--std=c++17"
+      ],
+      "unique_submissions": 113
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-arch=sm_80"
+      ],
+      "unique_submissions": 112
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-std=c++17"
+      ],
+      "unique_submissions": 109
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-std=c++17",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "--expt-relaxed-constexpr"
+      ],
+      "unique_submissions": 107
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-arch=sm_100"
+      ],
+      "unique_submissions": 104
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "-arch=sm_100",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 99
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 95
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-O3",
+        "--expt-relaxed-constexpr",
+        "-gencode=arch=compute_100a,code=sm_100a"
+      ],
+      "unique_submissions": 93
+    },
+    {
+      "runner_class": "NVIDIA_OTHER",
+      "flags": [
+        "-O3",
+        "--use_fast_math",
+        "-gencode=arch=compute_100a,code=sm_100a",
+        "-lineinfo",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__"
+      ],
+      "unique_submissions": 93
+    },
+    {
+      "runner_class": "unknown",
+      "flags": [
+        "-arch=sm_89",
+        "-O3",
+        "--use_fast_math"
+      ],
+      "unique_submissions": 86
+    }
+  ]
+}

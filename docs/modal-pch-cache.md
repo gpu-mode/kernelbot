@@ -5,7 +5,10 @@ The runner sets `CXX` to a GCC wrapper that loads a precompiled
 changes. Leave `use_pch=False`; PyTorch's separate native PCH option is unnecessary.
 The submission path assumes `load_inline()`.
 
-Only the Torch host header is cached. CUDA/CUTLASS templates, user headers, kernel
+An additional, opt-in [NVCC framework header cache](nvcc-pch-cache.md) can cache
+the CUDA-side Torch/runtime includes with NVIDIA's private compiler drop.
+
+This host cache only precompiles the Torch host header. CUDA/CUTLASS templates, user headers, kernel
 objects, and shared libraries still compile in each submission container.
 Different sources and module names share a PCH when their host flags match;
 changing a user header after the Torch include still changes the compiled code.

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -9,9 +10,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from libkernelbot.consts import get_gpu_by_name
-from libkernelbot.inline_artifacts import _check_dependencies, _dependencies
+from libkernelbot.inline_artifacts import (
+    _check_dependencies,
+    _dependencies,
+    _dependency_digest,
+    nvcc_fingerprint,
+)
 from libkernelbot.launchers.modal import ModalLauncher
 from libkernelbot.python_precompile import (
+    build_identity,
     compile_python,
     cuda_arch,
     pack_artifacts,
@@ -133,7 +140,7 @@ def test_cpu_import_failures_return_fallback(config, monkeypatch, error):
     assert packet["artifacts"] == b""
 
 
-@pytest.mark.parametrize("changed", ["sources", "image", "version"])
+@pytest.mark.parametrize("changed", ["sources", "image", "version", "nvcc_toolchain"])
 def test_gpu_rejects_stale_build_without_failing_submission(config, result, changed):
     packet = {
         "identity": {"image": "image"},
@@ -226,3 +233,123 @@ def test_missing_dependency_information_cannot_be_reused(tmp_path, monkeypatch):
     monkeypatch.setenv("KERNELBOT_INLINE_WORKDIR", str(tmp_path))
     with pytest.raises(RuntimeError, match="no compiler dependency"):
         _check_dependencies(None, tmp_path)
+
+
+def test_cpu_packet_identity_tracks_experimental_compiler(config, tmp_path, monkeypatch):
+    fingerprint = tmp_path / "nvcc-fingerprint"
+    monkeypatch.setattr("libkernelbot.inline_artifacts.NVCC_FINGERPRINT", fingerprint)
+    with patch("libkernelbot.python_precompile.Path.read_text", return_value="host headers"):
+        original = build_identity(config)
+        assert original["nvcc_toolchain"] is None
+        fingerprint.write_bytes(b"first compiler and wrapper digest\n")
+        first = build_identity(config)
+        fingerprint.write_bytes(b"second compiler and wrapper digest\n")
+        second = build_identity(config)
+    assert first["image"] == second["image"] == original["image"]
+    assert first["sources"] == second["sources"] == original["sources"]
+    assert len({first["nvcc_toolchain"], second["nvcc_toolchain"], None}) == 3
+
+
+def test_empty_nvcc_fingerprint_cannot_authorize_reuse(tmp_path, monkeypatch):
+    fingerprint = tmp_path / "nvcc-fingerprint"
+    fingerprint.write_bytes(b"\n")
+    monkeypatch.setattr("libkernelbot.inline_artifacts.NVCC_FINGERPRINT", fingerprint)
+    with pytest.raises(RuntimeError, match="fingerprint is empty"):
+        nvcc_fingerprint()
+
+
+@pytest.fixture
+def trusted_pch(tmp_path, monkeypatch):
+    generation, key = "a" * 64, "b" * 64
+    root = tmp_path / "trusted-cache"
+    entry = root / generation / key
+    (entry / "pch").mkdir(parents=True)
+    header = entry / "gpumode.cuh"
+    header.write_text("#include <ATen/ATen.h>\n#pragma hdrstop\n")
+    files = []
+    for frontend in ("cicc", "cudafe"):
+        name = f"pch/{frontend}_123456.pch"
+        (entry / name).write_bytes(b"compiler cache contents")
+        files.append({"path": name, "bytes": (entry / name).stat().st_size})
+    manifest = {
+        "version": 1,
+        "generation": generation,
+        "key": key,
+        "profile": "sm75-default",
+        "flags": ["-std=c++20"],
+        "environment": {},
+        "header_sha256": hashlib.sha256(header.read_bytes()).hexdigest(),
+        "files": files,
+    }
+    (entry / "manifest.json").write_text(json.dumps(manifest))
+    fingerprint = tmp_path / "nvcc-fingerprint"
+    fingerprint.write_text(generation + "\n")
+    monkeypatch.setattr("libkernelbot.inline_artifacts.NVCC_FINGERPRINT", fingerprint)
+    monkeypatch.setattr("libkernelbot.inline_artifacts.NVCC_PCH_ROOT", root)
+    return entry, manifest, fingerprint
+
+
+def test_trusted_pch_dependencies_do_not_read_cache_bodies(trusted_pch, tmp_path, monkeypatch):
+    entry, _, _ = trusted_pch
+    original_open = Path.open
+
+    def small_files_only(path, *args, **kwargs):
+        assert path.suffix != ".pch", "Artifact replay must not read multi-GB PCH bodies"
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", small_files_only)
+    cpu, gpu = tmp_path / "cpu", tmp_path / "gpu"
+    build = cpu / "build"
+    build.mkdir(parents=True)
+    gpu.mkdir()
+    for work in (cpu, gpu):
+        (work / "user.h").write_text("#define VALUE 1\n")
+    pch = entry / "pch/cicc_123456.pch"
+    output = f"cuda.o: #deps 2\n    {pch}\n    {cpu / 'user.h'}\n"
+    with patch(
+        "libkernelbot.inline_artifacts.subprocess.run", return_value=SimpleNamespace(stdout=output)
+    ):
+        dependencies = _dependencies(build, cpu)
+    assert dependencies[str(pch)].startswith("nvcc-pch-v1:")
+    assert len(dependencies) == 2
+    _check_dependencies(dependencies, gpu)
+    (gpu / "user.h").write_text("#define VALUE 2\n")
+    with pytest.raises(RuntimeError, match="Build dependency changed"):
+        _check_dependencies(dependencies, gpu)
+
+
+@pytest.mark.parametrize("change", ["manifest", "header", "generation", "size", "missing"])
+def test_trusted_pch_dependency_changes_reject_replay(trusted_pch, tmp_path, change):
+    entry, manifest, fingerprint = trusted_pch
+    path = entry / "pch/cicc_123456.pch"
+    dependencies = {str(path): _dependency_digest(path)}
+    if change == "manifest":
+        manifest["flags"] = ["-std=c++20", "-O3"]
+        (entry / "manifest.json").write_text(json.dumps(manifest))
+    elif change == "header":
+        (entry / "gpumode.cuh").write_text("#include <different.h>\n")
+    elif change == "generation":
+        fingerprint.write_text("c" * 64 + "\n")
+    elif change == "size":
+        path.write_bytes(b"truncated")
+    else:
+        (entry / "manifest.json").unlink()
+    with pytest.raises((RuntimeError, FileNotFoundError)):
+        _check_dependencies(dependencies, tmp_path)
+
+
+def test_untrusted_pch_is_not_skipped_or_read(tmp_path, monkeypatch):
+    path = tmp_path / "user.pch"
+    path.write_bytes(b"not trusted")
+    monkeypatch.setenv("KERNELBOT_NVCC_PCH_ROOT", str(tmp_path))
+    with patch.object(Path, "open", side_effect=AssertionError("Must not read PCH contents")):
+        with pytest.raises(RuntimeError, match="outside the trusted"):
+            _dependency_digest(path)
+
+
+def test_pch_file_must_be_named_by_the_complete_ready_manifest(trusted_pch):
+    entry, _, _ = trusted_pch
+    path = entry / "pch/unknown.pch"
+    path.write_bytes(b"unlisted cache")
+    with pytest.raises(RuntimeError, match="not covered"):
+        _dependency_digest(path)

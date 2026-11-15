@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from modal import App, Image, Volume
+from nvcc_toolchain import BINARY_SHA256, RELEASE, install_nvcc_toolchain
 
 from libkernelbot.consts import Timeout
 from libkernelbot.python_precompile import compile_python, run_with_cpu_artifacts
@@ -15,6 +16,10 @@ from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 # IMPORTANT: This has to stay in separate file or modal breaks
 app = App(os.environ.get("KERNELBOT_MODAL_APP", "discord-bot-runner"))
 cuda_version = "13.3.0"
+NVCC_TOOLCHAIN_ENABLED = os.environ.get("KERNELBOT_NVCC_TOOLCHAIN") == "1"
+NVCC_PCH_ENABLED = os.environ.get("KERNELBOT_NVCC_PCH") == "1"
+if NVCC_PCH_ENABLED and not NVCC_TOOLCHAIN_ENABLED:
+    raise ValueError("NVCC PCH requires KERNELBOT_NVCC_TOOLCHAIN=1")
 flavor = "devel"
 operating_sys = "ubuntu24.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
@@ -98,14 +103,16 @@ cuda_image = (
             f"rm /tmp/{mathdx_archive}"
         ),
     )
-    .env({
-        "CUTLASS_PATH": "/opt/cutlass",
-        "MATHDX_HOME": "/opt/mathdx",
-        "CPLUS_INCLUDE_PATH": (
-            "/opt/mathdx/include:/opt/mathdx/external/cutlass/include:"
-            "/opt/cutlass/include:/opt/cutlass/tools/util/include"
-        ),
-    })
+    .env(
+        {
+            "CUTLASS_PATH": "/opt/cutlass",
+            "MATHDX_HOME": "/opt/mathdx",
+            "CPLUS_INCLUDE_PATH": (
+                "/opt/mathdx/include:/opt/mathdx/external/cutlass/include:"
+                "/opt/cutlass/include:/opt/cutlass/tools/util/include"
+            ),
+        }
+    )
     .run_commands(
         "python -m pip check",
         'python -c "import cuda.tile, nvmath"',
@@ -143,10 +150,75 @@ cuda_image = cuda_image.apt_install("nsight-compute-2025.2.1").run_commands(
     "ncu --version",
 )
 
+# This switch selects a separately versioned runner image. Keeping it separate
+# from PCH enablement allows a same-compiler comparison and independent rollback.
+NVCC_PCH_MOUNT = "/kernelbot-nvcc-pch"
+nvcc_pch_volume = Volume.from_name(
+    os.environ.get("KERNELBOT_NVCC_PCH_VOLUME", "kernelbot-nvcc-pch"), create_if_missing=True
+)
+submission_volumes = {PCH_MOUNT: pch_volume.with_mount_options(read_only=True)}
+if NVCC_TOOLCHAIN_ENABLED:
+    binary_volume = Volume.from_name(
+        os.environ.get("KERNELBOT_NVCC_TOOLCHAIN_VOLUME", "kernelbot-nvcc-toolchains")
+    )
+    cuda_image = cuda_image.apt_install(
+        # Preserve the full devel-image surface (tileiras, cuBLAS, sanitizer,
+        # profiler tools, and all library headers) when switching CUDA_HOME.
+        "cuda-toolkit-13-4=13.4.3-1",
+        "cuda-nvcc-13-4=13.4.92-1",
+        "cuda-cudart-dev-13-4=13.4.92-1",
+        "cuda-driver-dev-13-4=13.4.92-1",
+        "libnvvm-13-4=13.4.92-1",
+        "cuda-crt-13-4=13.4.92-1",
+        "libnvptxcompiler-13-4=13.4.92-1",
+    ).run_commands(
+        "ln -sfn /usr/local/cuda-13.4 /usr/local/cuda",
+        # The toolkit meta-package may install a newer Nsight. Keep the tested
+        # profiler on both CUDA's and the system's command lookup paths.
+        "ln -sfn /opt/nvidia/nsight-compute/2025.2.1/ncu /usr/local/cuda/bin/ncu",
+        "ln -sfn /opt/nvidia/nsight-compute/2025.2.1/ncu /usr/local/bin/ncu",
+        "ncu --version",
+        "tileiras --version",
+        "compute-sanitizer --version",
+        (
+            "printf '#include <cublas_v2.h>\\n#include <cublasdx.hpp>\\n"
+            "int main() { cublasHandle_t h; return cublasCreate(&h); }\\n' | "
+            "nvcc -std=c++17 -x cu - -lcublas -o /tmp/cublas-toolkit-smoke && "
+            "rm /tmp/cublas-toolkit-smoke"
+        ),
+        "python /opt/kernelbot-pch/compiler.py --kernelbot-fingerprint",
+    )
+    for filename in ("nvcc.py", "nvcc_common.py", "nvcc_warm.py"):
+        cuda_image = cuda_image.add_local_file(
+            pch_files / filename, f"/opt/kernelbot-pch/{filename}", copy=True
+        )
+    cuda_image = (
+        cuda_image.run_commands("chmod +x /opt/kernelbot-pch/nvcc.py")
+        .run_function(
+            install_nvcc_toolchain,
+            volumes={"/nvcc-toolchain-input": binary_volume.with_mount_options(read_only=True)},
+            kwargs={"release": RELEASE, "expected_hashes": BINARY_SHA256},
+            cpu=4,
+            memory=8192,
+            timeout=600,
+        )
+        .env(
+            {
+                "PYTORCH_NVCC": "/opt/kernelbot-pch/nvcc.py",
+                "KERNELBOT_NVCC_TOOLCHAIN": "1",
+                "KERNELBOT_NVCC_PCH": "1" if NVCC_PCH_ENABLED else "0",
+                "KERNELBOT_NVCC_PCH_ROOT": NVCC_PCH_MOUNT,
+            }
+        )
+    )
+    submission_volumes[NVCC_PCH_MOUNT] = nvcc_pch_volume.with_mount_options(read_only=True)
+
+cuda_image_base = cuda_image
 cuda_image = cuda_image.add_local_python_source(
     "libkernelbot",
     "modal_runner",
     "modal_runner_archs",
+    "nvcc_toolchain",
 )
 
 MODAL_RUN_TIMEOUT_SECONDS = 60 * 60
@@ -207,7 +279,7 @@ def modal_run_config(  # noqa: C901
     timeout=Timeout.COMPILE + 30,
     single_use_containers=True,
     restrict_modal_access=True,
-    volumes={PCH_MOUNT: pch_volume.with_mount_options(read_only=True)},
+    volumes=submission_volumes,
 )
 def compile_python_submission(config: dict) -> dict:
     return compile_python(config)
@@ -236,3 +308,26 @@ def warm_pch(profiles: str = ""):
     subprocess.run(["python3", "/opt/kernelbot-pch/warm.py", *selected], check=True)
     pch_volume.commit()
     return "Torch PCH profiles committed"
+
+
+@app.function(
+    image=cuda_image,
+    cpu=4,
+    memory=16384,
+    timeout=1800,
+    max_containers=1,
+    volumes={NVCC_PCH_MOUNT: nvcc_pch_volume},
+)
+def warm_nvcc_pch(profiles: str = ""):
+    """Publish fixed, trusted profiles before replacing submission workers."""
+    if not NVCC_TOOLCHAIN_ENABLED:
+        return "NVCC toolchain disabled; no CUDA profiles warmed"
+    nvcc_pch_volume.reload()
+    subprocess.run(
+        ["python3", "/opt/kernelbot-pch/nvcc_warm.py", *profiles.split(",")]
+        if profiles
+        else ["python3", "/opt/kernelbot-pch/nvcc_warm.py"],
+        check=True,
+    )
+    nvcc_pch_volume.commit()
+    return "NVCC PCH profiles committed"
