@@ -14,7 +14,7 @@ from contextlib import chdir, contextmanager, suppress
 from pathlib import Path
 
 from libkernelbot.consts import Timeout
-from libkernelbot.inline_artifacts import prepare_environment
+from libkernelbot.inline_artifacts import nvcc_fingerprint, prepare_environment
 from libkernelbot.run_eval import CPUCompileInfo
 
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
@@ -67,11 +67,12 @@ def should_precompile(config: dict) -> bool:
 
 def build_identity(config: dict) -> dict:
     return {
-        "version": 2,
+        "version": 3,
         "sources": hashlib.sha256(
             json.dumps(config["sources"], sort_keys=True).encode()
         ).hexdigest(),
         "image": Path("/opt/kernelbot-pch/fingerprint").read_text().strip(),
+        "nvcc_toolchain": nvcc_fingerprint(),
     }
 
 
