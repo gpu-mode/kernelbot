@@ -16,8 +16,8 @@ from libkernelbot.run_eval import FullResult, SystemInfo, run_config
 # IMPORTANT: This has to stay in separate file or modal breaks
 app = App(os.environ.get("KERNELBOT_MODAL_APP", "discord-bot-runner"))
 cuda_version = "13.3.0"
-NVCC_TOOLCHAIN_ENABLED = os.environ.get("KERNELBOT_NVCC_TOOLCHAIN") == "1"
-NVCC_PCH_ENABLED = os.environ.get("KERNELBOT_NVCC_PCH") == "1"
+NVCC_TOOLCHAIN_ENABLED = os.environ.get("KERNELBOT_NVCC_TOOLCHAIN", "1") == "1"
+NVCC_PCH_ENABLED = os.environ.get("KERNELBOT_NVCC_PCH", "1" if NVCC_TOOLCHAIN_ENABLED else "0") == "1"
 if NVCC_PCH_ENABLED and not NVCC_TOOLCHAIN_ENABLED:
     raise ValueError("NVCC PCH requires KERNELBOT_NVCC_TOOLCHAIN=1")
 flavor = "devel"

@@ -1,4 +1,4 @@
-"""Pinned private NVIDIA compiler drop used by the opt-in Modal runner image."""
+"""Pinned private NVIDIA compiler drop used by the Modal runner image."""
 
 RELEASE = "nvidia-pch-13.4.99-20261017"
 BINARY_SHA256 = {

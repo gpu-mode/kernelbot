@@ -14,9 +14,9 @@ jobs:
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-      # Enable only after validating this toolchain in the dev leaderboard.
-      KERNELBOT_NVCC_TOOLCHAIN: ${{ vars.KERNELBOT_NVCC_TOOLCHAIN || '0' }}
-      KERNELBOT_NVCC_PCH: ${{ vars.KERNELBOT_NVCC_PCH || '0' }}
+      # Set to 0 for rollback; ordinary submissions use the shared cache automatically.
+      KERNELBOT_NVCC_TOOLCHAIN: ${{ vars.KERNELBOT_NVCC_TOOLCHAIN || '1' }}
+      KERNELBOT_NVCC_PCH: ${{ vars.KERNELBOT_NVCC_PCH || '1' }}
       KERNELBOT_NVCC_PCH_PROFILES: ${{ vars.KERNELBOT_NVCC_PCH_PROFILES }}
       KERNELBOT_NVCC_TOOLCHAIN_VOLUME: ${{ vars.KERNELBOT_NVCC_TOOLCHAIN_VOLUME || 'kernelbot-nvcc-toolchains' }}
       KERNELBOT_NVCC_PCH_VOLUME: ${{ vars.KERNELBOT_NVCC_PCH_VOLUME || 'kernelbot-nvcc-pch' }}

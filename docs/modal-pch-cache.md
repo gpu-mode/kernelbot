@@ -5,10 +5,9 @@ The runner sets `CXX` to a GCC wrapper that loads a precompiled
 changes. Leave `use_pch=False`; PyTorch's separate native PCH option is unnecessary.
 The submission path assumes `load_inline()`.
 
-An additional, opt-in [NVCC framework header cache](nvcc-pch-cache.md) can cache
-the CUDA-side Torch/runtime includes with NVIDIA's private compiler drop.
+NVCC also caches the implicit CUDA-side framework headers by default (see below).
 
-This host cache only precompiles the Torch host header. CUDA/CUTLASS templates, user headers, kernel
+The host cache only precompiles the Torch host header. CUDA/CUTLASS templates, user headers, kernel
 objects, and shared libraries still compile in each submission container.
 Different sources and module names share a PCH when their host flags match;
 changing a user header after the Torch include still changes the compiled code.
@@ -30,6 +29,36 @@ speedup. Set `CXX=/usr/bin/g++` before building to bypass the wrapper entirely.
 `KERNELBOT_PCH_DISABLE=1` disables cache lookup but retains wrapper startup.
 
 ## Deployment
+
+### CUDA-side framework cache
+
+The runner uses NVIDIA's checksum-pinned NVCC 13.4.99 drop with the complete CUDA
+13.4 toolkit. `PYTORCH_NVCC` automatically reuses `torch/types.h`, `cuda.h`, and
+`cuda_runtime.h` from `kernelbot-nvcc-pch`. CUTLASS and user headers stay outside
+this cache. The trusted warmer builds 18 profiles from six observed flag tuples;
+submission workers mount them read-only. Unknown flags, custom compiler inputs,
+and sources without the implicit header prefix compile normally. Corrupt caches
+fall back to normal compilation. CPU artifact replay checks compiler identity
+and user-header dependencies.
+
+Upload the private compiler drop once, without committing binaries:
+
+```sh
+PYTHONPATH=src/runners uv run python scripts/upload_nvcc_toolchain.py --source /private/path/to/binaries
+```
+
+CI warms both caches before deployment. `KERNELBOT_NVCC_PCH_PROFILES` selects a
+comma-separated subset; empty warms all 18. Manual warmup uses
+`modal run src/runners/modal_runner.py::warm_nvcc_pch --profiles ...`.
+Set `KERNELBOT_NVCC_PCH=0` to disable device PCH. Set both
+`KERNELBOT_NVCC_TOOLCHAIN=0` and `KERNELBOT_NVCC_PCH=0` to restore CUDA 13.3.
+`KERNELBOT_NVCC_PCH_DISABLE=1` also disables lookup within a submission.
+The corresponding `KERNELBOT_NVCC_TOOLCHAIN_VOLUME`, `KERNELBOT_NVCC_PCH_VOLUME`,
+and `KERNELBOT_PCH_VOLUME` variables override the private input, device, and host
+volumes. Retain old cache generations for rollback and replace workers after
+warming so they see the new Volume snapshot.
+
+### Host cache
 
 The main/dev workflow warms profiles before deploying GPU runners. Manually,
 run both commands in the same Modal profile/environment:
