@@ -11,18 +11,18 @@
 | src/libkernelbot/consts.py                          |       71 |        1 |     99% |        50 |
 | src/libkernelbot/db\_types.py                       |       15 |        1 |     93% |         7 |
 | src/libkernelbot/hf\_export.py                      |       77 |        4 |     95% |62, 84, 150, 179 |
-| src/libkernelbot/inline\_artifacts.py               |       94 |        2 |     98% |   59, 109 |
+| src/libkernelbot/inline\_artifacts.py               |      151 |        5 |     97% |36, 52, 68, 140, 190 |
 | src/libkernelbot/kernelguard.py                     |       97 |       44 |     55% |46-48, 52-53, 57-58, 66-71, 75-78, 82-118, 128, 156-159 |
 | src/libkernelbot/leaderboard\_db.py                 |      524 |       88 |     83% |66, 101, 412-422, 696, 743-744, 795, 830-831, 842-857, 876-877, 926, 958, 970, 998, 1188-1190, 1204, 1293-1318, 1534-1553, 1733-1757, 1769-1808, 1815-1836, 1843-1850, 1866-1875, 1884-1894, 1902-1912, 1920-1929, 1952 |
 | src/libkernelbot/problem\_sync.py                   |      128 |      105 |     18% |72-101, 121-206, 235-302 |
 | src/libkernelbot/profiling.py                       |       26 |        1 |     96% |        33 |
-| src/libkernelbot/python\_precompile.py              |      124 |       21 |     83% |30, 32, 52, 55, 69, 82, 87-104, 120-122, 163, 168 |
+| src/libkernelbot/python\_precompile.py              |      124 |       20 |     84% |30, 32, 52, 55, 83, 88-105, 121-123, 164, 169 |
 | src/libkernelbot/report.py                          |      269 |        9 |     97% |75, 326, 345, 356, 395, 422, 429-430, 437 |
 | src/libkernelbot/submission.py                      |      152 |       15 |     90% |19, 60, 78-83, 90, 115-122 |
 | src/libkernelbot/task.py                            |      131 |        8 |     94% |37, 79, 134, 139-141, 184, 247 |
 | src/libkernelbot/utils.py                           |      104 |       11 |     89% |49-50, 64-69, 89-91 |
 | src/libkernelbot/validation\_runtime.py             |       62 |        8 |     87% |37, 49, 54, 70, 72, 74, 111-112 |
-| **TOTAL**                                           | **2390** |  **441** | **82%** |           |
+| **TOTAL**                                           | **2447** |  **443** | **82%** |           |
 
 
 ## Setup coverage badge
