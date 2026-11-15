@@ -35,7 +35,7 @@ speedup. Set `CXX=/usr/bin/g++` before building to bypass the wrapper entirely.
 The runner uses NVIDIA's checksum-pinned NVCC 13.4.99 drop with the complete CUDA
 13.4 toolkit. `PYTORCH_NVCC` automatically reuses `torch/types.h`, `cuda.h`, and
 `cuda_runtime.h` from `kernelbot-nvcc-pch`. CUTLASS and user headers stay outside
-this cache. The trusted warmer builds 18 profiles from six observed flag tuples;
+this cache. The trusted warmer builds 17 profiles from five observed flag tuples;
 submission workers mount them read-only. Unknown flags, custom compiler inputs,
 and sources without the implicit header prefix compile normally. Corrupt caches
 fall back to normal compilation. CPU artifact replay checks compiler identity
@@ -48,7 +48,7 @@ PYTHONPATH=src/runners uv run python scripts/upload_nvcc_toolchain.py --source /
 ```
 
 CI warms both caches before deployment. `KERNELBOT_NVCC_PCH_PROFILES` selects a
-comma-separated subset; empty warms all 18. Manual warmup uses
+comma-separated subset; empty warms all 17. Manual warmup uses
 `modal run src/runners/modal_runner.py::warm_nvcc_pch --profiles ...`.
 Set `KERNELBOT_NVCC_PCH=0` to disable device PCH. Set both
 `KERNELBOT_NVCC_TOOLCHAIN=0` and `KERNELBOT_NVCC_PCH=0` to restore CUDA 13.3.

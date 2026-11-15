@@ -29,11 +29,8 @@ PROFILES = {
 EXPLICIT_PROFILES = {
     "sm100a-O3-fast-math-arch": ("100a", ["-O3", "--use_fast_math", "-arch=sm_100a"]),
     "sm100-O3-arch-fast-math": ("100", ["-O3", "-arch=sm_100", "--use_fast_math"]),
-    "sm80-O3-cxx17-arch-fast-math": (
-        "80",
-        ["-O3", "-std=c++17", "-arch=sm_80", "--use_fast_math"],
-    ),
 }
+# Historical C++17 tuples cannot precompile the current Torch headers.
 PROFILES.update(EXPLICIT_PROFILES)
 DEFAULT_PROFILES = tuple(PROFILES)
 ENVIRONMENT_KEYS = (
