@@ -121,7 +121,8 @@ def test_consumption_evidence_and_cache_only_retry(cache, kind, code, status):
         assert event["frontends"] == ["cicc", "cudafe"]
 
 
-@pytest.mark.parametrize("change", ["truncated", "header", "generation", "escape", "partial"])
+@pytest.mark.parametrize("change", [
+    "truncated", "header", "generation", "escape", "partial", "duplicate", "duplicate-alias"])
 def test_bad_ready_metadata_falls_back_before_compiler(cache, change):
     c = cache
     if change == "truncated":
@@ -132,13 +133,22 @@ def test_bad_ready_metadata_falls_back_before_compiler(cache, change):
         c.manifest["generation"] = "b" * 64
     elif change == "escape":
         c.files[0]["path"] = "../foreign.pch"
+    elif change.startswith("duplicate"):
+        path = c.files[0]["path"]
+        path = path.replace("pch/", "pch/./") if change.endswith("alias") else path
+        c.files.append({"path": path, "bytes": 4})
     else:
         c.files.pop()
     (c.entry / "manifest.json").write_text(json.dumps(c.manifest))
     assert wrapper.main(c.args) == 0 and c.calls == [(c.args, False)]
 
 
-def test_validation_does_not_read_gigabyte_payloads(cache, monkeypatch):
+@pytest.mark.parametrize("count", [2, 3])
+def test_validation_does_not_read_gigabyte_payloads(cache, monkeypatch, count):
+    if count == 3:
+        (cache.entry / "pch/cicc_cd.pch").write_bytes(b"stub")
+        cache.files.append({"path": "pch/cicc_cd.pch", "bytes": 4})
+        (cache.entry / "manifest.json").write_text(json.dumps(cache.manifest))
     original = Path.open
 
     def guarded(path, *args, **kwargs):

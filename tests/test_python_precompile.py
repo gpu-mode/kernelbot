@@ -258,8 +258,8 @@ def test_empty_nvcc_fingerprint_cannot_authorize_reuse(tmp_path, monkeypatch):
         nvcc_fingerprint()
 
 
-@pytest.fixture
-def trusted_pch(tmp_path, monkeypatch):
+@pytest.fixture(params=[2, 3])
+def trusted_pch(tmp_path, monkeypatch, request):
     generation, key = "a" * 64, "b" * 64
     root = tmp_path / "trusted-cache"
     entry = root / generation / key
@@ -267,8 +267,8 @@ def trusted_pch(tmp_path, monkeypatch):
     header = entry / "gpumode.cuh"
     header.write_text("#include <ATen/ATen.h>\n#pragma hdrstop\n")
     files = []
-    for frontend in ("cicc", "cudafe"):
-        name = f"pch/{frontend}_123456.pch"
+    for name in ("cicc_123456", "cudafe_123456", "cicc_654321")[:request.param]:
+        name = f"pch/{name}.pch"
         (entry / name).write_bytes(b"compiler cache contents")
         files.append({"path": name, "bytes": (entry / name).stat().st_size})
     manifest = {
@@ -318,7 +318,8 @@ def test_trusted_pch_dependencies_do_not_read_cache_bodies(trusted_pch, tmp_path
         _check_dependencies(dependencies, gpu)
 
 
-@pytest.mark.parametrize("change", ["manifest", "header", "generation", "size", "missing"])
+@pytest.mark.parametrize("change", [
+    "manifest", "header", "generation", "size", "missing", "duplicate"])
 def test_trusted_pch_dependency_changes_reject_replay(trusted_pch, tmp_path, change):
     entry, manifest, fingerprint = trusted_pch
     path = entry / "pch/cicc_123456.pch"
@@ -332,9 +333,13 @@ def test_trusted_pch_dependency_changes_reject_replay(trusted_pch, tmp_path, cha
         fingerprint.write_text("c" * 64 + "\n")
     elif change == "size":
         path.write_bytes(b"truncated")
+    elif change == "duplicate":
+        manifest["files"].append(manifest["files"][0].copy())
+        (entry / "manifest.json").write_text(json.dumps(manifest))
     else:
         (entry / "manifest.json").unlink()
-    with pytest.raises((RuntimeError, FileNotFoundError)):
+    message = "Invalid NVCC PCH dependency file metadata" if change == "duplicate" else None
+    with pytest.raises((RuntimeError, FileNotFoundError), match=message):
         _check_dependencies(dependencies, tmp_path)
 
 

@@ -64,13 +64,13 @@ def _pch_dependency_digest(path: Path) -> str:
     ):
         raise RuntimeError("NVCC PCH dependency manifest does not match its cache entry")
     files = manifest.get("files", [])
-    if len(files) != 2:
+    if len(files) < 2:
         raise RuntimeError("NVCC PCH dependency manifest is incomplete")
     frontends, names = set(), set()
     for item in files:
         name, size = item.get("path", ""), item.get("bytes")
         match = re.fullmatch(r"pch/(cicc|cudafe)_[A-Za-z0-9_]+\.pch", name)
-        if not match or type(size) is not int or size <= 0:
+        if not match or name in names or type(size) is not int or size <= 0:
             raise RuntimeError("Invalid NVCC PCH dependency file metadata")
         cache_file = entry / name
         if (

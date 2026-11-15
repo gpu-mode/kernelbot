@@ -171,18 +171,22 @@ def validate_manifest(manifest, entry, flags, fingerprint):
 
 
 def validate_files(entry, files):
-    if len(files) != 2:
+    if len(files) < 2:
         raise ValueError("PCH profile must contain both frontends")
-    frontends = set()
+    frontends, paths = set(), set()
     for item in files:
         path = Path(item["path"])
-        if path.parent != Path("pch") or not PCH_NAME.fullmatch(path.name):
+        if path in paths or path.parent != Path("pch") or not PCH_NAME.fullmatch(path.name):
             raise ValueError("Invalid PCH manifest path")
+        paths.add(path)
         target = entry / path
         if not target.resolve().is_relative_to(entry.resolve()):
             raise ValueError("PCH file escapes its profile")
         size = item["bytes"]
-        if not isinstance(size, int) or size <= 0 or target.stat().st_size != size:
+        if (
+            type(size) is not int or size <= 0
+            or not target.is_file() or target.stat().st_size != size
+        ):
             raise ValueError("PCH file is missing or truncated")
         frontends.add(path.name.split("_", 1)[0])
     if frontends != {"cicc", "cudafe"}:
