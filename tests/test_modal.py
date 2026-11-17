@@ -197,6 +197,7 @@ def modal_deployment(project_root: Path):
     [
         ("vectoradd_py", "submission_cuda_inline.py"),
         ("vectoradd_py", "submission_triton.py"),
+        ("vectoradd_py", "submission_mojo.py"),
     ],
 )
 async def test_modal_launcher_python_script(
