@@ -36,6 +36,8 @@ See [docs/database.md](docs/database.md) for migration patterns and creating new
 For production incident triage, see [docs/production-debugging.md](docs/production-debugging.md).
 For nightly end-to-end kernel checks, see
 [docs/application-validation.md](docs/application-validation.md).
+For CPU compilation coverage and the proposed separation of preparation from
+GPU evaluation, see [docs/cpu-preflight-harness.md](docs/cpu-preflight-harness.md).
 
 ### Environment Variables
 
