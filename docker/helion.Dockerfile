@@ -83,14 +83,13 @@ RUN sudo uv pip install --system \
 # # tinygrad
 # RUN sudo uv pip install --system tinygrad~=0.10
 
-# # NVIDIA CUDA packages
-# RUN sudo uv pip install --system \
-#     nvidia-cupynumeric~=25.3 \
-#     nvidia-cutlass-dsl==4.3.5 \
-#     "cuda-core[cu13]" \
-#     "cuda-python[all]==13.0"
+# NVIDIA CUDA/CUTLASS packages for CuTe DSL submissions
+RUN sudo uv pip install --system \
+    nvidia-cutlass-dsl==4.5.2 \
+    "cuda-core[cu13]" \
+    "cuda-python[all]==13.0"
 
-# # CUTLASS C++ headers
-# RUN git clone --depth 1 --branch v4.3.5 https://github.com/NVIDIA/cutlass.git /opt/cutlass
-# ENV CUTLASS_PATH=/opt/cutlass
-# ENV CPLUS_INCLUDE_PATH=/opt/cutlass/include:/opt/cutlass/tools/util/include
+# CUTLASS C++ headers
+RUN git clone --depth 1 --branch v4.5.1 https://github.com/NVIDIA/cutlass.git /opt/cutlass
+ENV CUTLASS_PATH=/opt/cutlass
+ENV CPLUS_INCLUDE_PATH=/opt/cutlass/include:/opt/cutlass/tools/util/include
