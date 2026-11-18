@@ -26,16 +26,13 @@ JSON result:
 }
 ```
 
-## Schedule
+## Manual batches
 
-Every day at 22:00 `America/Los_Angeles`, one KernelBot replica claims each
-`(leaderboard, GPU, contract version, local date)` sweep. It snapshots the
-current best submission from each of the top 10 users and runs at most two
-Modal jobs concurrently. The database claim prevents duplicate sweeps.
-
-Set `APPLICATION_VALIDATION_ENABLED=false` to disable the scheduler. A failed
-job is recorded as `VALIDATION ERROR`; a completed job is stored as `X/Y
-VALIDATED`.
+Application validation never runs automatically. An admin explicitly starts a
+batch for one leaderboard and GPU. By default it snapshots the current best
+submission from each of the top 10 users and runs at most two Modal jobs
+concurrently. A failed job is recorded as `VALIDATION ERROR`; a completed job
+is stored as `X/Y VALIDATED`.
 
 ## Local debug
 
@@ -47,7 +44,6 @@ modal environment create cholesky-validation-debug
 modal deploy --env cholesky-validation-debug src/runners/modal_runner_archs.py
 
 MODAL_ENVIRONMENT=cholesky-validation-debug \
-APPLICATION_VALIDATION_ENABLED=false \
 python src/kernelbot/main.py --api-only --debug
 ```
 
@@ -69,10 +65,9 @@ For a one-time backfill of every ranked user's current best submission, add
 kernelbot-admin validate-top10 cholesky B200 --all-users --only-missing
 ```
 
-This override applies only to the manual sweep. Scheduled sweeps remain capped
-at the top 10 users. `--only-missing` skips exact submissions that already have
-a result for the active validation contract, making it suitable for continuing
-a backfill after leaderboard changes.
+`--only-missing` skips exact submissions that already have a result for the
+active validation contract, making it suitable for continuing a backfill after
+leaderboard changes.
 
 Roll out KernelBot's migration and runner first, then the reference-kernels
 contract, then the Kernelboard badge.

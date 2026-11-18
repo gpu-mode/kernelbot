@@ -1,13 +1,11 @@
-"""Nightly application-level validation for ranked kernel submissions."""
+"""Admin-triggered application-level validation for ranked kernel submissions."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import datetime
 import math
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from libkernelbot.consts import get_gpu_by_name
 from libkernelbot.task import LeaderboardTask, build_validation_config
@@ -15,87 +13,23 @@ from libkernelbot.utils import KernelBotError, setup_logging
 
 logger = setup_logging(__name__)
 
-SCHEDULE = datetime.time(22, 0)
-TIMEZONE = ZoneInfo("America/Los_Angeles")
 TOP_K = 10
 MAX_CONCURRENCY = 2
 
 
-def _due_date(now: datetime.datetime) -> datetime.date | None:
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=datetime.timezone.utc)
-    local_now = now.astimezone(TIMEZONE)
-    if local_now.time() < SCHEDULE:
-        return None
-    return local_now.date()
-
-
 class ApplicationValidationService:
-    def __init__(self, backend, *, enabled: bool = False, poll_seconds: int = 60):
+    def __init__(self, backend):
         self.backend = backend
-        self.enabled = enabled
-        self.poll_seconds = poll_seconds
-        self._scheduler_task: asyncio.Task | None = None
         self._manual_tasks: set[asyncio.Task] = set()
-
-    async def start(self) -> None:
-        if not self.enabled or self._scheduler_task is not None:
-            return
-        logger.info("Starting application validation scheduler")
-        self._scheduler_task = asyncio.create_task(
-            self._scheduler_loop(),
-            name="application-validation-scheduler",
-        )
 
     async def stop(self) -> None:
         tasks = list(self._manual_tasks)
-        if self._scheduler_task is not None:
-            self._scheduler_task.cancel()
-            tasks.append(self._scheduler_task)
-            self._scheduler_task = None
         for task in tasks:
             task.cancel()
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         self._manual_tasks.clear()
-
-    async def _scheduler_loop(self) -> None:
-        while True:
-            try:
-                await self.run_due_once()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.exception("Application validation scheduler iteration failed")
-            await asyncio.sleep(self.poll_seconds)
-
-    async def run_due_once(
-        self,
-        now: datetime.datetime | None = None,
-    ) -> list[dict[str, Any]]:
-        scheduled_for = _due_date(
-            now or datetime.datetime.now(datetime.timezone.utc)
-        )
-        if scheduled_for is None:
-            return []
-
-        with self.backend.db as db:
-            leaderboards = db.get_leaderboards()
-
-        summaries = []
-        for leaderboard in leaderboards:
-            if leaderboard["task"].validation is None:
-                continue
-            for gpu_type in leaderboard["gpu_types"]:
-                summaries.append(
-                    await self.run_sweep(
-                        leaderboard["name"],
-                        gpu_type,
-                        scheduled_for=scheduled_for,
-                    )
-                )
-        return summaries
 
     def enqueue_manual_sweep(
         self,
@@ -109,7 +43,6 @@ class ApplicationValidationService:
             self.run_sweep(
                 leaderboard_name,
                 gpu_type,
-                scheduled_for=None,
                 all_users=all_users,
                 only_missing=only_missing,
             ),
@@ -233,7 +166,6 @@ class ApplicationValidationService:
         leaderboard_name: str,
         gpu_type: str,
         *,
-        scheduled_for: datetime.date | None,
         all_users: bool = False,
         only_missing: bool = False,
     ) -> dict[str, Any]:
@@ -254,15 +186,8 @@ class ApplicationValidationService:
                 leaderboard_id=leaderboard["id"],
                 gpu_type=gpu_type,
                 contract_version=validation.version,
-                scheduled_for=scheduled_for,
+                scheduled_for=None,
             )
-            if sweep_id is None:
-                return {
-                    "status": "already_claimed",
-                    "leaderboard": leaderboard_name,
-                    "gpu_type": gpu_type,
-                    "scheduled_for": scheduled_for,
-                }
             submissions = db.get_leaderboard_submissions(
                 leaderboard_name,
                 gpu_type,
@@ -308,7 +233,6 @@ class ApplicationValidationService:
                 "sweep_id": sweep_id,
                 "leaderboard": leaderboard_name,
                 "gpu_type": gpu_type,
-                "scheduled_for": scheduled_for,
                 "contract_version": validation.version,
                 "all_users": all_users,
                 "only_missing": only_missing,
