@@ -22,23 +22,6 @@ if typing.TYPE_CHECKING:
 logger = setup_logging(__name__)
 
 
-# Evaluators time PyTorch's current stream, so passing its raw handle to a
-# kernel (for Mojo, via DeviceContext.create_external_stream) is allowed. The
-# Stream object itself stays banned: `type(torch.cuda.current_stream())()`
-# builds a new side stream, and the object works as a context manager.
-ALLOWED_STREAM_USES = (
-    "torch.cuda.current_stream().cuda_stream",
-    "create_external_stream(",
-)
-
-
-def mentions_streams(code: str) -> bool:
-    code = code.lower()
-    for allowed in ALLOWED_STREAM_USES:
-        code = code.replace(allowed, "")
-    return "stream" in code
-
-
 @dataclasses.dataclass
 class SubmissionRequest:
     # to be filled in when making the request

@@ -17,7 +17,6 @@ from libkernelbot.report import (
 )
 from libkernelbot.submission import (
     SubmissionRequest,
-    mentions_streams,
     prepare_submission,
 )
 from libkernelbot.utils import KernelBotError
@@ -269,7 +268,7 @@ async def to_submit_info(
 
     try:
         submission_code = submission_content.decode("utf-8")
-        if mentions_streams(submission_code):
+        if "stream" in submission_code.lower():
             raise HTTPException(
                 status_code=500,
                 detail="Your code contains work on another stream. This is not allowed and may result in your disqualification. If you think this is a mistake, please contact us.",  # noqa: E501

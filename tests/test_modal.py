@@ -446,7 +446,7 @@ async def test_modal_mojo_leaderboard(modal_deployment, project_root: Path):
     assert mean_ns > moved_bytes / 4e12 * 1e9
 
 
-MOJO_STREAM_CHECK = """
+MOJO_ORDERING_CHECK = """
 import os
 
 import torch
@@ -455,49 +455,23 @@ from submission import custom_kernel
 n = 4096
 A = torch.empty(n, n, device="cuda", dtype=torch.float16)
 B = torch.empty_like(A)
-failures = []
-
-
-def delayed_add(a, b):
-    # Delay the queue first, so a kernel launched elsewhere reads stale inputs.
-    torch.cuda._sleep(200_000_000)
-    A.fill_(a)
-    B.fill_(b)
-    C = custom_kernel((A, B))
-    return bool((C == a + b).all())
-
-
-if not delayed_add(1, 2):
-    failures.append("default stream")
-
-side = torch.cuda.Stream()
-side.wait_stream(torch.cuda.current_stream())
-with torch.cuda.stream(side):
-    if not delayed_add(3, 4):
-        failures.append("side stream")
-torch.cuda.synchronize()
-
-graph = torch.cuda.CUDAGraph()
-with torch.cuda.graph(graph):
-    C = custom_kernel((A, B))
-A.fill_(5)
-B.fill_(6)
-graph.replay()
-torch.cuda.synchronize()
-if not bool((C == 11).all()):
-    failures.append("CUDA graph replay")
+# Delay PyTorch's queue so a kernel that does not wait for it reads stale inputs.
+torch.cuda._sleep(200_000_000)
+A.fill_(1)
+B.fill_(2)
+C = custom_kernel((A, B))
+ok = bool((C == 3).all())
 
 with os.fdopen(int(os.environ["POPCORN_FD"]), "w") as out:
-    out.write("check: " + ("fail" if failures else "pass") + "\\n")
-    out.write("failures: " + ",".join(failures) + "\\n")
+    out.write("check: " + ("pass" if ok else "fail") + "\\n")
 """
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_modal_mojo_uses_torch_current_stream(modal_deployment, project_root: Path):
-    """The Mojo kernel must follow PyTorch's current stream: the default stream, a side
-    stream, and CUDA graph capture."""
+async def test_modal_mojo_is_ordered_with_torch(modal_deployment, project_root: Path):
+    """Submissions may not name streams, so Mojo launches on its own queue. It must still
+    wait for, and be waited on by, work on PyTorch's default stream."""
     launcher = ModalLauncher(add_include_dirs=[])
     task_path = project_root / "examples" / "vectoradd_py"
     config = {
@@ -507,7 +481,7 @@ async def test_modal_mojo_uses_torch_current_stream(modal_deployment, project_ro
         "arch": GPU_TO_SM[ModalGPU.H100.name],
         "tests": [{"size": 1}],
         "sources": {
-            "eval.py": MOJO_STREAM_CHECK,
+            "eval.py": MOJO_ORDERING_CHECK,
             "submission.py": (task_path / "submission_mojo.py").read_text(),
             "task.py": (task_path / "task.py").read_text(),
         },
@@ -517,4 +491,4 @@ async def test_modal_mojo_uses_torch_current_stream(modal_deployment, project_ro
 
     assert result.success, result.error
     run = result.runs["test"].run
-    assert run.passed, f"{run.result.get('failures')}\n{run.stderr}"
+    assert run.passed, run.stderr
