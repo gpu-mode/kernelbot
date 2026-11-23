@@ -440,7 +440,6 @@ def test_generate_run_verdict(mock_backend):
     "code",
     [
         "handle = torch.cuda.current_stream().cuda_stream",
-        "torch.cuda.current_stream().synchronize()",
         "var queue = ctx.create_external_stream(handle)",
         "TORCH.CUDA.CURRENT_STREAM().CUDA_STREAM",
         "def kernel(): pass",
@@ -454,6 +453,10 @@ def test_current_stream_uses_are_allowed(code):
     "code",
     [
         "s = torch.cuda.Stream()",
+        "side = torch.cuda.current_stream().__class__()",
+        "side = type(torch.cuda.current_stream())()",
+        "torch.cuda.current_stream().synchronize()",
+        "torch.cuda.current_stream().cuda_stream.__class__ and torch.cuda.current_stream()",
         "with torch.cuda.stream(s):",
         "get = torch.cuda.current_stream",
         "torch.cuda.current_stream().wait_stream(other)",

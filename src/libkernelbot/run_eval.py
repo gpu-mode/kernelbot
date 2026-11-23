@@ -746,11 +746,14 @@ def run_pytorch_script(  # noqa: C901
     assert main in sources.keys()
     # Submissions may write next to themselves (e.g. Mojo sources and their
     # __mojocache__). Modal reuses warm containers across users, so each run
-    # gets a private working directory that is deleted afterwards.
+    # gets a private working directory that is deleted afterwards. CPU-artifact
+    # replay already provides one, and checks header dependencies against it.
+    inline_workdir = os.environ.get("KERNELBOT_INLINE_WORKDIR")
     with (
-        tempfile.TemporaryDirectory(prefix="kernelbot-run-", ignore_cleanup_errors=True) as workdir,
-        contextlib.chdir(workdir),
-    ):
+        contextlib.nullcontext(inline_workdir)
+        if inline_workdir
+        else tempfile.TemporaryDirectory(prefix="kernelbot-run-", ignore_cleanup_errors=True)
+    ) as workdir, contextlib.chdir(workdir):
         _create_files(sources)
 
         # "compile" step: execute the script once. Will populate
