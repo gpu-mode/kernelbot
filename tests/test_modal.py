@@ -197,6 +197,7 @@ def modal_deployment(project_root: Path):
     [
         ("vectoradd_py", "submission_cuda_inline.py"),
         ("vectoradd_py", "submission_triton.py"),
+        ("vectoradd_py", "submission_mojo.py"),
     ],
 )
 async def test_modal_launcher_python_script(
@@ -414,3 +415,97 @@ async def test_modal_launcher_failing_script(modal_deployment, project_root: Pat
     assert result.success, f"Expected successful run, got: {result.error}"
     assert result.error == ""
     assert result.runs["test"].run.passed is False or result.runs["benchmark"].run.passed is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_modal_mojo_leaderboard(modal_deployment, project_root: Path):
+    """A Mojo submission goes through test, benchmark and ranked runs with honest timings."""
+    launcher = ModalLauncher(add_include_dirs=[])
+    gpu_type = ModalGPU.H100
+    task_path = project_root / "examples" / "vectoradd_py"
+    task_definition = make_task_definition(task_path)
+    config = build_task_config(
+        task=task_definition.task,
+        submission_content=(task_path / "submission_mojo.py").read_text(),
+        arch=GPU_TO_SM[gpu_type.name],
+        mode=SubmissionMode.LEADERBOARD,
+    )
+
+    result = await launcher.run_submission(config, gpu_type, MockProgressReporter())
+
+    assert result.success, result.error
+    for name in ("test", "benchmark", "leaderboard"):
+        run = result.runs[name].run
+        assert run.passed, f"{name}: {run.stderr}"
+    # Ranked runs time only the largest case: 16384^2 fp16 values, read twice and written
+    # once. Events that missed the Mojo kernel would report far less than H100's
+    # bandwidth allows.
+    moved_bytes = 3 * 16384 * 16384 * 2
+    mean_ns = float(result.runs["leaderboard"].run.result["benchmark.0.mean"])
+    assert mean_ns > moved_bytes / 4e12 * 1e9
+
+
+MOJO_STREAM_CHECK = """
+import os
+
+import torch
+from submission import custom_kernel
+
+n = 4096
+A = torch.empty(n, n, device="cuda", dtype=torch.float16)
+B = torch.empty_like(A)
+failures = []
+
+stream = torch.cuda.Stream()
+stream.wait_stream(torch.cuda.current_stream())
+with torch.cuda.stream(stream):
+    # Delay the side stream so a kernel launched on any other stream reads stale inputs.
+    torch.cuda._sleep(200_000_000)
+    A.fill_(1)
+    B.fill_(2)
+    C = custom_kernel((A, B))
+    if not bool((C == 3).all()):
+        failures.append("side stream")
+torch.cuda.synchronize()
+
+graph = torch.cuda.CUDAGraph()
+with torch.cuda.graph(graph):
+    C = custom_kernel((A, B))
+A.fill_(3)
+B.fill_(4)
+graph.replay()
+torch.cuda.synchronize()
+if not bool((C == 7).all()):
+    failures.append("CUDA graph replay")
+
+with os.fdopen(int(os.environ["POPCORN_FD"]), "w") as out:
+    out.write("check: " + ("fail" if failures else "pass") + "\\n")
+    out.write("failures: " + ",".join(failures) + "\\n")
+"""
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_modal_mojo_uses_torch_current_stream(modal_deployment, project_root: Path):
+    """Evaluators that use side streams or CUDA graphs must see the Mojo kernel."""
+    launcher = ModalLauncher(add_include_dirs=[])
+    task_path = project_root / "examples" / "vectoradd_py"
+    config = {
+        "lang": "py",
+        "main": "eval.py",
+        "mode": SubmissionMode.TEST.value,
+        "arch": GPU_TO_SM[ModalGPU.H100.name],
+        "tests": [{"size": 1}],
+        "sources": {
+            "eval.py": MOJO_STREAM_CHECK,
+            "submission.py": (task_path / "submission_mojo.py").read_text(),
+            "task.py": (task_path / "task.py").read_text(),
+        },
+    }
+
+    result = await launcher.run_submission(config, ModalGPU.H100, MockProgressReporter())
+
+    assert result.success, result.error
+    run = result.runs["test"].run
+    assert run.passed, f"{run.result.get('failures')}\n{run.stderr}"
