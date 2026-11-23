@@ -73,6 +73,9 @@ cuda_image = (
     .uv_pip_install(
         "tinygrad~=0.10",
         "helion",
+        # Mojo compiler, `mojo.importer`, and the MAX GPU libraries. Pinned because
+        # Mojo syntax still changes between releases and would break submissions.
+        "max==26.7.0",
     )
     # nvidia cuda packages
     .uv_pip_install(
@@ -115,8 +118,9 @@ cuda_image = (
     )
     .run_commands(
         "python -m pip check",
-        'python -c "import cuda.tile, nvmath"',
+        'python -c "import cuda.tile, nvmath, mojo.importer"',
         "tileiras --version",
+        "mojo --version",
         (
             "printf '#include <cublasdx.hpp>\\n' | "
             "nvcc -std=c++17 -x cu -c - -o /tmp/cublasdx-smoke.o && "

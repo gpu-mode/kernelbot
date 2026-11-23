@@ -218,6 +218,18 @@ def test_build_task_config_cuda():
     assert result == expected
 
 
+def test_make_task_definition_accepts_mojo_template(task_directory):
+    (task_directory / "template-mojo.py").write_text("# Mojo template")
+    task_yml = task_directory / "task.yml"
+    task_yml.write_text(
+        task_yml.read_text().replace('  CUDA: "template.cu"\n', '  Mojo: "template-mojo.py"\n')
+    )
+
+    result = make_task_definition(task_yml)
+
+    assert result.templates == {"Python": "# Python template", "Mojo": "# Mojo template"}
+
+
 def test_make_task_definition(task_directory):
     """Test make_task_definition with a complete YAML structure"""
 
