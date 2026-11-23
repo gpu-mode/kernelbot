@@ -4,10 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException, UploadFile
 
-from kernelbot.api.api_utils import to_submit_info
-
 
 async def submit(project_root, code: bytes):
+    # Importing at collection time would load kernelbot.env before test_admin_api patches it.
+    from kernelbot.api.api_utils import to_submit_info
+
     db = MagicMock()
     db.__enter__.return_value.get_leaderboard.return_value = {"gpu_types": ["H100"]}
     return await to_submit_info(
