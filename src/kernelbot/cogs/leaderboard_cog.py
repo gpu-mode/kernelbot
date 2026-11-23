@@ -21,7 +21,12 @@ from libkernelbot.leaderboard_db import (
     LeaderboardRankedEntry,
     SubmissionItem,
 )
-from libkernelbot.submission import SubmissionRequest, generate_run_verdict, prepare_submission
+from libkernelbot.submission import (
+    SubmissionRequest,
+    generate_run_verdict,
+    mentions_streams,
+    prepare_submission,
+)
 from libkernelbot.utils import format_time, setup_logging
 
 if TYPE_CHECKING:
@@ -109,7 +114,7 @@ class LeaderboardSubmitCog(app_commands.Group):
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
 
-        if "stream" in submission_content.lower():
+        if mentions_streams(submission_content):
             await send_discord_message(
                 interaction,
                 "Your code contains work on another stream. This is not allowed and may result in your disqualification. If you think this is a mistake, please contact us.",  # noqa: E501

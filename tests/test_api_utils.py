@@ -33,4 +33,4 @@ async def test_mojo_example_passes_submission_filters(project_root):
 @pytest.mark.asyncio
 async def test_submissions_mentioning_streams_are_rejected(project_root):
     with pytest.raises(HTTPException, match="another stream"):
-        await submit(project_root, b"s = torch.cuda.current_stream()\n")
+        await submit(project_root, b"s = torch.cuda.Stream()\n")
