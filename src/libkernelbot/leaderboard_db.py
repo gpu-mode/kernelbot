@@ -1811,7 +1811,9 @@ class LeaderboardDB:
             logger.exception("Could not create/update user %s from CLI.", user_id, exc_info=e)
             raise KernelBotError("Database error while creating/updating user from CLI") from e
 
-    def reset_user_from_cli(self, user_id: str, cli_id: str, auth_provider: str):
+    def reset_user_from_cli(
+        self, user_id: str, cli_id: str, auth_provider: str, user_name: Optional[str] = None
+    ):
         try:
             self.cursor.execute(
                 """
@@ -1827,10 +1829,11 @@ class LeaderboardDB:
             self.cursor.execute(
                 """
                 UPDATE leaderboard.user_info
-                SET cli_id = %s, cli_auth_provider = %s, cli_valid = TRUE
+                SET cli_id = %s, cli_auth_provider = %s, cli_valid = TRUE,
+                    user_name = COALESCE(%s, user_name)
                 WHERE id = %s
                 """,
-                (cli_id, auth_provider, user_id),
+                (cli_id, auth_provider, user_name or None, user_id),
             )
 
             self.connection.commit()

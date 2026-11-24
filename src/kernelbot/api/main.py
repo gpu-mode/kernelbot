@@ -370,7 +370,7 @@ async def cli_auth(auth_provider: str, code: str, state: str, db_context=Depends
     try:
         with db_context as db:
             if is_reset:
-                db.reset_user_from_cli(user_id, cli_id, auth_provider)
+                db.reset_user_from_cli(user_id, cli_id, auth_provider, user_name)
             else:
                 db.create_user_from_cli(user_id, user_name, cli_id, auth_provider)
 
