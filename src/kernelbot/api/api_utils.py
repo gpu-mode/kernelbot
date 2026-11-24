@@ -73,7 +73,7 @@ async def _handle_discord_oauth(code: str, redirect_uri: str) -> tuple[str, str]
 
     user_json = user_response.json()
     user_id = user_json.get("id")
-    user_name = user_json.get("username")
+    user_name = user_json.get("global_name") or user_json.get("username")
 
     if not user_id or not user_name:
         raise HTTPException(

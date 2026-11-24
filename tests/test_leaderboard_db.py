@@ -1540,3 +1540,15 @@ def test_check_rate_limit_categories_independent(database, submit_leaderboard):
         # Test should be blocked
         result = db.check_rate_limit("submit-leaderboard", "123", "test")
         assert result["allowed"] is False
+
+
+def test_reset_user_from_cli_updates_user_name(database):
+    with database as db:
+        db.init_user_from_cli("cli-1", "discord")
+        db.create_user_from_cli("123456789", "alice_dev", "cli-1", "discord")
+
+        db.reset_user_from_cli("123456789", "cli-2", "discord", "Alice Öztürk")
+        assert db.validate_cli_id("cli-2") == {"user_id": "123456789", "user_name": "Alice Öztürk"}
+
+        db.reset_user_from_cli("123456789", "cli-3", "discord")
+        assert db.validate_cli_id("cli-3") == {"user_id": "123456789", "user_name": "Alice Öztürk"}
